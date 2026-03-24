@@ -1,0 +1,5 @@
+django>=4.2,<6.0
+numpy>=1.24.0
+gunicorn>=21.2.0
+whitenoise>=6.5.0
+django-ratelimit>=4.1.0

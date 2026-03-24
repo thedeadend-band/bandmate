@@ -1,0 +1,129 @@
+{% extends "player/base.html" %}
+{% block title %}{{ form_title }} – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Songs
+</a>
+
+<h1 class="page-title">{{ form_title }}</h1>
+
+{% if error %}
+<div class="error-message">{{ error }}</div>
+{% endif %}
+{% if success %}
+<div class="success-message">{{ success }}</div>
+{% endif %}
+
+<form method="post" id="playlist-form">
+  {% csrf_token %}
+  <div class="form-group">
+    <label for="pl-name">Playlist name</label>
+    <input type="text" id="pl-name" name="name" value="{{ form_name }}" autocomplete="off" required>
+  </div>
+
+  <!-- Selected songs (reorderable) -->
+  <div class="form-group">
+    <label>Songs in playlist</label>
+    <div id="selected-songs" class="pl-selected-list">
+      <!-- populated by JS -->
+    </div>
+    <p id="empty-hint" class="pl-empty-hint">Add songs from the list below.</p>
+  </div>
+
+  <!-- Available songs to add -->
+  <div class="form-group">
+    <label>Available songs</label>
+    <div id="available-songs" class="pl-available-list">
+      {% for song in available_songs %}
+      <button type="button" class="pl-add-btn" data-song="{{ song.name }}">
+        <span class="pl-add-name">{{ song.name }}</span>
+        {% if not song.has_master %}<span class="pl-no-master">no master</span>{% endif %}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary" style="max-width:480px">
+    {% if playlist %}Save Changes{% else %}Create Playlist{% endif %}
+  </button>
+</form>
+
+{{ selected_songs|json_script:"selected-songs-data" }}
+<script>
+(function() {
+  let songs = JSON.parse(document.getElementById('selected-songs-data').textContent) || [];
+  const listEl = document.getElementById('selected-songs');
+  const hintEl = document.getElementById('empty-hint');
+
+  function render() {
+    listEl.innerHTML = '';
+    document.querySelectorAll('input[name="songs"]').forEach(el => el.remove());
+
+    songs.forEach((name, i) => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'songs'; inp.value = name;
+      document.getElementById('playlist-form').appendChild(inp);
+
+      const row = document.createElement('div');
+      row.className = 'pl-selected-row';
+      row.innerHTML = `
+        <span class="pl-selected-pos">${i + 1}</span>
+        <span class="pl-selected-name">${name}</span>
+        <div class="pl-selected-actions">
+          <button type="button" class="pl-move-btn" data-dir="up" data-idx="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+          <button type="button" class="pl-move-btn" data-dir="down" data-idx="${i}" ${i === songs.length - 1 ? 'disabled' : ''} title="Move down">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <button type="button" class="pl-remove-btn" data-idx="${i}" title="Remove">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>`;
+      listEl.appendChild(row);
+    });
+
+    hintEl.style.display = songs.length ? 'none' : '';
+
+    document.querySelectorAll('.pl-add-btn').forEach(btn => {
+      const inList = songs.includes(btn.dataset.song);
+      btn.disabled = inList;
+      btn.style.opacity = inList ? '0.35' : '';
+    });
+  }
+
+  listEl.addEventListener('click', (e) => {
+    const moveBtn = e.target.closest('.pl-move-btn');
+    const removeBtn = e.target.closest('.pl-remove-btn');
+    if (moveBtn && !moveBtn.disabled) {
+      const idx = +moveBtn.dataset.idx;
+      const dir = moveBtn.dataset.dir;
+      const swap = dir === 'up' ? idx - 1 : idx + 1;
+      [songs[idx], songs[swap]] = [songs[swap], songs[idx]];
+      render();
+    }
+    if (removeBtn) {
+      songs.splice(+removeBtn.dataset.idx, 1);
+      render();
+    }
+  });
+
+  document.getElementById('available-songs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.pl-add-btn');
+    if (btn) {
+      songs.push(btn.dataset.song);
+      render();
+    }
+  });
+
+  render();
+})();
+</script>
+{% endblock %}

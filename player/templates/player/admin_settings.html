@@ -1,0 +1,34 @@
+{% extends "player/base.html" %}
+{% block title %}Admin – Settings{% endblock %}
+
+{% block content %}
+<a href="{% url 'admin_users' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Users
+</a>
+
+<div class="admin-header">
+  <h1 class="page-title">Site Settings</h1>
+</div>
+
+{% if success %}
+<div class="alert alert-success">{{ success }}</div>
+{% endif %}
+
+<form method="post" class="admin-form">
+  {% csrf_token %}
+  <div class="form-group">
+    <label for="google_calendar_url">Google Calendar Embed URL</label>
+    <input type="url" id="google_calendar_url" name="google_calendar_url"
+           value="{{ site.google_calendar_url }}"
+           placeholder="https://calendar.google.com/calendar/embed?src=..."
+           class="form-input">
+    <p class="form-hint">
+      In Google Calendar: Settings &gt; your calendar &gt; Integrate calendar &gt; copy the "Embed code" URL from the iframe <code>src</code> attribute.
+    </p>
+  </div>
+  <button type="submit" class="btn btn-add">Save</button>
+</form>
+{% endblock %}

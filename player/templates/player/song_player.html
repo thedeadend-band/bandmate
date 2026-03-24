@@ -1,0 +1,198 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}{% if song_info.artist and song_info.title %}{{ song_info.artist }} – {{ song_info.title }}{% else %}{{ song_name }}{% endif %} – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Songs
+</a>
+
+{% if song_info.artist and song_info.title %}
+<h1 class="song-title">{{ song_info.artist }} – {{ song_info.title }}</h1>
+{% else %}
+<h1 class="song-title">{{ song_name }}</h1>
+{% endif %}
+
+{% if song_info %}
+<div class="song-info-panel">
+  {% if song_info.tempo or song_info.key %}
+  <div class="info-row">
+    {% if song_info.tempo %}
+    <span class="info-chip">
+      <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 20h16L12 2z"/><line x1="12" y1="8" x2="17" y2="3"/></svg>
+      {{ song_info.tempo }} BPM
+    </span>
+    {% endif %}
+    {% if song_info.key %}
+    <span class="info-chip">
+      <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v13.6a4 4 0 104 4V2"/><line x1="6" y1="8" x2="16" y2="6"/><line x1="6" y1="12" x2="16" y2="10"/></svg>
+      {{ song_info.key }}
+    </span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if song_info.vocals %}
+  <div class="info-row">
+    {% if song_info.vocals.lead %}
+    <span class="info-chip vocals-lead">
+      <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a4 4 0 00-4 4v4a4 4 0 008 0V5a4 4 0 00-4-4z"/><path d="M6 11v1a6 6 0 0012 0v-1"/><line x1="12" y1="18" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      {% for name in song_info.vocals.lead %}{{ name|make_list|first }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </span>
+    {% endif %}
+    {% if song_info.vocals.backing %}
+    <span class="info-chip vocals-backing">
+      <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a4 4 0 00-4 4v4a4 4 0 008 0V5a4 4 0 00-4-4z"/><path d="M6 11v1a6 6 0 0012 0v-1"/><line x1="12" y1="18" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      {% for name in song_info.vocals.backing %}{{ name|make_list|first }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if song_info.guitars %}
+  <div class="guitar-rows">
+    {% if song_info.guitars.lead_guitar %}
+    <div class="guitar-row">
+      <span class="guitar-label">Lead Guitar</span>
+      <span class="guitar-detail">
+        {% if song_info.guitars.lead_guitar.type == "acoustic" %}
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v7"/><path d="M10 1h4"/><path d="M11 8h2"/><path d="M12 8c-1 0-3 1.5-4 3.5s-1.5 3-.5 5c.7 1.4 1 2.5.5 3.5-.3.6 0 1.5.8 2.2a3.5 3.5 0 004.4 0c.8-.7 1.1-1.6.8-2.2-.5-1 -.2-2.1.5-3.5 1-2 .5-3.5-.5-5S13 8 12 8z"/><circle cx="12" cy="16" r="1.5"/></svg>
+        {% else %}
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l3-8z"/></svg>
+        {% endif %}
+      </span>
+      <span class="guitar-detail">
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M5 16a7 7 0 0114 0"/><line x1="12" y1="16" x2="8.5" y2="9"/></svg>
+        {{ song_info.guitars.lead_guitar.tuning }}
+      </span>
+      {% if song_info.guitars.lead_guitar.capo %}
+      <span class="guitar-detail">
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2c-1 0-2 1-3 3l-1 2c-.5 1-1.5 2-3 2H8c-2 0-3.5 2-4 4-.5 2 0 3 1 4s2.5 1 4 .5c1.5-.5 2.5-1.5 3-3l1-2c.5-1 1-2 2-3l2-3c.5-1 1-2 1-3s-.5-1.5-1-1.5z"/></svg>
+        {{ song_info.guitars.lead_guitar.capo }}
+      </span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if song_info.guitars.rhythm_guitar %}
+    <div class="guitar-row">
+      <span class="guitar-label">Rhythm Guitar</span>
+      <span class="guitar-detail">
+        {% if song_info.guitars.rhythm_guitar.type == "acoustic" %}
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v7"/><path d="M10 1h4"/><path d="M11 8h2"/><path d="M12 8c-1 0-3 1.5-4 3.5s-1.5 3-.5 5c.7 1.4 1 2.5.5 3.5-.3.6 0 1.5.8 2.2a3.5 3.5 0 004.4 0c.8-.7 1.1-1.6.8-2.2-.5-1 -.2-2.1.5-3.5 1-2 .5-3.5-.5-5S13 8 12 8z"/><circle cx="12" cy="16" r="1.5"/></svg>
+        {% else %}
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l3-8z"/></svg>
+        {% endif %}
+      </span>
+      <span class="guitar-detail">
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M5 16a7 7 0 0114 0"/><line x1="12" y1="16" x2="8.5" y2="9"/></svg>
+        {{ song_info.guitars.rhythm_guitar.tuning }}
+      </span>
+      {% if song_info.guitars.rhythm_guitar.capo %}
+      <span class="guitar-detail">
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2c-1 0-2 1-3 3l-1 2c-.5 1-1.5 2-3 2H8c-2 0-3.5 2-4 4-.5 2 0 3 1 4s2.5 1 4 .5c1.5-.5 2.5-1.5 3-3l1-2c.5-1 1-2 2-3l2-3c.5-1 1-2 1-3s-.5-1.5-1-1.5z"/></svg>
+        {{ song_info.guitars.rhythm_guitar.capo }}
+      </span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if song_info.guitars.bass_guitar %}
+    <div class="guitar-row">
+      <span class="guitar-label">Bass Guitar</span>
+      <span class="guitar-detail">
+        {% if song_info.guitars.bass_guitar.type == "acoustic" %}
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v7"/><path d="M10 1h4"/><path d="M11 8h2"/><path d="M12 8c-1 0-3 1.5-4 3.5s-1.5 3-.5 5c.7 1.4 1 2.5.5 3.5-.3.6 0 1.5.8 2.2a3.5 3.5 0 004.4 0c.8-.7 1.1-1.6.8-2.2-.5-1 -.2-2.1.5-3.5 1-2 .5-3.5-.5-5S13 8 12 8z"/><circle cx="12" cy="16" r="1.5"/></svg>
+        {% else %}
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l3-8z"/></svg>
+        {% endif %}
+      </span>
+      <span class="guitar-detail">
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M5 16a7 7 0 0114 0"/><line x1="12" y1="16" x2="8.5" y2="9"/></svg>
+        {{ song_info.guitars.bass_guitar.tuning }}
+      </span>
+      {% if song_info.guitars.bass_guitar.capo %}
+      <span class="guitar-detail">
+        <svg class="info-icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2c-1 0-2 1-3 3l-1 2c-.5 1-1.5 2-3 2H8c-2 0-3.5 2-4 4-.5 2 0 3 1 4s2.5 1 4 .5c1.5-.5 2.5-1.5 3-3l1-2c.5-1 1-2 2-3l2-3c.5-1 1-2 1-3s-.5-1.5-1-1.5z"/></svg>
+        {{ song_info.guitars.bass_guitar.capo }}
+      </span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Track list -->
+<div class="tracks-container" id="tracks">
+  {% for track in tracks %}
+  <div class="track" data-index="{{ forloop.counter0 }}" data-filename="{{ track.filename }}">
+    <div class="track-header">
+      <span class="track-name">{{ track.name }}</span>
+      <div class="track-buttons">
+        <button class="mute-btn" data-index="{{ forloop.counter0 }}" title="Mute">M</button>
+        <button class="solo-btn" data-index="{{ forloop.counter0 }}" title="Solo">S</button>
+      </div>
+    </div>
+    <div class="waveform-container" data-index="{{ forloop.counter0 }}">
+      <canvas class="waveform-canvas"></canvas>
+      <div class="playhead"></div>
+      <div class="hover-line"></div>
+      <div class="loading-overlay"><span>Loading waveform…</span></div>
+    </div>
+    <div class="track-sliders">
+      <div class="track-slider-group">
+        <label class="slider-label">VOL</label>
+        <input type="range" class="track-range vol-slider" data-index="{{ forloop.counter0 }}" min="0" max="100" value="100">
+        <span class="slider-value vol-value" data-index="{{ forloop.counter0 }}">100</span>
+      </div>
+      <div class="track-slider-group">
+        <label class="slider-label">PAN</label>
+        <input type="range" class="track-range pan-slider" data-index="{{ forloop.counter0 }}" min="-100" max="100" value="0">
+        <span class="slider-value pan-value" data-index="{{ forloop.counter0 }}">C</span>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if lyrics %}
+<div class="lyrics-container" id="lyrics-container">
+  <div class="lyrics-title">Lyrics</div>
+  <div class="lyrics-scroller" id="lyrics-scroller">
+    {% for line in lyrics %}
+    <div class="lyrics-line" data-time="{{ line.time }}">{{ line.text|default:"&nbsp;" }}</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Transport — pinned to bottom on mobile -->
+<div class="transport" id="transport">
+  <button id="play-btn" class="transport-btn disabled" title="Play / Pause (Space)">
+    <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor">
+      <polygon points="6,3 20,12 6,21"/>
+    </svg>
+    <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+      <rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/>
+    </svg>
+  </button>
+  <button id="stop-btn" class="transport-btn" title="Stop">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <rect x="5" y="5" width="14" height="14" rx="1"/>
+    </svg>
+  </button>
+  <span id="time-display">0:00 / 0:00</span>
+  <span id="loading-status" class="loading-status"></span>
+</div>
+
+{{ tracks|json_script:"track-data" }}
+{% if lyrics %}{{ lyrics|json_script:"lyrics-data" }}{% endif %}
+{% if song_info %}{{ song_info|json_script:"song-info-data" }}{% endif %}
+<script>
+  const SONG_NAME = "{{ song_name|escapejs }}";
+</script>
+<script src="{% static 'player/js/player.js' %}"></script>
+{% endblock %}

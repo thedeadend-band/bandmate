@@ -1,0 +1,126 @@
+{% extends "player/base.html" %}
+{% block title %}Multitrack – BandMate{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="page-title">Multitrack</h1>
+  {% if user.is_staff %}
+  <button type="button" class="btn btn-add" id="upload-btn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Upload Song
+  </button>
+  <input type="file" id="upload-input" accept=".zip" style="display:none">
+  {% endif %}
+</div>
+
+{% if songs %}
+<div class="songs-grid">
+  {% for song in songs %}
+  <div class="song-row">
+    <a href="{% url 'song_player' song.name %}" class="song-card">
+      <div class="song-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13"/>
+          <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+      </div>
+      <div class="song-info">
+        {% if song.artist and song.title %}
+        <h3>{{ song.artist }} – {{ song.title }}</h3>
+        {% else %}
+        <h3>{{ song.name }}</h3>
+        {% endif %}
+        <span class="track-count">{{ song.track_count }} track{{ song.track_count|pluralize }}</span>
+      </div>
+      <svg class="song-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 6 15 12 9 18"/>
+      </svg>
+    </a>
+    {% if user.is_staff %}
+    <div class="song-row-actions">
+      <form method="post" action="{% url 'song_delete' song.name %}" class="admin-delete-form"
+            onsubmit="return confirm('Delete song {{ song.name|escapejs }}? This cannot be undone.');">
+        {% csrf_token %}
+        <button type="submit" class="admin-action-btn admin-action-delete"
+                title="{% if song.in_playlist %}Used in a playlist{% else %}Delete song{% endif %}"
+                {% if song.in_playlist %}disabled{% endif %}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+          </svg>
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <h3>No songs found</h3>
+  <p>Add song folders to your <code>songs</code> directory to get started.</p>
+</div>
+{% endif %}
+
+{% if user.is_staff %}
+<script>
+(function() {
+  const btn = document.getElementById('upload-btn');
+  const input = document.getElementById('upload-input');
+  if (!btn || !input) return;
+
+  btn.addEventListener('click', () => input.click());
+
+  input.addEventListener('change', () => {
+    const file = input.files[0];
+    if (!file) return;
+    uploadZip(file, false);
+    input.value = '';
+  });
+
+  function uploadZip(file, confirm) {
+    const form = new FormData();
+    form.append('zipfile', file);
+    if (confirm) form.append('confirm', '1');
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+      || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    btn.disabled = true;
+    btn.textContent = 'Uploading\u2026';
+
+    fetch('{% url "song_upload" %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: form,
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        alert('Upload failed: ' + data.error);
+        resetBtn();
+      } else if (data.exists) {
+        if (window.confirm('"' + data.name + '" already exists. Overwrite it?')) {
+          uploadZip(file, true);
+        } else {
+          resetBtn();
+        }
+      } else if (data.ok) {
+        window.location.reload();
+      }
+    })
+    .catch(err => {
+      alert('Upload failed: ' + err.message);
+      resetBtn();
+    });
+  }
+
+  function resetBtn() {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload Song';
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

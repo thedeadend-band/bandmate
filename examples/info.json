@@ -1,0 +1,29 @@
+{
+	"title": "Say It Aint't So",
+	"artist": "Weezer",
+	"tempo": 152,
+    "key": "C Min",
+    "guitars": {
+        "lead_guitar": {
+    		"tuning": -0.5,
+    		"type": "electric",
+    		"capo": 0
+        },
+        "rhythm_guitar": {
+        	"tuning": -0.5,
+        	"type": "acoustic",
+        	"capo": 0
+        },
+        "bass_guitar": {
+        	"tuning": -0.5,
+        	"type": "electric",
+        	"capo": 0
+        }
+    },
+    "vocals": {
+        "lead": ["Erick"],
+        "backing": ["Robyn"]
+    },
+    "starts": "Matt",
+    "lyric_offset": "00:02.00"
+}

@@ -1,0 +1,66 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}{{ playlist.name }} – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Songs
+</a>
+
+<h1 class="song-title">{{ playlist.name }}</h1>
+
+<!-- Now-playing info (populated by JS) -->
+<div class="pp-now-playing">
+  <div class="pp-now-label" id="pp-now-label">Select a song to play</div>
+  <div class="song-info-panel" id="pp-info-panel" style="display:none"></div>
+  <div class="waveform-container pp-waveform" id="pp-waveform-container">
+    <canvas class="waveform-canvas" id="pp-canvas"></canvas>
+    <div class="playhead" id="pp-playhead"></div>
+    <div class="hover-line"></div>
+    <div class="loading-overlay" id="pp-loading"><span>Loading…</span></div>
+  </div>
+</div>
+
+<!-- Lyrics (populated by JS) -->
+<div class="lyrics-container" id="lyrics-container" style="display:none">
+  <div class="lyrics-title">Lyrics</div>
+  <div class="lyrics-scroller" id="lyrics-scroller"></div>
+</div>
+
+<hr class="section-divider" id="pp-lyrics-divider" style="display:none">
+
+<!-- Track listing -->
+<div class="pp-tracklist" id="pp-tracklist">
+  {% for song in playlist_songs %}
+  <button type="button" class="pp-track-row" data-index="{{ forloop.counter0 }}">
+    <span class="pp-track-num">{{ forloop.counter }}</span>
+    <span class="pp-track-name">{{ song.name }}</span>
+    <span class="pp-track-dur" data-index="{{ forloop.counter0 }}">--:--</span>
+  </button>
+  {% endfor %}
+</div>
+
+<!-- Transport — fixed bottom -->
+<div class="transport" id="transport">
+  <button id="pp-prev" class="transport-btn" title="Previous">
+    <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16"/></svg>
+  </button>
+  <button id="pp-play" class="transport-btn disabled" title="Play / Pause">
+    <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+    <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
+  </button>
+  <button id="pp-stop" class="transport-btn" title="Stop">
+    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+  </button>
+  <button id="pp-next" class="transport-btn" title="Next">
+    <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><rect x="17" y="4" width="2" height="16"/></svg>
+  </button>
+  <span id="pp-time">0:00 / 0:00</span>
+</div>
+
+{{ playlist_songs|json_script:"pp-data" }}
+<script src="{% static 'player/js/playlist_player.js' %}"></script>
+{% endblock %}

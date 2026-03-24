@@ -1,0 +1,19 @@
+{% extends "player/base.html" %}
+{% block title %}Calendar – BandMate{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h1 class="page-title">Calendar</h1>
+</div>
+
+{% if calendar_url %}
+<div class="calendar-container">
+  <iframe src="{{ calendar_url }}" class="calendar-iframe" frameborder="0" width="100%" height="100%" style="width:100%;height:100%;"></iframe>
+</div>
+{% else %}
+<div class="empty-state">
+  <h3>No calendar configured</h3>
+  <p>An admin can set the Google Calendar URL in Settings.</p>
+</div>
+{% endif %}
+{% endblock %}
