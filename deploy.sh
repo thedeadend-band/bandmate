@@ -88,7 +88,6 @@ if [[ "${ENABLE_TUNNEL,,}" == "y" ]]; then
     fi
 fi
 
-TEMPLATE="debian-12-standard_12.7-1_amd64.tar.zst"
 TEMPLATE_STORAGE="local"
 
 echo ""
@@ -117,11 +116,22 @@ fi
 
 # ---------- download template if needed -------------------------------------
 bold "[1/${TOTAL_STEPS}] Checking container template..."
-if ! pveam list "$TEMPLATE_STORAGE" 2>/dev/null | grep -q "$TEMPLATE"; then
-    echo "Downloading Debian 12 template..."
+
+# Check if a Debian 12 template is already downloaded
+TEMPLATE=$(pveam list "$TEMPLATE_STORAGE" 2>/dev/null | grep -o 'debian-12-standard[^ ]*' | head -1)
+
+if [[ -z "$TEMPLATE" ]]; then
+    echo "No local Debian 12 template found. Updating available list..."
+    pveam update > /dev/null 2>&1
+    TEMPLATE=$(pveam available --section system 2>/dev/null | grep -o 'debian-12-standard[^ ]*' | tail -1)
+    if [[ -z "$TEMPLATE" ]]; then
+        red "ERROR: Could not find a Debian 12 template. Check your Proxmox configuration."
+        exit 1
+    fi
+    echo "Downloading ${TEMPLATE}..."
     pveam download "$TEMPLATE_STORAGE" "$TEMPLATE"
 else
-    echo "Template already available."
+    echo "Template already available: ${TEMPLATE}"
 fi
 
 # ---------- create container ------------------------------------------------
