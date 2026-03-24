@@ -87,6 +87,18 @@ This creates a directory per song named `[Artist] - [Title]` and writes an `info
 
 If a song directory already exists (e.g. it already has audio tracks), the script adds the `info.json` alongside them.
 
+## Downloading Lyrics from LRCLIB
+
+The `download_lyrics.py` script searches [LRCLIB](https://lrclib.net/) for time-synced lyrics and saves them as `lyrics.lrc` files:
+
+```bash
+python download_lyrics.py /path/to/spreadsheet.xlsx --output-dir ./songs
+```
+
+For each row in the "Songs" sheet it looks up the track by artist and title, preferring synced (timestamped) lyrics. If only plain lyrics are available they are saved as a fallback. Existing `lyrics.lrc` files are skipped unless `--overwrite` is passed.
+
+The directories follow the same `[Artist] - [Title]` naming convention used by `generate_info.py`, so running both scripts against the same spreadsheet populates each song folder with both `info.json` and `lyrics.lrc`.
+
 ## Keyboard shortcuts (player page)
 
 | Key | Action |
