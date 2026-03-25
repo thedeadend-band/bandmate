@@ -66,6 +66,7 @@ All settings can be overridden with environment variables:
 |---|---|---|
 | `SONGS_DIR` | `<project>/songs` | Absolute path to the directory containing song folders. |
 | `WAVEFORM_CACHE_DIR` | `<project>/.waveform_cache` | Where cached waveform JSON files are stored. |
+| `AUDIO_CACHE_DIR` | `<project>/.audio_cache` | Where cached compressed audio files (OGG) are stored. |
 | `DJANGO_SECRET_KEY` | *(insecure dev key)* | Set a strong secret for production. |
 | `DJANGO_DEBUG` | `True` | Set to `False` in production. |
 | `DJANGO_ALLOWED_HOSTS` | `*` | Comma-separated list of allowed hostnames. |

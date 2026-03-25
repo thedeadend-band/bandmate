@@ -3,7 +3,7 @@
 # BandMate — Service Deployment Script
 #
 # Run this INSIDE your LXC container (or any Debian/Ubuntu server):
-#   bash deploy-service-only.sh
+#   bash deploy-service.sh
 #
 # It will install all dependencies, clone your repo, and start BandMate
 # as a systemd service, with optional Cloudflare Tunnel for HTTPS.
@@ -132,7 +132,8 @@ ENV_CONTENT="DJANGO_SECRET_KEY=${SECRET_KEY}
 DJANGO_DEBUG=False
 DJANGO_ALLOWED_HOSTS=127.0.0.1,${MY_IP}${CF_HOSTNAME:+,${CF_HOSTNAME}}
 SONGS_DIR=/srv/bandmate/songs
-WAVEFORM_CACHE_DIR=/srv/bandmate/.waveform_cache"
+WAVEFORM_CACHE_DIR=/srv/bandmate/.waveform_cache
+AUDIO_CACHE_DIR=/srv/bandmate/.audio_cache"
 
 if [[ "${ENABLE_TUNNEL,,}" == "y" ]]; then
     ENV_CONTENT="${ENV_CONTENT}
@@ -148,7 +149,7 @@ ENVEOF
 bold "[4/${TOTAL_STEPS}] Running migrations, collecting static files, creating admin..."
 cd /srv/bandmate
 set -a && source .env && set +a
-mkdir -p songs .waveform_cache
+mkdir -p songs .waveform_cache .audio_cache
 .venv/bin/python manage.py migrate --noinput -q
 .venv/bin/python manage.py collectstatic --noinput -q
 .venv/bin/python manage.py shell -c "

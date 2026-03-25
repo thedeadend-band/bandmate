@@ -91,6 +91,9 @@ SONGS_DIR = os.environ.get('SONGS_DIR', str(BASE_DIR / 'songs'))
 # Directory for caching generated waveform peak data (JSON files).
 WAVEFORM_CACHE_DIR = os.environ.get('WAVEFORM_CACHE_DIR', str(BASE_DIR / '.waveform_cache'))
 
+# Directory for caching transcoded audio files (OGG Vorbis).
+AUDIO_CACHE_DIR = os.environ.get('AUDIO_CACHE_DIR', str(BASE_DIR / '.audio_cache'))
+
 # ---------------------------------------------------------------------------
 # Upload / request size limits
 # ---------------------------------------------------------------------------

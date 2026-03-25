@@ -561,6 +561,28 @@ class PlaylistPlayer {
   }
 }
 
+/* ---- iOS / mobile audio unlock ---------------------------------------- */
+
+(function() {
+  let unlocked = false;
+  function unlock() {
+    if (unlocked) return;
+    unlocked = true;
+    const s = new Audio(
+      'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA' +
+      '//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7' +
+      'u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7////////////////' +
+      '//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4' +
+      'LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRBqpAAAAAAD/+1DEAAABgANeAAAAIAAANIAAAAA='
+    );
+    s.play().then(function() { s.pause(); s.remove(); }).catch(function() {});
+    document.removeEventListener('touchstart', unlock, true);
+    document.removeEventListener('click', unlock, true);
+  }
+  document.addEventListener('touchstart', unlock, true);
+  document.addEventListener('click', unlock, true);
+})();
+
 /* ---- Bootstrap -------------------------------------------------------- */
 
 document.addEventListener('DOMContentLoaded', () => {

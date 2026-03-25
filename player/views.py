@@ -32,6 +32,7 @@ def _staff_required(view_func):
     return wrapper
 
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.aiff', '.aif'}
+LOSSLESS_EXTENSIONS = {'.flac', '.wav', '.aiff', '.aif'}
 
 CONTENT_TYPES = {
     '.mp3': 'audio/mpeg',
@@ -248,14 +249,40 @@ def song_player(request, song_name: str):
 # API views
 # ---------------------------------------------------------------------------
 
+def _get_compressed_audio(track_path: Path) -> tuple:
+    """Return (file_path, content_type) — transcodes lossless to OGG if needed."""
+    if track_path.suffix.lower() not in LOSSLESS_EXTENSIONS:
+        ct = CONTENT_TYPES.get(track_path.suffix.lower(), 'application/octet-stream')
+        return track_path, ct
+
+    cache_dir = Path(settings.AUDIO_CACHE_DIR)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    file_stat = track_path.stat()
+    cache_key = hashlib.sha256(
+        f'{track_path}:{file_stat.st_mtime_ns}'.encode()
+    ).hexdigest()
+    cache_path = cache_dir / f'{cache_key}.ogg'
+
+    if not cache_path.exists():
+        subprocess.run(
+            [
+                'ffmpeg', '-v', 'quiet', '-y',
+                '-i', str(track_path),
+                '-c:a', 'libvorbis', '-b:a', '192k',
+                str(cache_path),
+            ],
+            check=True,
+        )
+
+    return cache_path, 'audio/ogg'
+
+
 @login_required
 def track_audio(request, song_name: str, track_filename: str):
     song_path = _safe_song_path(song_name)
     track_path = _safe_track_path(song_path, track_filename)
-    content_type = CONTENT_TYPES.get(
-        track_path.suffix.lower(), 'application/octet-stream'
-    )
-    response = FileResponse(open(track_path, 'rb'), content_type=content_type)
+    serve_path, content_type = _get_compressed_audio(track_path)
+    response = FileResponse(open(serve_path, 'rb'), content_type=content_type)
     response['Accept-Ranges'] = 'bytes'
     return response
 
@@ -604,10 +631,8 @@ def master_audio(request, song_name: str):
     master = _find_master_track(song_path)
     if not master:
         raise Http404
-    content_type = CONTENT_TYPES.get(
-        master.suffix.lower(), 'application/octet-stream'
-    )
-    response = FileResponse(open(master, 'rb'), content_type=content_type)
+    serve_path, content_type = _get_compressed_audio(master)
+    response = FileResponse(open(serve_path, 'rb'), content_type=content_type)
     response['Accept-Ranges'] = 'bytes'
     return response
 

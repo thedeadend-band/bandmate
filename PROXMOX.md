@@ -2,36 +2,82 @@
 
 ## Prerequisites
 
-- A Proxmox VE host with access to `pct` commands
+- A Proxmox VE host
 - Your BandMate code pushed to a Git repository (e.g. GitHub)
-- SSH access to your Proxmox host
 - (Optional) A Cloudflare account with a domain for HTTPS via Cloudflare Tunnel
 
-## Quick Start
+## Step 1: Create the LXC Container
 
-1. Copy `deploy.sh` to your Proxmox host:
+### Option A: Proxmox Web UI
 
-   ```bash
-   scp deploy.sh root@<proxmox-ip>:/root/deploy.sh
-   ```
+1. Log in to your Proxmox web interface
+2. Click **Create CT** in the top-right corner
+3. Configure the container:
+   - **General**: Pick a Container ID (e.g. `200`), set a hostname (e.g. `bandmate`), and set a root password
+   - **Template**: Select a **Debian 12** standard template (download one first via **local > CT Templates > Templates** if needed)
+   - **Disks**: Root disk size **16 GB** (adjust based on how many songs you plan to store)
+   - **CPU**: **2 cores**
+   - **Memory**: **2048 MB** RAM, **512 MB** swap
+   - **Network**: Bridge `vmbr0`, IPv4 **DHCP** (or a static IP if you prefer)
+4. Click **Finish** and start the container
 
-2. SSH into your Proxmox host and run the script:
+### Option B: Proxmox CLI
 
-   ```bash
-   ssh root@<proxmox-ip>
-   bash deploy.sh
-   ```
+```bash
+# Download the latest Debian 12 template if you don't have one
+pveam update
+TEMPLATE=$(pveam available --section system | grep -o 'debian-12-standard[^ ]*' | tail -1)
+pveam download local "$TEMPLATE"
 
-3. Follow the interactive prompts.
+# Create the container
+pct create 200 local:vztmpl/$TEMPLATE \
+    --hostname bandmate \
+    --rootfs local-lvm:16 \
+    --cores 2 \
+    --memory 2048 \
+    --swap 512 \
+    --net0 name=eth0,bridge=vmbr0,ip=dhcp \
+    --unprivileged 1 \
+    --features nesting=1 \
+    --start 0
 
-## What the Script Asks For
+# Start it
+pct start 200
+```
+
+## Step 2: Set the Root Password
+
+If you haven't already set one during creation, or need to reset it:
+
+```bash
+pct enter 200
+passwd root
+exit
+```
+
+## Step 3: Copy and Run deploy-service.sh
+
+Find your container's IP address:
+
+```bash
+pct exec 200 -- hostname -I
+```
+
+Copy the deploy script into the container and run it:
+
+```bash
+scp deploy-service.sh root@<container-ip>:/root/deploy-service.sh
+ssh root@<container-ip>
+bash deploy-service.sh
+```
+
+Follow the interactive prompts.
+
+### What the Script Asks For
 
 | Prompt | Default | Description |
 |--------|---------|-------------|
 | GitHub repo URL | *(required)* | URL to clone your BandMate repository |
-| Container ID | 200 | Proxmox LXC container ID |
-| Storage | local-lvm | Proxmox storage backend for the rootfs |
-| Disk size | 16 GB | Container disk allocation |
 | Admin username | admin | BandMate admin account |
 | Admin password | *(required)* | Password for the admin account |
 | Port | 80 | Port Gunicorn will listen on |
@@ -39,34 +85,30 @@
 | Public hostname | *(if tunnel)* | Your subdomain (e.g. `bandmate.thedeadend.band`) |
 | Tunnel token | *(if tunnel)* | Token from the Cloudflare dashboard |
 
-## What the Script Does
+### What the Script Does
 
-1. **Downloads** the Debian 12 LXC template (if not already cached)
-2. **Creates** an unprivileged LXC container (2 cores, 2 GB RAM, 512 MB swap)
-3. **Installs** system packages: Python 3, python3-venv, pip, ffmpeg, git, OpenSSH (with root login enabled for SCP)
-4. **Clones** your repo into `/srv/bandmate` and installs Python dependencies in a virtualenv
-5. **Configures** the environment (`.env` file with secret key, allowed hosts, songs directory)
-6. **Initialises** the database (migrations), collects static files, and creates the admin user
-7. **Sets up** a systemd service (`bandmate.service`) running Gunicorn
-8. **(Optional)** Installs `cloudflared` and registers the Cloudflare Tunnel
+1. **Installs** system packages: Python 3, python3-venv, pip, ffmpeg, git, OpenSSH (with root login enabled for SCP)
+2. **Clones** your repo into `/srv/bandmate` and installs Python dependencies in a virtualenv
+3. **Configures** the environment (`.env` file with secret key, allowed hosts, songs/cache directories)
+4. **Initialises** the database (migrations), collects static files, and creates the admin user
+5. **Sets up** a systemd service (`bandmate.service`) running Gunicorn
+6. **(Optional)** Installs `cloudflared` and registers the Cloudflare Tunnel
 
 ## After Deployment
 
 The script prints the container IP and access URL when finished. You can also manage the service with:
 
 ```bash
-# Check service status
-pct exec <CTID> -- systemctl status bandmate
+ssh root@<container-ip> systemctl status bandmate
+ssh root@<container-ip> journalctl -u bandmate -f
+ssh root@<container-ip> systemctl restart bandmate
+```
 
-# View live logs
-pct exec <CTID> -- journalctl -u bandmate -f
+Or from the Proxmox host:
 
-# View Cloudflare Tunnel logs (if enabled)
-pct exec <CTID> -- systemctl status cloudflared
-pct exec <CTID> -- journalctl -u cloudflared -f
-
-# Restart the service
-pct exec <CTID> -- systemctl restart bandmate
+```bash
+pct exec 200 -- systemctl status bandmate
+pct exec 200 -- journalctl -u bandmate -f
 ```
 
 ## Uploading Songs
@@ -82,14 +124,6 @@ scp -r /path/to/songs/* root@<container-ip>:/srv/bandmate/songs/
 
 # List current songs
 ssh root@<container-ip> ls /srv/bandmate/songs/
-```
-
-The deploy scripts install OpenSSH server and enable root login automatically. If you need to set or reset the root password:
-
-```bash
-# From the Proxmox host
-pct enter <CTID>
-passwd root
 ```
 
 ## HTTPS with Cloudflare Tunnel
@@ -108,7 +142,7 @@ Cloudflare Tunnel creates a secure outbound connection from your LXC container t
 
 ### Step 2: Run the Deploy Script
 
-Run `deploy.sh` on your Proxmox host (see [Quick Start](#quick-start)). When prompted:
+Run `deploy-service.sh` inside your container (see [Step 3](#step-3-copy-and-run-deploy-servicesh) above). When prompted:
 - Answer **y** to "Set up Cloudflare Tunnel for HTTPS?"
 - Enter your public hostname (e.g. `bandmate.thedeadend.band`)
 - Paste the tunnel token you copied from the dashboard
@@ -154,7 +188,7 @@ Gunicorn (127.0.0.1:80)
 To update BandMate after a new push to your repo:
 
 ```bash
-pct exec <CTID> -- bash -c "
+ssh root@<container-ip> bash -c "
   cd /srv/bandmate &&
   git pull &&
   source .venv/bin/activate &&
