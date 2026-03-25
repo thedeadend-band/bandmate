@@ -154,10 +154,13 @@ pct start "$CTID"
 sleep 5
 
 # ---------- install system packages -----------------------------------------
-bold "[4/${TOTAL_STEPS}] Installing system packages (python3, ffmpeg, git)..."
+bold "[4/${TOTAL_STEPS}] Installing system packages (python3, ffmpeg, git, openssh)..."
 pct exec "$CTID" -- bash -c "
     apt-get update -qq &&
-    apt-get install -y -qq python3 python3-venv python3-pip ffmpeg git > /dev/null 2>&1
+    apt-get install -y -qq python3 python3-venv python3-pip ffmpeg git openssh-server > /dev/null 2>&1 &&
+    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config &&
+    systemctl enable ssh > /dev/null 2>&1 &&
+    systemctl restart ssh
 "
 
 # ---------- clone repo and install app --------------------------------------
@@ -298,6 +301,6 @@ echo "    Service: HTTP  URL: localhost:${PORT}"
 echo "  Save the tunnel. Your site will be live at https://${CF_HOSTNAME}"
 fi
 echo ""
-echo "  Upload songs via the web UI or copy them to:"
-echo "    pct exec $CTID -- ls /srv/bandmate/songs/"
+echo "  Upload songs via the web UI or SCP them to the container:"
+echo "    scp -r /path/to/songs/* root@${CT_IP}:/srv/bandmate/songs/"
 echo ""

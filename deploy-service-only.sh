@@ -101,9 +101,12 @@ if [[ "${CONFIRM,,}" == "n" ]]; then
 fi
 
 # ---------- install system packages -----------------------------------------
-bold "[1/${TOTAL_STEPS}] Installing system packages (python3, ffmpeg, git)..."
+bold "[1/${TOTAL_STEPS}] Installing system packages (python3, ffmpeg, git, openssh)..."
 apt-get update -qq
-apt-get install -y -qq python3 python3-venv python3-pip ffmpeg git > /dev/null 2>&1
+apt-get install -y -qq python3 python3-venv python3-pip ffmpeg git openssh-server > /dev/null 2>&1
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+systemctl enable ssh > /dev/null 2>&1
+systemctl restart ssh
 
 # ---------- clone repo and install app --------------------------------------
 bold "[2/${TOTAL_STEPS}] Cloning repo and installing Python dependencies..."
@@ -125,7 +128,7 @@ SECRET_KEY=$(.venv/bin/python -c "from django.core.management.utils import get_r
 
 MY_IP=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "127.0.0.1")
 
-ENV_CONTENT="DJANGO_SECRET_KEY='${SECRET_KEY}'
+ENV_CONTENT="DJANGO_SECRET_KEY=${SECRET_KEY}
 DJANGO_DEBUG=False
 DJANGO_ALLOWED_HOSTS=127.0.0.1,${MY_IP}${CF_HOSTNAME:+,${CF_HOSTNAME}}
 SONGS_DIR=/srv/bandmate/songs
@@ -146,8 +149,8 @@ bold "[4/${TOTAL_STEPS}] Running migrations, collecting static files, creating a
 cd /srv/bandmate
 set -a && source .env && set +a
 mkdir -p songs .waveform_cache
-.venv/bin/python manage.py migrate --noinput
-.venv/bin/python manage.py collectstatic --noinput
+.venv/bin/python manage.py migrate --noinput -q
+.venv/bin/python manage.py collectstatic --noinput -q
 .venv/bin/python manage.py shell -c "
 from django.contrib.auth.models import User
 if not User.objects.filter(username='${ADMIN_USER}').exists():
@@ -229,6 +232,6 @@ echo "    Service: HTTP  URL: localhost:${PORT}"
 echo "  Save the tunnel. Your site will be live at https://${CF_HOSTNAME}"
 fi
 echo ""
-echo "  Upload songs via the web UI or copy them to:"
-echo "    ls /srv/bandmate/songs/"
+echo "  Upload songs via the web UI or SCP them to the container:"
+echo "    scp -r /path/to/songs/* root@${MY_IP}:/srv/bandmate/songs/"
 echo ""

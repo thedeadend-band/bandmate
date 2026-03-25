@@ -43,7 +43,7 @@
 
 1. **Downloads** the Debian 12 LXC template (if not already cached)
 2. **Creates** an unprivileged LXC container (2 cores, 2 GB RAM, 512 MB swap)
-3. **Installs** system packages: Python 3, python3-venv, pip, ffmpeg, git
+3. **Installs** system packages: Python 3, python3-venv, pip, ffmpeg, git, OpenSSH (with root login enabled for SCP)
 4. **Clones** your repo into `/srv/bandmate` and installs Python dependencies in a virtualenv
 5. **Configures** the environment (`.env` file with secret key, allowed hosts, songs directory)
 6. **Initialises** the database (migrations), collects static files, and creates the admin user
@@ -71,14 +71,25 @@ pct exec <CTID> -- systemctl restart bandmate
 
 ## Uploading Songs
 
-Upload songs via the BandMate web UI (admin only), or copy them directly into the container:
+Upload songs via the BandMate web UI (admin only), or SCP them directly into the container:
 
 ```bash
-# List current songs
-pct exec <CTID> -- ls /srv/bandmate/songs/
+# Copy a single song folder
+scp -r "/path/to/Artist - Title" root@<container-ip>:/srv/bandmate/songs/
 
-# Copy a song folder into the container
-pct push <CTID> /path/to/song-folder /srv/bandmate/songs/song-folder
+# Copy all song folders at once
+scp -r /path/to/songs/* root@<container-ip>:/srv/bandmate/songs/
+
+# List current songs
+ssh root@<container-ip> ls /srv/bandmate/songs/
+```
+
+The deploy scripts install OpenSSH server and enable root login automatically. If you need to set or reset the root password:
+
+```bash
+# From the Proxmox host
+pct enter <CTID>
+passwd root
 ```
 
 ## HTTPS with Cloudflare Tunnel
