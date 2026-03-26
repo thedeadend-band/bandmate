@@ -11,3 +11,4 @@ build/
 .env
 .DS_Store
 /songs
+/.audio_cache

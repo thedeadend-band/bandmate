@@ -268,7 +268,7 @@ def _get_compressed_audio(track_path: Path) -> tuple:
             [
                 'ffmpeg', '-v', 'quiet', '-y',
                 '-i', str(track_path),
-                '-c:a', 'libvorbis', '-b:a', '192k',
+                '-c:a', 'libopus', '-b:a', '192k',
                 str(cache_path),
             ],
             check=True,
