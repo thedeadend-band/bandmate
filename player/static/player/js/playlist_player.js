@@ -35,16 +35,48 @@ class PlaylistPlayer {
     this.lyricOffset = 0;
     this.currentLyricIndex = -1;
 
+    this._wakeLock = null;
+
     this._initAudio();
     this._bindEvents();
     this._preloadDurations();
     if (songs.length > 0) this.loadSong(0);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.isPlaying) {
+        this._requestWakeLock();
+      }
+    });
+  }
+
+  async _requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try { this._wakeLock = await navigator.wakeLock.request('screen'); }
+    catch (_) {}
+  }
+
+  _releaseWakeLock() {
+    if (this._wakeLock) {
+      this._wakeLock.release().catch(function() {});
+      this._wakeLock = null;
+    }
   }
 
   _initAudio() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    try {
+      this._streamDest = this.audioContext.createMediaStreamDestination();
+      this._iosAudio = document.createElement('audio');
+      this._iosAudio.setAttribute('playsinline', '');
+      this._iosAudio.srcObject = this._streamDest.stream;
+      this.outputNode = this._streamDest;
+    } catch (e) {
+      this.outputNode = this.audioContext.destination;
+    }
+
     this.gainNode = this.audioContext.createGain();
-    this.gainNode.connect(this.audioContext.destination);
+    this.gainNode.connect(this.outputNode);
   }
 
   /* ---- Loading -------------------------------------------------------- */
@@ -345,6 +377,7 @@ class PlaylistPlayer {
     if (!this.buffer) return;
     if (this.isPlaying) return;
     await this.audioContext.resume();
+    if (this._iosAudio) this._iosAudio.play().catch(function() {});
     if (this.playOffset >= this.duration) this.playOffset = 0;
     this.isPlaying = true;
 
@@ -365,6 +398,7 @@ class PlaylistPlayer {
     };
     this.source = src;
     this._startAnimation();
+    this._requestWakeLock();
     this._showPause(true);
   }
 
@@ -377,6 +411,7 @@ class PlaylistPlayer {
       this.source = null;
     }
     this._stopAnimation();
+    this._releaseWakeLock();
     this._showPause(false);
   }
 

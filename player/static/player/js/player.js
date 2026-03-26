@@ -19,16 +19,50 @@ class MultiTrackPlayer {
     this.lyricOffset = 0;
     this.currentLyricIndex = -1;
 
+    this._wakeLock = null;
+
     this._initAudioContext();
     this._initTracks(trackData);
     this._initLyrics();
     this._bindEvents();
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.isPlaying) {
+        this._requestWakeLock();
+      }
+    });
+  }
+
+  async _requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try { this._wakeLock = await navigator.wakeLock.request('screen'); }
+    catch (_) {}
+  }
+
+  _releaseWakeLock() {
+    if (this._wakeLock) {
+      this._wakeLock.release().catch(function() {});
+      this._wakeLock = null;
+    }
   }
 
   /* ---- Initialisation ------------------------------------------------- */
 
   _initAudioContext() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Route audio through a MediaStreamDestination → <audio> element so that
+    // iOS treats playback as "media" rather than "ambient", bypassing the
+    // hardware mute/silent switch.
+    try {
+      this._streamDest = this.audioContext.createMediaStreamDestination();
+      this._iosAudio = document.createElement('audio');
+      this._iosAudio.setAttribute('playsinline', '');
+      this._iosAudio.srcObject = this._streamDest.stream;
+      this.outputNode = this._streamDest;
+    } catch (e) {
+      this.outputNode = this.audioContext.destination;
+    }
   }
 
   _initTracks(trackData) {
@@ -56,7 +90,7 @@ class MultiTrackPlayer {
         displayHeight: 0,
       };
       track.gainNode.connect(track.panNode);
-      track.panNode.connect(this.audioContext.destination);
+      track.panNode.connect(this.outputNode);
       this.tracks.push(track);
       this._loadTrack(track);
     });
@@ -279,8 +313,8 @@ class MultiTrackPlayer {
     if (this.loadedCount === 0) return;
     if (this.isPlaying) return;
 
-    // Ensure the context is fully running before scheduling anything.
     await this.audioContext.resume();
+    if (this._iosAudio) this._iosAudio.play().catch(function() {});
 
     if (this.playOffset >= this.duration) this.playOffset = 0;
     this.isPlaying = true;
@@ -303,6 +337,7 @@ class MultiTrackPlayer {
 
     this._applyMuteState();
     this._startAnimation();
+    this._requestWakeLock();
 
     const btn = document.getElementById('play-btn');
     btn.querySelector('.icon-play').style.display = 'none';
@@ -323,6 +358,7 @@ class MultiTrackPlayer {
     }
 
     this._stopAnimation();
+    this._releaseWakeLock();
 
     const btn = document.getElementById('play-btn');
     btn.querySelector('.icon-play').style.display = '';
