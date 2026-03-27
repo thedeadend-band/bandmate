@@ -18,7 +18,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django_ratelimit.decorators import ratelimit
 
-from .models import Playlist, PlaylistEntry, SiteSettings
+from .models import Setlist, SetlistEntry, SiteSettings
 
 
 def _staff_required(view_func):
@@ -209,10 +209,10 @@ def song_list(request):
 
     if request.user.is_staff:
         used_songs = set(
-            PlaylistEntry.objects.values_list('song_name', flat=True).distinct()
+            SetlistEntry.objects.filter(is_break=False).values_list('song_name', flat=True).distinct()
         )
         for s in songs:
-            s['in_playlist'] = s['name'] in used_songs
+            s['in_setlist'] = s['name'] in used_songs
 
     return render(request, 'player/song_list.html', {
         'songs': songs,
@@ -220,13 +220,6 @@ def song_list(request):
     })
 
 
-@login_required
-def playlist_list(request):
-    playlists = Playlist.objects.select_related('owner').prefetch_related('entries')
-    return render(request, 'player/playlist_list.html', {
-        'playlists': playlists,
-        'nav_active': 'playlists',
-    })
 
 
 @login_required
@@ -525,39 +518,57 @@ def calendar_view(request):
 
 
 # ---------------------------------------------------------------------------
-# Playlists
+# Setlists
 # ---------------------------------------------------------------------------
 
+BREAK_SENTINEL = '__BREAK__'
+
+
 @login_required
-def playlist_create(request):
+def setlist_list(request):
+    setlists = Setlist.objects.select_related('owner').prefetch_related('entries')
+    return render(request, 'player/setlist_list.html', {
+        'setlists': setlists,
+        'nav_active': 'setlists',
+    })
+
+
+@login_required
+def setlist_create(request):
     songs = _get_available_songs()
     error = None
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
+        date = request.POST.get('date', '').strip() or None
         song_names = request.POST.getlist('songs')
         if not name:
-            error = 'Playlist name is required.'
+            error = 'Setlist name is required.'
         elif not song_names:
             error = 'Add at least one song.'
         else:
-            pl = Playlist.objects.create(name=name, owner=request.user)
+            sl = Setlist.objects.create(name=name, date=date, owner=request.user)
             for i, sn in enumerate(song_names):
-                PlaylistEntry.objects.create(playlist=pl, song_name=sn, position=i)
-            return redirect('playlist_list')
+                is_break = sn == BREAK_SENTINEL
+                SetlistEntry.objects.create(
+                    setlist=sl, song_name='' if is_break else sn,
+                    position=i, is_break=is_break,
+                )
+            return redirect('setlist_list')
 
-    return render(request, 'player/playlist_form.html', {
-        'form_title': 'New Playlist',
+    return render(request, 'player/setlist_form.html', {
+        'form_title': 'New Setlist',
         'available_songs': songs,
         'selected_songs': request.POST.getlist('songs') if request.method == 'POST' else [],
         'form_name': request.POST.get('name', '') if request.method == 'POST' else '',
+        'form_date': request.POST.get('date', '') if request.method == 'POST' else '',
         'error': error,
     })
 
 
 @login_required
-def playlist_edit(request, playlist_id: int):
-    pl = get_object_or_404(Playlist, pk=playlist_id)
-    if pl.owner != request.user and not request.user.is_staff:
+def setlist_edit(request, setlist_id: int):
+    sl = get_object_or_404(Setlist, pk=setlist_id)
+    if sl.owner != request.user and not request.user.is_staff:
         raise Http404
     songs = _get_available_songs()
     error = None
@@ -565,64 +576,114 @@ def playlist_edit(request, playlist_id: int):
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
+        date = request.POST.get('date', '').strip() or None
         song_names = request.POST.getlist('songs')
         if not name:
-            error = 'Playlist name is required.'
+            error = 'Setlist name is required.'
         elif not song_names:
             error = 'Add at least one song.'
         else:
-            pl.name = name
-            pl.save()
-            pl.entries.all().delete()
+            sl.name = name
+            sl.date = date
+            sl.save()
+            sl.entries.all().delete()
             for i, sn in enumerate(song_names):
-                PlaylistEntry.objects.create(playlist=pl, song_name=sn, position=i)
-            success = 'Playlist saved.'
+                is_break = sn == BREAK_SENTINEL
+                SetlistEntry.objects.create(
+                    setlist=sl, song_name='' if is_break else sn,
+                    position=i, is_break=is_break,
+                )
+            success = 'Setlist saved.'
 
-    current_songs = list(pl.entries.values_list('song_name', flat=True))
+    current_songs = []
+    for entry in sl.entries.order_by('position'):
+        current_songs.append(BREAK_SENTINEL if entry.is_break else entry.song_name)
 
-    return render(request, 'player/playlist_form.html', {
-        'form_title': f'Edit – {pl.name}',
-        'playlist': pl,
+    return render(request, 'player/setlist_form.html', {
+        'form_title': f'Edit – {sl.name}',
+        'setlist': sl,
         'available_songs': songs,
         'selected_songs': request.POST.getlist('songs') if request.method == 'POST' and error else current_songs,
-        'form_name': request.POST.get('name', pl.name) if request.method == 'POST' and error else pl.name,
+        'form_name': request.POST.get('name', sl.name) if request.method == 'POST' and error else sl.name,
+        'form_date': (
+            request.POST.get('date', '') if request.method == 'POST' and error
+            else (sl.date.isoformat() if sl.date else '')
+        ),
         'error': error,
         'success': success,
     })
 
 
 @login_required
-def playlist_delete(request, playlist_id: int):
-    pl = get_object_or_404(Playlist, pk=playlist_id)
-    if pl.owner != request.user and not request.user.is_staff:
+def setlist_delete(request, setlist_id: int):
+    sl = get_object_or_404(Setlist, pk=setlist_id)
+    if sl.owner != request.user and not request.user.is_staff:
         raise Http404
     if request.method == 'POST':
-        pl.delete()
-    return redirect('playlist_list')
+        sl.delete()
+    return redirect('setlist_list')
 
 
 @login_required
-def playlist_player(request, playlist_id: int):
-    pl = get_object_or_404(Playlist, pk=playlist_id)
-    entries = list(pl.entries.order_by('position'))
+def setlist_player(request, setlist_id: int):
+    sl = get_object_or_404(Setlist, pk=setlist_id)
+    entries = list(sl.entries.order_by('position'))
 
-    playlist_songs = []
+    setlist_items = []
     for entry in entries:
+        if entry.is_break:
+            setlist_items.append({'is_break': True})
+            continue
         try:
             song_path = _safe_song_path(entry.song_name)
         except Http404:
             continue
         master = _find_master_track(song_path)
         if master:
-            playlist_songs.append({
+            setlist_items.append({
                 'name': entry.song_name,
                 'master_filename': master.name,
+                'is_break': False,
             })
 
-    return render(request, 'player/playlist_player.html', {
-        'playlist': pl,
-        'playlist_songs': playlist_songs,
+    return render(request, 'player/setlist_player.html', {
+        'setlist': sl,
+        'setlist_items': setlist_items,
     })
+
+
+@login_required
+def setlist_export(request, setlist_id: int):
+    """Export a setlist as a PDF with one page per set (split by breaks)."""
+    from .export import render_setlist_pdf
+    sl = get_object_or_404(Setlist, pk=setlist_id)
+    entries = list(sl.entries.order_by('position'))
+
+    song_data = []
+    for entry in entries:
+        if entry.is_break:
+            song_data.append({'is_break': True})
+            continue
+        info = None
+        try:
+            song_path = _safe_song_path(entry.song_name)
+            info = _load_song_info(song_path)
+        except Http404:
+            pass
+        song_data.append({
+            'is_break': False,
+            'song_name': entry.song_name,
+            'info': info,
+        })
+
+    pdf_bytes = render_setlist_pdf(sl, song_data)
+    safe_name = sl.name.replace(' ', '_')
+    response = FileResponse(
+        pdf_bytes,
+        content_type='application/pdf',
+        filename=f'{safe_name}_setlist.pdf',
+    )
+    return response
 
 
 @login_required
@@ -751,10 +812,10 @@ def song_delete(request, song_name: str):
 
     song_path = _safe_song_path(song_name)
 
-    in_playlists = PlaylistEntry.objects.filter(song_name=song_name).exists()
-    if in_playlists:
+    in_setlists = SetlistEntry.objects.filter(song_name=song_name, is_break=False).exists()
+    if in_setlists:
         return JsonResponse(
-            {'error': 'Cannot delete: song is used in one or more playlists.'},
+            {'error': 'Cannot delete: song is used in one or more setlists.'},
             status=400,
         )
 

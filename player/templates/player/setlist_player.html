@@ -1,16 +1,31 @@
 {% extends "player/base.html" %}
 {% load static %}
-{% block title %}{{ playlist.name }} – BandMate{% endblock %}
+{% block title %}{{ setlist.name }} – BandMate{% endblock %}
 
 {% block content %}
-<a href="{% url 'song_list' %}" class="back-link">
+<a href="{% url 'setlist_list' %}" class="back-link">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <polyline points="15 18 9 12 15 6"/>
   </svg>
-  Back to Songs
+  Back to Setlists
 </a>
 
-<h1 class="song-title">{{ playlist.name }}</h1>
+<div class="section-header" style="margin-top:0">
+  <h1 class="song-title">{{ setlist.name }}</h1>
+  <a href="{% url 'setlist_export' setlist.pk %}" class="btn btn-add" title="Export PDF">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+    </svg>
+    Export PDF
+  </a>
+</div>
+
+{% if setlist.date %}
+<p class="setlist-date">{{ setlist.date|date:"F j, Y" }}</p>
+{% endif %}
 
 <!-- Now-playing info (populated by JS) -->
 <div class="pp-now-playing">
@@ -34,12 +49,18 @@
 
 <!-- Track listing -->
 <div class="pp-tracklist" id="pp-tracklist">
-  {% for song in playlist_songs %}
-  <button type="button" class="pp-track-row" data-index="{{ forloop.counter0 }}">
-    <span class="pp-track-num">{{ forloop.counter }}</span>
-    <span class="pp-track-name">{{ song.name }}</span>
-    <span class="pp-track-dur" data-index="{{ forloop.counter0 }}">--:--</span>
-  </button>
+  {% for item in setlist_items %}
+    {% if item.is_break %}
+    <div class="pp-break-row">
+      <span class="pp-break-label">— Break —</span>
+    </div>
+    {% else %}
+    <button type="button" class="pp-track-row" data-index="{{ forloop.counter0 }}" data-is-break="false">
+      <span class="pp-track-num">{{ forloop.counter }}</span>
+      <span class="pp-track-name">{{ item.name }}</span>
+      <span class="pp-track-dur" data-index="{{ forloop.counter0 }}">--:--</span>
+    </button>
+    {% endif %}
   {% endfor %}
 </div>
 
@@ -61,6 +82,6 @@
   <span id="pp-time">0:00 / 0:00</span>
 </div>
 
-{{ playlist_songs|json_script:"pp-data" }}
-<script src="{% static 'player/js/playlist_player.js' %}"></script>
+{{ setlist_items|json_script:"pp-data" }}
+<script src="{% static 'player/js/setlist_player.js' %}"></script>
 {% endblock %}

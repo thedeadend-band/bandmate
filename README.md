@@ -1,6 +1,6 @@
 # BandMate
 
-A self-hosted multi-track audio player and playlist manager for reviewing
+A self-hosted multi-track audio player and setlist manager for reviewing
 mixes. Songs live as directories on your server; each directory contains
 individual track files (MP3, WAV, FLAC, etc.) that are played back
 simultaneously with per-track mute/solo controls, waveform visualization,
@@ -11,7 +11,7 @@ and a scrub-able playhead.
 - **User authentication** – Django-based login; built-in admin console for user management.
 - **Song browser** – Automatically discovers song folders in a configurable directory.
 - **Multi-track player** – Web Audio API plays all tracks in perfect sync with volume and pan.
-- **Playlists** – Create playlists of songs that play each song's "Master" track in sequence.
+- **Setlists** – Build setlists with break markers, play master tracks in sequence, and export to PDF.
 - **Waveform display** – Server-side peak generation (cached to disk) rendered on `<canvas>`.
 - **Mute / Solo** – Standard DAW-style mute and solo per track.
 - **Scrub / Seek** – Click or drag on any waveform to scrub. Keyboard shortcuts included.

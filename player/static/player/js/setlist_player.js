@@ -1,5 +1,5 @@
 /* ========================================================================
-   BandMate – Playlist player (sequential master-track playback)
+   BandMate – Setlist player (sequential master-track playback)
    ======================================================================== */
 
 const PP_ICONS = {
@@ -12,9 +12,10 @@ const PP_ICONS = {
   tuning: '<svg class="info-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M5 16a7 7 0 0114 0"/><line x1="12" y1="16" x2="8.5" y2="9"/></svg>',
 };
 
-class PlaylistPlayer {
-  constructor(songs) {
-    this.songs = songs;
+class SetlistPlayer {
+  constructor(items) {
+    this.allItems = items;
+    this.songs = items.filter(it => !it.is_break);
     this.audioContext = null;
     this.currentIndex = -1;
     this.buffer = null;
@@ -40,7 +41,7 @@ class PlaylistPlayer {
     this._initAudio();
     this._bindEvents();
     this._preloadDurations();
-    if (songs.length > 0) this.loadSong(0);
+    if (this.songs.length > 0) this.loadSong(0);
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && this.isPlaying) {
@@ -99,7 +100,6 @@ class PlaylistPlayer {
     document.getElementById('pp-now-label').textContent = song.name;
 
     try {
-      // Fetch song info + lyrics in parallel with waveform
       const infoPromise = fetch(`/api/songs/${encodeURIComponent(song.name)}/info/`)
         .then(r => r.ok ? r.json() : null).catch(() => null);
 
@@ -123,7 +123,6 @@ class PlaylistPlayer {
       this._drawWaveform();
       this._updateTime();
 
-      // Process info data
       const infoData = await infoPromise;
       this.songInfo = infoData?.info || null;
       this.lyrics = infoData?.lyrics || null;
@@ -162,10 +161,30 @@ class PlaylistPlayer {
         const resp = await fetch(url);
         if (!resp.ok) continue;
         const data = await resp.json();
-        const el = document.querySelector(`.pp-track-dur[data-index="${i}"]`);
+        const el = document.querySelector(`.pp-track-dur[data-index="${this._domIndexForSong(i)}"]`);
         if (el) el.textContent = this._fmt(data.duration);
       } catch (_) { /* ignore */ }
     }
+  }
+
+  _domIndexForSong(songIndex) {
+    let songCount = 0;
+    for (let i = 0; i < this.allItems.length; i++) {
+      if (!this.allItems[i].is_break) {
+        if (songCount === songIndex) return i;
+        songCount++;
+      }
+    }
+    return -1;
+  }
+
+  _songIndexFromDom(domIndex) {
+    if (this.allItems[domIndex]?.is_break) return -1;
+    let songCount = 0;
+    for (let i = 0; i < domIndex; i++) {
+      if (!this.allItems[i].is_break) songCount++;
+    }
+    return songCount;
   }
 
   /* ---- Info panel (dynamic) ------------------------------------------- */
@@ -501,8 +520,9 @@ class PlaylistPlayer {
   }
 
   _highlightRow(index) {
-    document.querySelectorAll('.pp-track-row').forEach((el, i) => {
-      el.classList.toggle('pp-active', i === index);
+    const domIdx = this._domIndexForSong(index);
+    document.querySelectorAll('.pp-track-row').forEach(el => {
+      el.classList.toggle('pp-active', +el.dataset.index === domIdx);
     });
   }
 
@@ -527,10 +547,12 @@ class PlaylistPlayer {
     document.getElementById('pp-tracklist').addEventListener('click', (e) => {
       const row = e.target.closest('.pp-track-row');
       if (row) {
-        const idx = +row.dataset.index;
+        const domIdx = +row.dataset.index;
+        const songIdx = this._songIndexFromDom(domIdx);
+        if (songIdx < 0) return;
         const wasPlaying = this.isPlaying;
         this.pause();
-        this.loadSong(idx).then(() => { if (wasPlaying) this.play(); });
+        this.loadSong(songIdx).then(() => { if (wasPlaying) this.play(); });
       }
     });
 
@@ -606,7 +628,7 @@ class PlaylistPlayer {
     const s = new Audio(
       'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA' +
       '//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7' +
-      'u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7////////////////' +
+      'u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7////////////////' +
       '//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4' +
       'LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRBqpAAAAAAD/+1DEAAABgANeAAAAIAAANIAAAAA='
     );
@@ -623,6 +645,6 @@ class PlaylistPlayer {
 document.addEventListener('DOMContentLoaded', () => {
   const raw = document.getElementById('pp-data');
   if (!raw) return;
-  const songs = JSON.parse(raw.textContent);
-  window.playlistPlayer = new PlaylistPlayer(songs);
+  const items = JSON.parse(raw.textContent);
+  window.setlistPlayer = new SetlistPlayer(items);
 });

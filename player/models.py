@@ -2,13 +2,14 @@ from django.conf import settings
 from django.db import models
 
 
-class Playlist(models.Model):
+class Setlist(models.Model):
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='playlists',
+        related_name='setlists',
     )
+    date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -19,21 +20,24 @@ class Playlist(models.Model):
         return self.name
 
 
-class PlaylistEntry(models.Model):
-    playlist = models.ForeignKey(
-        Playlist,
+class SetlistEntry(models.Model):
+    setlist = models.ForeignKey(
+        Setlist,
         on_delete=models.CASCADE,
         related_name='entries',
     )
-    song_name = models.CharField(max_length=500)
+    song_name = models.CharField(max_length=500, blank=True, default='')
     position = models.PositiveIntegerField()
+    is_break = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['position']
-        unique_together = [('playlist', 'position')]
+        unique_together = [('setlist', 'position')]
 
     def __str__(self):
-        return f'{self.playlist.name} #{self.position}: {self.song_name}'
+        if self.is_break:
+            return f'{self.setlist.name} #{self.position}: (Break)'
+        return f'{self.setlist.name} #{self.position}: {self.song_name}'
 
 
 class SiteSettings(models.Model):
