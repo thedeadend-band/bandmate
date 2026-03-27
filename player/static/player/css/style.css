@@ -15,6 +15,7 @@
   --radius:    8px;
   --radius-lg: 12px;
   --transport-h: 72px;
+  --navbar-h: 63px;
 
   /* ---- Dark palette (default) ---- */
   --bg-primary:   #0a0a14;
@@ -1330,6 +1331,8 @@ body {
   letter-spacing: 0.05em;
   color: var(--text-secondary);
   padding: 8px 16px 0;
+  position: relative;
+  z-index: 2;
 }
 
 .lyrics-scroller {
@@ -1394,7 +1397,7 @@ body {
 
 .lyrics-container.lyrics-fullscreen {
   position: fixed;
-  top: 0;
+  top: var(--navbar-h, 45px);
   left: 0;
   right: 0;
   bottom: var(--transport-h);
@@ -1402,7 +1405,7 @@ body {
   margin: 0;
   border: none;
   border-radius: 0;
-  z-index: 110;
+  z-index: 99;
 }
 
 .lyrics-container.lyrics-fullscreen .lyrics-scroller {
@@ -1452,6 +1455,8 @@ body {
   .container { padding: 28px 24px 60px; }
 
   .navbar { padding: 14px 24px; }
+
+  :root { --navbar-h: 67px; }
 
   .song-card { padding: 18px 20px; }
 

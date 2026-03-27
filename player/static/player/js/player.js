@@ -51,16 +51,23 @@ class MultiTrackPlayer {
   _initAudioContext() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-    // Route audio through a MediaStreamDestination → <audio> element so that
-    // iOS treats playback as "media" rather than "ambient", bypassing the
-    // hardware mute/silent switch.
-    try {
-      this._streamDest = this.audioContext.createMediaStreamDestination();
-      this._iosAudio = document.createElement('audio');
-      this._iosAudio.setAttribute('playsinline', '');
-      this._iosAudio.srcObject = this._streamDest.stream;
-      this.outputNode = this._streamDest;
-    } catch (e) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+      // Route audio through a MediaStreamDestination → <audio> element so that
+      // iOS treats playback as "media" rather than "ambient", bypassing the
+      // hardware mute/silent switch.
+      try {
+        this._streamDest = this.audioContext.createMediaStreamDestination();
+        this._iosAudio = document.createElement('audio');
+        this._iosAudio.setAttribute('playsinline', '');
+        this._iosAudio.srcObject = this._streamDest.stream;
+        this.outputNode = this._streamDest;
+      } catch (e) {
+        this.outputNode = this.audioContext.destination;
+      }
+    } else {
       this.outputNode = this.audioContext.destination;
     }
   }

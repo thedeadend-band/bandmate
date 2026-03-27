@@ -66,13 +66,20 @@ class SetlistPlayer {
   _initAudio() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-    try {
-      this._streamDest = this.audioContext.createMediaStreamDestination();
-      this._iosAudio = document.createElement('audio');
-      this._iosAudio.setAttribute('playsinline', '');
-      this._iosAudio.srcObject = this._streamDest.stream;
-      this.outputNode = this._streamDest;
-    } catch (e) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+      try {
+        this._streamDest = this.audioContext.createMediaStreamDestination();
+        this._iosAudio = document.createElement('audio');
+        this._iosAudio.setAttribute('playsinline', '');
+        this._iosAudio.srcObject = this._streamDest.stream;
+        this.outputNode = this._streamDest;
+      } catch (e) {
+        this.outputNode = this.audioContext.destination;
+      }
+    } else {
       this.outputNode = this.audioContext.destination;
     }
 
