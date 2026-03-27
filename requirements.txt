@@ -4,3 +4,4 @@ gunicorn>=21.2.0
 whitenoise>=6.5.0
 django-ratelimit>=4.1.0
 reportlab>=4.0
+mido>=1.3

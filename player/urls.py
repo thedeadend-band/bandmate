@@ -26,6 +26,7 @@ urlpatterns = [
     path('setlists/<int:setlist_id>/delete/', views.setlist_delete, name='setlist_delete'),
     path('setlists/<int:setlist_id>/play/', views.setlist_player, name='setlist_player'),
     path('setlists/<int:setlist_id>/export/', views.setlist_export, name='setlist_export'),
+    path('setlists/<int:setlist_id>/export-midi/', views.setlist_export_midi, name='setlist_export_midi'),
     path('api/songs/<str:song_name>/master/audio/', views.master_audio, name='master_audio'),
     path('api/songs/<str:song_name>/master/waveform/', views.master_waveform, name='master_waveform'),
     path('api/songs/<str:song_name>/info/', views.song_info_api, name='song_info_api'),

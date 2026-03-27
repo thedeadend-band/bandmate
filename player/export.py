@@ -1,4 +1,4 @@
-"""PDF export for setlists using ReportLab."""
+"""PDF and MIDI export for setlists."""
 
 import io
 import os
@@ -275,5 +275,75 @@ def render_setlist_pdf(setlist, song_data):
         story.append(table)
 
     doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+# ---------------------------------------------------------------------------
+# MIDI export
+# ---------------------------------------------------------------------------
+
+DEFAULT_BPM = 120
+SONG_DURATION_MINUTES = 10
+MIDI_TICKS_PER_BEAT = 960
+
+
+def render_setlist_midi(setlist, song_data):
+    """Render a setlist to a MIDI byte buffer.
+
+    Produces a Type 1 MIDI file matching Reaper's expected format:
+    - Track 0: tempo map with track name, time signature, tempo changes,
+      and song-title markers (~10 min gap between songs)
+    - Track 1: empty (Reaper convention)
+
+    Breaks are included as markers but occupy no time.
+
+    Returns an io.BytesIO positioned at 0, ready to be served.
+    """
+    import mido
+
+    mid = mido.MidiFile(type=1, ticks_per_beat=MIDI_TICKS_PER_BEAT)
+    tempo_track = mido.MidiTrack()
+    mid.tracks.append(tempo_track)
+
+    tempo_track.append(mido.MetaMessage('track_name', name=setlist.name, time=0))
+    tempo_track.append(mido.MetaMessage(
+        'time_signature', numerator=4, denominator=4,
+        clocks_per_click=24, notated_32nd_notes_per_beat=8, time=0,
+    ))
+
+    songs = [item for item in song_data if not item.get('is_break')]
+    pending_gap = 0
+
+    for idx, item in enumerate(song_data):
+        if item.get('is_break'):
+            continue
+
+        title = _song_title(item)
+        info = item.get('info') or {}
+        bpm = info.get('tempo', DEFAULT_BPM)
+        tempo_us = mido.bpm2tempo(bpm)
+
+        tempo_track.append(mido.MetaMessage(
+            'set_tempo', tempo=tempo_us, time=pending_gap,
+        ))
+        tempo_track.append(mido.MetaMessage('marker', text=title, time=0))
+
+        raw_beats = bpm * SONG_DURATION_MINUTES
+        bars = round(raw_beats / 4)
+        pending_gap = bars * 4 * MIDI_TICKS_PER_BEAT
+
+    tempo_track.append(mido.MetaMessage(
+        'set_tempo', tempo=mido.bpm2tempo(DEFAULT_BPM), time=pending_gap,
+    ))
+    tempo_track.append(mido.MetaMessage('marker', text='End', time=0))
+    tempo_track.append(mido.MetaMessage('end_of_track', time=0))
+
+    empty_track = mido.MidiTrack()
+    empty_track.append(mido.MetaMessage('end_of_track', time=0))
+    mid.tracks.append(empty_track)
+
+    buf = io.BytesIO()
+    mid.save(file=buf)
     buf.seek(0)
     return buf

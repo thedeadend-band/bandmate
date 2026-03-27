@@ -21,6 +21,16 @@
     </svg>
     Export PDF
   </a>
+  <a href="{% url 'setlist_export_midi' setlist.pk %}" class="btn btn-add" title="Export MIDI tempo map for Reaper">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="6" width="20" height="14" rx="2"/>
+      <rect x="5" y="6" width="2" height="8" fill="currentColor"/>
+      <rect x="9" y="6" width="2" height="8" fill="currentColor"/>
+      <rect x="14" y="6" width="2" height="8" fill="currentColor"/>
+      <rect x="18" y="6" width="2" height="8" fill="currentColor"/>
+    </svg>
+    Export MIDI
+  </a>
 </div>
 
 {% if setlist.date %}

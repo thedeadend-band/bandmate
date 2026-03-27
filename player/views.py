@@ -687,6 +687,40 @@ def setlist_export(request, setlist_id: int):
 
 
 @login_required
+def setlist_export_midi(request, setlist_id: int):
+    """Export a setlist as a MIDI file with tempo map and markers."""
+    from .export import render_setlist_midi
+    sl = get_object_or_404(Setlist, pk=setlist_id)
+    entries = list(sl.entries.order_by('position'))
+
+    song_data = []
+    for entry in entries:
+        if entry.is_break:
+            song_data.append({'is_break': True})
+            continue
+        info = None
+        try:
+            song_path = _safe_song_path(entry.song_name)
+            info = _load_song_info(song_path)
+        except Http404:
+            pass
+        song_data.append({
+            'is_break': False,
+            'song_name': entry.song_name,
+            'info': info,
+        })
+
+    midi_bytes = render_setlist_midi(sl, song_data)
+    safe_name = sl.name.replace(' ', '_')
+    response = FileResponse(
+        midi_bytes,
+        content_type='audio/midi',
+        filename=f'{safe_name}_setlist.mid',
+    )
+    return response
+
+
+@login_required
 def master_audio(request, song_name: str):
     song_path = _safe_song_path(song_name)
     master = _find_master_track(song_path)
