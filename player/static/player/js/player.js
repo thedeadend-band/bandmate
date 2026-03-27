@@ -171,6 +171,18 @@ class MultiTrackPlayer {
       const info = JSON.parse(infoEl.textContent);
       this.lyricOffset = info.lyric_offset_secs || 0;
     }
+    const fsBtn = document.getElementById('lyrics-fullscreen-btn');
+    if (fsBtn) {
+      fsBtn.addEventListener('click', () => this._toggleLyricsFullscreen());
+    }
+  }
+
+  _toggleLyricsFullscreen() {
+    const container = document.getElementById('lyrics-container');
+    if (!container) return;
+    container.classList.toggle('lyrics-fullscreen');
+    this.currentLyricIndex = -2;
+    this._updateLyrics();
   }
 
   _updateLyrics() {

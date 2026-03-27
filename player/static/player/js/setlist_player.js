@@ -248,6 +248,7 @@ class SetlistPlayer {
     const scroller = document.getElementById('lyrics-scroller');
     const divider = document.getElementById('pp-lyrics-divider');
     if (!this.lyrics || !this.lyrics.length) {
+      container.classList.remove('lyrics-fullscreen');
       container.style.display = 'none';
       if (divider) divider.style.display = 'none';
       scroller.innerHTML = '';
@@ -535,6 +536,14 @@ class SetlistPlayer {
 
   /* ---- Events --------------------------------------------------------- */
 
+  _toggleLyricsFullscreen() {
+    const container = document.getElementById('lyrics-container');
+    if (!container) return;
+    container.classList.toggle('lyrics-fullscreen');
+    this.currentLyricIndex = -2;
+    this._updateLyrics();
+  }
+
   _bindEvents() {
     document.getElementById('pp-play').addEventListener('click', () => {
       if (document.getElementById('pp-play').classList.contains('disabled')) return;
@@ -543,6 +552,11 @@ class SetlistPlayer {
     document.getElementById('pp-stop').addEventListener('click', () => this.stop());
     document.getElementById('pp-next').addEventListener('click', () => this.next());
     document.getElementById('pp-prev').addEventListener('click', () => this.prev());
+
+    const fsBtn = document.getElementById('lyrics-fullscreen-btn');
+    if (fsBtn) {
+      fsBtn.addEventListener('click', () => this._toggleLyricsFullscreen());
+    }
 
     document.getElementById('pp-tracklist').addEventListener('click', (e) => {
       const row = e.target.closest('.pp-track-row');

@@ -1,0 +1,453 @@
+diff --git a/player/static/player/css/style.css b/player/static/player/css/style.css
+index e97340c..6d75696 100644
+--- a/player/static/player/css/style.css
++++ b/player/static/player/css/style.css
+@@ -1361,6 +1361,53 @@ body {
+   opacity: 0;
+ }
+ 
++.lyrics-fullscreen-btn {
++  position: absolute;
++  top: 6px;
++  right: 10px;
++  background: none;
++  border: none;
++  color: var(--text-secondary);
++  cursor: pointer;
++  padding: 4px;
++  border-radius: var(--radius);
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  transition: color 0.2s, background 0.2s;
++}
++
++.lyrics-fullscreen-btn:hover {
++  color: var(--accent-blue);
++  background: var(--bg-hover);
++}
++
++.lyrics-container.lyrics-fullscreen {
++  position: fixed;
++  top: 0;
++  left: 0;
++  right: 0;
++  bottom: var(--transport-h);
++  height: auto;
++  margin: 0;
++  border: none;
++  border-radius: 0;
++  z-index: 80;
++}
++
++.lyrics-container.lyrics-fullscreen .lyrics-scroller {
++  padding: 40vh 16px;
++}
++
++.lyrics-container.lyrics-fullscreen .lyrics-line {
++  font-size: 1.4rem;
++  padding: 6px 0;
++}
++
++.lyrics-container.lyrics-fullscreen .lyrics-line.active {
++  font-size: 2rem;
++}
++
+ /* ====================================================================
+    Desktop enhancements (hover-capable devices, wider screens)
+    ==================================================================== */
+diff --git a/player/static/player/icons/midi.png b/player/static/player/icons/midi.png
+deleted file mode 100644
+index c5878ea040e1edb24902eca20e4aafb6ec8d1ccf..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 11414
+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
+
+diff --git a/player/static/player/js/player.js b/player/static/player/js/player.js
+index 818bd3d..9b25e9b 100644
+--- a/player/static/player/js/player.js
++++ b/player/static/player/js/player.js
+@@ -171,6 +171,18 @@ class MultiTrackPlayer {
+       const info = JSON.parse(infoEl.textContent);
+       this.lyricOffset = info.lyric_offset_secs || 0;
+     }
++    const fsBtn = document.getElementById('lyrics-fullscreen-btn');
++    if (fsBtn) {
++      fsBtn.addEventListener('click', () => this._toggleLyricsFullscreen());
++    }
++  }
++
++  _toggleLyricsFullscreen() {
++    const container = document.getElementById('lyrics-container');
++    if (!container) return;
++    container.classList.toggle('lyrics-fullscreen');
++    this.currentLyricIndex = -2;
++    this._updateLyrics();
+   }
+ 
+   _updateLyrics() {
+diff --git a/player/static/player/js/setlist_player.js b/player/static/player/js/setlist_player.js
+index f54c7ac..f34b22e 100644
+--- a/player/static/player/js/setlist_player.js
++++ b/player/static/player/js/setlist_player.js
+@@ -248,6 +248,7 @@ class SetlistPlayer {
+     const scroller = document.getElementById('lyrics-scroller');
+     const divider = document.getElementById('pp-lyrics-divider');
+     if (!this.lyrics || !this.lyrics.length) {
++      container.classList.remove('lyrics-fullscreen');
+       container.style.display = 'none';
+       if (divider) divider.style.display = 'none';
+       scroller.innerHTML = '';
+@@ -535,6 +536,14 @@ class SetlistPlayer {
+ 
+   /* ---- Events --------------------------------------------------------- */
+ 
++  _toggleLyricsFullscreen() {
++    const container = document.getElementById('lyrics-container');
++    if (!container) return;
++    container.classList.toggle('lyrics-fullscreen');
++    this.currentLyricIndex = -2;
++    this._updateLyrics();
++  }
++
+   _bindEvents() {
+     document.getElementById('pp-play').addEventListener('click', () => {
+       if (document.getElementById('pp-play').classList.contains('disabled')) return;
+@@ -544,6 +553,11 @@ class SetlistPlayer {
+     document.getElementById('pp-next').addEventListener('click', () => this.next());
+     document.getElementById('pp-prev').addEventListener('click', () => this.prev());
+ 
++    const fsBtn = document.getElementById('lyrics-fullscreen-btn');
++    if (fsBtn) {
++      fsBtn.addEventListener('click', () => this._toggleLyricsFullscreen());
++    }
++
+     document.getElementById('pp-tracklist').addEventListener('click', (e) => {
+       const row = e.target.closest('.pp-track-row');
+       if (row) {
+diff --git a/player/templates/player/setlist_list.html b/player/templates/player/setlist_list.html
+index bbacb80..fea693b 100644
+--- a/player/templates/player/setlist_list.html
++++ b/player/templates/player/setlist_list.html
+@@ -41,12 +41,13 @@
+         </svg>
+       </a>
+       <a href="{% url 'setlist_export_midi' sl.pk %}" class="admin-action-btn" title="Export MIDI">
+-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+-          <rect x="2" y="6" width="20" height="14" rx="2"/>
+-          <rect x="5" y="6" width="2" height="8" fill="currentColor"/>
+-          <rect x="9" y="6" width="2" height="8" fill="currentColor"/>
+-          <rect x="14" y="6" width="2" height="8" fill="currentColor"/>
+-          <rect x="18" y="6" width="2" height="8" fill="currentColor"/>
++        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
++          <circle cx="12" cy="12" r="10"/>
++          <circle cx="8" cy="10" r="1.2" fill="currentColor" stroke="none"/>
++          <circle cx="16" cy="10" r="1.2" fill="currentColor" stroke="none"/>
++          <circle cx="6" cy="14" r="1.2" fill="currentColor" stroke="none"/>
++          <circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none"/>
++          <circle cx="18" cy="14" r="1.2" fill="currentColor" stroke="none"/>
+         </svg>
+       </a>
+       <a href="{% url 'setlist_edit' sl.pk %}" class="admin-action-btn" title="Edit">
+diff --git a/player/templates/player/setlist_player.html b/player/templates/player/setlist_player.html
+index b6359c8..a5d50dd 100644
+--- a/player/templates/player/setlist_player.html
++++ b/player/templates/player/setlist_player.html
+@@ -12,25 +12,28 @@
+ 
+ <div class="section-header" style="margin-top:0">
+   <h1 class="song-title">{{ setlist.name }}</h1>
+-  <a href="{% url 'setlist_export' setlist.pk %}" class="btn btn-add" title="Export PDF">
+-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+-      <polyline points="14 2 14 8 20 8"/>
+-      <line x1="16" y1="13" x2="8" y2="13"/>
+-      <line x1="16" y1="17" x2="8" y2="17"/>
+-    </svg>
+-    Export PDF
+-  </a>
+-  <a href="{% url 'setlist_export_midi' setlist.pk %}" class="btn btn-add" title="Export MIDI tempo map for Reaper">
+-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+-      <rect x="2" y="6" width="20" height="14" rx="2"/>
+-      <rect x="5" y="6" width="2" height="8" fill="currentColor"/>
+-      <rect x="9" y="6" width="2" height="8" fill="currentColor"/>
+-      <rect x="14" y="6" width="2" height="8" fill="currentColor"/>
+-      <rect x="18" y="6" width="2" height="8" fill="currentColor"/>
+-    </svg>
+-    Export MIDI
+-  </a>
++  <div style="display:flex;gap:8px;align-items:center">
++    <a href="{% url 'setlist_export' setlist.pk %}" class="btn btn-add" title="Export PDF">
++      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
++        <polyline points="14 2 14 8 20 8"/>
++        <line x1="16" y1="13" x2="8" y2="13"/>
++        <line x1="16" y1="17" x2="8" y2="17"/>
++      </svg>
++      Export PDF
++    </a>
++    <a href="{% url 'setlist_export_midi' setlist.pk %}" class="btn btn-add" title="Export MIDI tempo map for Reaper">
++      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
++        <circle cx="12" cy="12" r="10"/>
++        <circle cx="8" cy="10" r="1.2" fill="currentColor" stroke="none"/>
++        <circle cx="16" cy="10" r="1.2" fill="currentColor" stroke="none"/>
++        <circle cx="6" cy="14" r="1.2" fill="currentColor" stroke="none"/>
++        <circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none"/>
++        <circle cx="18" cy="14" r="1.2" fill="currentColor" stroke="none"/>
++      </svg>
++      Export MIDI
++    </a>
++  </div>
+ </div>
+ 
+ {% if setlist.date %}
+@@ -52,6 +55,12 @@
+ <!-- Lyrics (populated by JS) -->
+ <div class="lyrics-container" id="lyrics-container" style="display:none">
+   <div class="lyrics-title">Lyrics</div>
++  <button type="button" class="lyrics-fullscreen-btn" id="lyrics-fullscreen-btn" title="Toggle fullscreen lyrics">
++    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++      <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
++      <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
++    </svg>
++  </button>
+   <div class="lyrics-scroller" id="lyrics-scroller"></div>
+ </div>
+ 
+diff --git a/player/templates/player/song_player.html b/player/templates/player/song_player.html
+index 7ca8942..1795bee 100644
+--- a/player/templates/player/song_player.html
++++ b/player/templates/player/song_player.html
+@@ -161,6 +161,12 @@
+ {% if lyrics %}
+ <div class="lyrics-container" id="lyrics-container">
+   <div class="lyrics-title">Lyrics</div>
++  <button type="button" class="lyrics-fullscreen-btn" id="lyrics-fullscreen-btn" title="Toggle fullscreen lyrics">
++    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++      <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
++      <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
++    </svg>
++  </button>
+   <div class="lyrics-scroller" id="lyrics-scroller">
+     {% for line in lyrics %}
+     <div class="lyrics-line" data-time="{{ line.time }}">{{ line.text|default:"&nbsp;" }}</div>

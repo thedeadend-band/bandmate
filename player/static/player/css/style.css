@@ -1361,6 +1361,53 @@ body {
   opacity: 0;
 }
 
+.lyrics-fullscreen-btn {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background 0.2s;
+}
+
+.lyrics-fullscreen-btn:hover {
+  color: var(--accent-blue);
+  background: var(--bg-hover);
+}
+
+.lyrics-container.lyrics-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--transport-h);
+  height: auto;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  z-index: 80;
+}
+
+.lyrics-container.lyrics-fullscreen .lyrics-scroller {
+  padding: 40vh 16px;
+}
+
+.lyrics-container.lyrics-fullscreen .lyrics-line {
+  font-size: 1.4rem;
+  padding: 6px 0;
+}
+
+.lyrics-container.lyrics-fullscreen .lyrics-line.active {
+  font-size: 2rem;
+}
+
 /* ====================================================================
    Desktop enhancements (hover-capable devices, wider screens)
    ==================================================================== */

@@ -12,25 +12,28 @@
 
 <div class="section-header" style="margin-top:0">
   <h1 class="song-title">{{ setlist.name }}</h1>
-  <a href="{% url 'setlist_export' setlist.pk %}" class="btn btn-add" title="Export PDF">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/>
-      <line x1="16" y1="17" x2="8" y2="17"/>
-    </svg>
-    Export PDF
-  </a>
-  <a href="{% url 'setlist_export_midi' setlist.pk %}" class="btn btn-add" title="Export MIDI tempo map for Reaper">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="2" y="6" width="20" height="14" rx="2"/>
-      <rect x="5" y="6" width="2" height="8" fill="currentColor"/>
-      <rect x="9" y="6" width="2" height="8" fill="currentColor"/>
-      <rect x="14" y="6" width="2" height="8" fill="currentColor"/>
-      <rect x="18" y="6" width="2" height="8" fill="currentColor"/>
-    </svg>
-    Export MIDI
-  </a>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="{% url 'setlist_export' setlist.pk %}" class="btn btn-add" title="Export PDF">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      Export PDF
+    </a>
+    <a href="{% url 'setlist_export_midi' setlist.pk %}" class="btn btn-add" title="Export MIDI tempo map for Reaper">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <circle cx="8" cy="10" r="1.2" fill="currentColor" stroke="none"/>
+        <circle cx="16" cy="10" r="1.2" fill="currentColor" stroke="none"/>
+        <circle cx="6" cy="14" r="1.2" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="15" r="1.2" fill="currentColor" stroke="none"/>
+        <circle cx="18" cy="14" r="1.2" fill="currentColor" stroke="none"/>
+      </svg>
+      Export MIDI
+    </a>
+  </div>
 </div>
 
 {% if setlist.date %}
@@ -52,6 +55,12 @@
 <!-- Lyrics (populated by JS) -->
 <div class="lyrics-container" id="lyrics-container" style="display:none">
   <div class="lyrics-title">Lyrics</div>
+  <button type="button" class="lyrics-fullscreen-btn" id="lyrics-fullscreen-btn" title="Toggle fullscreen lyrics">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+      <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+    </svg>
+  </button>
   <div class="lyrics-scroller" id="lyrics-scroller"></div>
 </div>
 
