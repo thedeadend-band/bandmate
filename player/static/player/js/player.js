@@ -382,6 +382,7 @@ class MultiTrackPlayer {
       }
     }
 
+    if (this._iosAudio) this._iosAudio.pause();
     this._stopAnimation();
     this._releaseWakeLock();
 

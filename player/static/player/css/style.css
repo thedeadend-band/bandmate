@@ -1362,9 +1362,12 @@ body {
   opacity: 0.6;
 }
 
-.lyrics-line.past,
-.lyrics-line.future {
+.lyrics-line.past {
   opacity: 0;
+}
+
+.lyrics-line.future {
+  opacity: 0.15;
 }
 
 .lyrics-fullscreen-btn {

@@ -136,6 +136,8 @@ class SetlistPlayer {
       this.lyricOffset = this.songInfo?.lyric_offset_secs || 0;
       this._renderInfoPanel();
       this._renderLyrics();
+      this.currentLyricIndex = -2;
+      this._updateLyrics();
 
       if (this.songInfo?.artist && this.songInfo?.title) {
         document.getElementById('pp-now-label').textContent =
@@ -416,11 +418,7 @@ class SetlistPlayer {
     src.start(startAt, this.playOffset);
     src.onended = () => {
       if (this.isPlaying && this.currentTime() >= this.duration - 0.1) {
-        this.pause();
-        this.playOffset = 0;
-        this._updatePlayhead();
-        this._updateTime();
-        this.next();
+        this._autoAdvance();
       }
     };
     this.source = src;
@@ -437,6 +435,7 @@ class SetlistPlayer {
       try { this.source.stop(); } catch (_) {}
       this.source = null;
     }
+    if (this._iosAudio) this._iosAudio.pause();
     this._stopAnimation();
     this._releaseWakeLock();
     this._showPause(false);
@@ -455,6 +454,17 @@ class SetlistPlayer {
       this.pause();
       await this.loadSong(this.currentIndex + 1);
       if (wasPlaying) await this.play();
+    }
+  }
+
+  async _autoAdvance() {
+    this.pause();
+    this.playOffset = 0;
+    this._updatePlayhead();
+    this._updateTime();
+    if (this.currentIndex < this.songs.length - 1) {
+      await this.loadSong(this.currentIndex + 1);
+      await this.play();
     }
   }
 
