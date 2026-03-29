@@ -2,6 +2,7 @@
 {% load static %}
 {% block title %}{% if song_info.artist and song_info.title %}{{ song_info.artist }} – {{ song_info.title }}{% else %}{{ song_name }}{% endif %} – BandMate{% endblock %}
 
+{% block container_class %}multitrack-page{% endblock %}
 {% block content %}
 <a href="{% url 'song_list' %}" class="back-link">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

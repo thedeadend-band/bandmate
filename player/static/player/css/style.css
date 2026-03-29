@@ -269,6 +269,12 @@ body {
   padding: 16px 12px 24px;
 }
 
+@media (max-width: 767px) {
+  .container.multitrack-page {
+    padding-right: 20vw;
+  }
+}
+
 /* ---- Login ------------------------------------------------------------ */
 
 .login-container {
@@ -1124,6 +1130,12 @@ body {
   color: var(--accent-green);
 }
 
+.sl-add-btn.sl-added,
+.sl-add-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 .btn-break {
   margin-top: 8px;
   background: transparent;
@@ -1339,6 +1351,8 @@ body {
   padding: 60px 16px;
   transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .lyrics-line {
@@ -1368,6 +1382,19 @@ body {
 
 .lyrics-line.future {
   opacity: 0.15;
+}
+
+.lyrics-container.lyrics-scrubbing .lyrics-line {
+  opacity: 0.4;
+  transition: none;
+}
+
+.lyrics-container.lyrics-scrubbing .lyrics-line.active {
+  opacity: 1;
+}
+
+.lyrics-container.lyrics-scrubbing .lyrics-line.near {
+  opacity: 0.6;
 }
 
 .lyrics-fullscreen-btn {
@@ -1413,6 +1440,12 @@ body {
 
 .lyrics-container.lyrics-fullscreen .lyrics-scroller {
   padding: 40vh 16px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lyrics-container.lyrics-fullscreen .lyrics-scroller:active {
+  cursor: grabbing;
 }
 
 .lyrics-container.lyrics-fullscreen .lyrics-line {

@@ -82,6 +82,7 @@ def _get_tracks(song_path: Path) -> list[dict]:
                 'filename': f.name,
                 'extension': f.suffix.lower(),
             })
+    tracks.sort(key=lambda t: (0 if t['name'].lower() == 'master' else 1, t['name'].lower()))
     return tracks
 
 
@@ -546,8 +547,15 @@ def setlist_create(request):
         elif not song_names:
             error = 'Add at least one song.'
         else:
+            seen = set()
+            deduped = []
+            for sn in song_names:
+                if sn == BREAK_SENTINEL or sn not in seen:
+                    deduped.append(sn)
+                    if sn != BREAK_SENTINEL:
+                        seen.add(sn)
             sl = Setlist.objects.create(name=name, date=date, owner=request.user)
-            for i, sn in enumerate(song_names):
+            for i, sn in enumerate(deduped):
                 is_break = sn == BREAK_SENTINEL
                 SetlistEntry.objects.create(
                     setlist=sl, song_name='' if is_break else sn,
@@ -583,11 +591,18 @@ def setlist_edit(request, setlist_id: int):
         elif not song_names:
             error = 'Add at least one song.'
         else:
+            seen = set()
+            deduped = []
+            for sn in song_names:
+                if sn == BREAK_SENTINEL or sn not in seen:
+                    deduped.append(sn)
+                    if sn != BREAK_SENTINEL:
+                        seen.add(sn)
             sl.name = name
             sl.date = date
             sl.save()
             sl.entries.all().delete()
-            for i, sn in enumerate(song_names):
+            for i, sn in enumerate(deduped):
                 is_break = sn == BREAK_SENTINEL
                 SetlistEntry.objects.create(
                     setlist=sl, song_name='' if is_break else sn,

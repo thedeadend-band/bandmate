@@ -23,6 +23,10 @@ class MultiTrackPlayer {
 
     this._initAudioContext();
     this._initTracks(trackData);
+    this._applyDefaultMutes();
+    this._restoreMixerSettings();
+    this._applyMuteState();
+    this._updateTrackDimming();
     this._initLyrics();
     this._bindEvents();
 
@@ -101,6 +105,63 @@ class MultiTrackPlayer {
       this.tracks.push(track);
       this._loadTrack(track);
     });
+  }
+
+  _applyDefaultMutes() {
+    for (const t of this.tracks) {
+      if (t.name.toLowerCase() === 'master') {
+        t.muted = true;
+        t.element.querySelector('.mute-btn').classList.add('active');
+      }
+    }
+  }
+
+  _saveMixerSettings() {
+    const settings = {};
+    for (const t of this.tracks) {
+      settings[t.name.toLowerCase()] = {
+        muted: t.muted, soloed: t.soloed,
+        volume: t.volume, pan: t.pan,
+      };
+    }
+    try { localStorage.setItem('bm-mixer-settings', JSON.stringify(settings)); }
+    catch (_) {}
+  }
+
+  _restoreMixerSettings() {
+    let settings;
+    try {
+      const raw = localStorage.getItem('bm-mixer-settings');
+      if (!raw) return;
+      settings = JSON.parse(raw);
+    } catch (_) { return; }
+
+    for (const t of this.tracks) {
+      const s = settings[t.name.toLowerCase()];
+      if (!s) continue;
+      t.muted = s.muted;
+      t.soloed = s.soloed;
+      t.volume = s.volume;
+      t.pan = s.pan;
+      t.element.querySelector('.mute-btn').classList.toggle('active', t.muted);
+      t.element.querySelector('.solo-btn').classList.toggle('active', t.soloed);
+      const volSlider = t.element.querySelector('.vol-slider');
+      if (volSlider) {
+        volSlider.value = Math.round(t.volume * 100);
+        const volLabel = t.element.querySelector('.vol-value');
+        if (volLabel) volLabel.textContent = volSlider.value;
+      }
+      const panSlider = t.element.querySelector('.pan-slider');
+      if (panSlider) {
+        panSlider.value = Math.round(t.pan * 100);
+        const panLabel = t.element.querySelector('.pan-value');
+        if (panLabel) {
+          const v = +panSlider.value;
+          panLabel.textContent = v === 0 ? 'C' : (v < 0 ? `L${Math.abs(v)}` : `R${v}`);
+        }
+      }
+      t.panNode.pan.setValueAtTime(t.pan, this.audioContext.currentTime);
+    }
   }
 
   /* ---- Loading -------------------------------------------------------- */
@@ -182,6 +243,76 @@ class MultiTrackPlayer {
     if (fsBtn) {
       fsBtn.addEventListener('click', () => this._toggleLyricsFullscreen());
     }
+    this._initLyricsScrub();
+  }
+
+  _initLyricsScrub() {
+    const container = document.getElementById('lyrics-container');
+    const scroller = document.getElementById('lyrics-scroller');
+    if (!container || !scroller) return;
+
+    let scrubbing = false;
+    let wasPlaying = false;
+    let startY = 0;
+    let startTranslate = 0;
+
+    const getCurrentTranslateY = () => {
+      const m = scroller.style.transform.match(/translateY\((.+?)px\)/);
+      return m ? parseFloat(m[1]) : 0;
+    };
+
+    const findCenteredLineIndex = () => {
+      const lines = scroller.querySelectorAll('.lyrics-line');
+      if (!lines.length) return -1;
+      const centerY = container.getBoundingClientRect().top + container.clientHeight / 2;
+      let closest = 0;
+      let closestDist = Infinity;
+      lines.forEach((el, i) => {
+        const rect = el.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        const dist = Math.abs(mid - centerY);
+        if (dist < closestDist) { closestDist = dist; closest = i; }
+      });
+      return closest;
+    };
+
+    const onDown = (e) => {
+      if (!container.classList.contains('lyrics-fullscreen')) return;
+      if (e.target.closest('.lyrics-fullscreen-btn') || e.target.closest('.lyrics-title')) return;
+      scrubbing = true;
+      wasPlaying = this.isPlaying;
+      if (wasPlaying) this.pause();
+      startY = e.clientY || e.touches?.[0]?.clientY || 0;
+      startTranslate = getCurrentTranslateY();
+      scroller.style.transition = 'none';
+      container.classList.add('lyrics-scrubbing');
+      container.setPointerCapture?.(e.pointerId);
+    };
+
+    const onMove = (e) => {
+      if (!scrubbing) return;
+      const y = e.clientY || e.touches?.[0]?.clientY || 0;
+      const delta = y - startY;
+      scroller.style.transform = `translateY(${startTranslate + delta}px)`;
+    };
+
+    const onUp = () => {
+      if (!scrubbing) return;
+      scrubbing = false;
+      scroller.style.transition = '';
+      container.classList.remove('lyrics-scrubbing');
+      const idx = findCenteredLineIndex();
+      if (idx >= 0 && this.lyrics && this.lyrics[idx]) {
+        const time = this.lyrics[idx].time + (this.lyricOffset || 0);
+        this.seekTo(Math.max(0, time));
+      }
+      if (wasPlaying) this.play();
+    };
+
+    container.addEventListener('pointerdown', onDown);
+    container.addEventListener('pointermove', onMove);
+    container.addEventListener('pointerup', onUp);
+    container.addEventListener('pointercancel', onUp);
   }
 
   _toggleLyricsFullscreen() {
@@ -426,6 +557,7 @@ class MultiTrackPlayer {
     t.element.querySelector('.mute-btn').classList.toggle('active', t.muted);
     this._applyMuteState();
     this._updateTrackDimming();
+    this._saveMixerSettings();
   }
 
   toggleSolo(index) {
@@ -434,6 +566,7 @@ class MultiTrackPlayer {
     t.element.querySelector('.solo-btn').classList.toggle('active', t.soloed);
     this._applyMuteState();
     this._updateTrackDimming();
+    this._saveMixerSettings();
   }
 
   _applyMuteState() {
@@ -457,12 +590,14 @@ class MultiTrackPlayer {
     const t = this.tracks[index];
     t.volume = value;
     this._applyMuteState();
+    this._saveMixerSettings();
   }
 
   setPan(index, value) {
     const t = this.tracks[index];
     t.pan = value;
     t.panNode.pan.setValueAtTime(value, this.audioContext.currentTime);
+    this._saveMixerSettings();
   }
 
   /* ---- Animation / playhead ------------------------------------------- */
@@ -582,7 +717,6 @@ class MultiTrackPlayer {
         seek(e);
       });
       container.addEventListener('pointermove', (e) => {
-        // hover line
         const rect = container.getBoundingClientRect();
         const hl = container.querySelector('.hover-line');
         if (hl) hl.style.left = (e.clientX - rect.left) + 'px';

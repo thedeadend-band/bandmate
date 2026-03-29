@@ -73,6 +73,8 @@
     listEl.innerHTML = '';
     document.querySelectorAll('input[name="songs"]').forEach(el => el.remove());
 
+    const songSet = new Set(items.filter(v => v !== BREAK));
+
     items.forEach((val, i) => {
       const isBreak = val === BREAK;
       const inp = document.createElement('input');
@@ -98,6 +100,12 @@
       listEl.appendChild(row);
     });
 
+    document.querySelectorAll('.sl-add-btn').forEach(btn => {
+      const inList = songSet.has(btn.dataset.song);
+      btn.disabled = inList;
+      btn.classList.toggle('sl-added', inList);
+    });
+
     hintEl.style.display = items.length ? 'none' : '';
   }
 
@@ -119,8 +127,10 @@
 
   document.getElementById('available-songs').addEventListener('click', (e) => {
     const btn = e.target.closest('.sl-add-btn');
-    if (btn) {
-      items.push(btn.dataset.song);
+    if (btn && !btn.disabled) {
+      const name = btn.dataset.song;
+      if (items.includes(name)) return;
+      items.push(name);
       render();
     }
   });

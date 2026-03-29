@@ -97,7 +97,7 @@
   </aside>
   {% endif %}
 
-  <main class="container">
+  <main class="container {% block container_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
 

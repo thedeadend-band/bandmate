@@ -567,6 +567,75 @@ class SetlistPlayer {
     this._updateLyrics();
   }
 
+  _initLyricsScrub() {
+    const container = document.getElementById('lyrics-container');
+    const scroller = document.getElementById('lyrics-scroller');
+    if (!container || !scroller) return;
+
+    let scrubbing = false;
+    let wasPlaying = false;
+    let startY = 0;
+    let startTranslate = 0;
+
+    const getCurrentTranslateY = () => {
+      const m = scroller.style.transform.match(/translateY\((.+?)px\)/);
+      return m ? parseFloat(m[1]) : 0;
+    };
+
+    const findCenteredLineIndex = () => {
+      const lines = scroller.querySelectorAll('.lyrics-line');
+      if (!lines.length) return -1;
+      const centerY = container.getBoundingClientRect().top + container.clientHeight / 2;
+      let closest = 0;
+      let closestDist = Infinity;
+      lines.forEach((el, i) => {
+        const rect = el.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        const dist = Math.abs(mid - centerY);
+        if (dist < closestDist) { closestDist = dist; closest = i; }
+      });
+      return closest;
+    };
+
+    const onDown = (e) => {
+      if (!container.classList.contains('lyrics-fullscreen')) return;
+      if (e.target.closest('.lyrics-fullscreen-btn') || e.target.closest('.lyrics-title')) return;
+      scrubbing = true;
+      wasPlaying = this.isPlaying;
+      if (wasPlaying) this.pause();
+      startY = e.clientY || e.touches?.[0]?.clientY || 0;
+      startTranslate = getCurrentTranslateY();
+      scroller.style.transition = 'none';
+      container.classList.add('lyrics-scrubbing');
+      container.setPointerCapture?.(e.pointerId);
+    };
+
+    const onMove = (e) => {
+      if (!scrubbing) return;
+      const y = e.clientY || e.touches?.[0]?.clientY || 0;
+      const delta = y - startY;
+      scroller.style.transform = `translateY(${startTranslate + delta}px)`;
+    };
+
+    const onUp = () => {
+      if (!scrubbing) return;
+      scrubbing = false;
+      scroller.style.transition = '';
+      container.classList.remove('lyrics-scrubbing');
+      const idx = findCenteredLineIndex();
+      if (idx >= 0 && this.lyrics && this.lyrics[idx]) {
+        const time = this.lyrics[idx].time + (this.lyricOffset || 0);
+        this.seekTo(Math.max(0, time));
+      }
+      if (wasPlaying) this.play();
+    };
+
+    container.addEventListener('pointerdown', onDown);
+    container.addEventListener('pointermove', onMove);
+    container.addEventListener('pointerup', onUp);
+    container.addEventListener('pointercancel', onUp);
+  }
+
   _bindEvents() {
     document.getElementById('pp-play').addEventListener('click', () => {
       if (document.getElementById('pp-play').classList.contains('disabled')) return;
@@ -580,6 +649,8 @@ class SetlistPlayer {
     if (fsBtn) {
       fsBtn.addEventListener('click', () => this._toggleLyricsFullscreen());
     }
+
+    this._initLyricsScrub();
 
     document.getElementById('pp-tracklist').addEventListener('click', (e) => {
       const row = e.target.closest('.pp-track-row');
