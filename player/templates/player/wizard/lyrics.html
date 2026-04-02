@@ -1,0 +1,73 @@
+{% extends "player/base.html" %}
+{% block title %}Lyrics – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Lyrics</h1>
+  <p class="wiz-step-desc">Fetch synced lyrics for <strong>{{ wizard.artist }} – {{ wizard.title }}</strong>, or paste them manually.</p>
+
+  {% if lookup_msg %}
+  <div class="{% if 'found' in lookup_msg|lower %}wiz-lookup-result{% else %}wiz-lookup-noresult{% endif %}">
+    {{ lookup_msg }}
+  </div>
+  {% endif %}
+
+  <form method="post" class="wiz-lookup-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="lookup">
+    <button type="submit" class="btn btn-secondary wiz-btn-lookup">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      Look Up on LRCLIB
+    </button>
+  </form>
+
+  <form method="post" class="wiz-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="next">
+
+    <div class="form-group">
+      <label for="wiz-lyrics">Synced Lyrics (LRC format)</label>
+      <textarea id="wiz-lyrics" name="lyrics" rows="14" class="form-input wiz-lyrics-textarea" placeholder="[00:12.34] First line of lyrics...">{{ wizard.lyrics_content }}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="wiz-offset">Lyric Offset (seconds)</label>
+      <input type="number" id="wiz-offset" name="lyric_offset" step="0.001"
+             value="{{ wizard.lyric_offset_secs|default:auto_offset }}"
+             class="form-input" style="max-width:200px">
+      <p class="form-hint">Auto-calculated from click intro: {{ auto_offset }}s. Adjust if needed.</p>
+    </div>
+
+    <div class="wiz-actions">
+      <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      <button type="submit" class="btn btn-primary wiz-btn-next">
+        Next: Band Details
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
+  </form>
+</div>
+{% endblock %}

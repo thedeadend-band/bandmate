@@ -1,0 +1,200 @@
+{% extends "player/base.html" %}
+{% block title %}Download Tracks – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'wizard_start' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to New Song
+</a>
+
+<div class="dl-tracks-page">
+  <h1 class="page-title">Download Tracks</h1>
+  <p class="dl-tracks-desc">Search YouTube for a track, preview it, or download it as FLAC audio.</p>
+
+  <div class="dl-search-bar">
+    <input type="text" id="dl-search-input" class="form-control" placeholder="Search for a song…" autocomplete="off">
+    <button type="button" id="dl-search-btn" class="btn btn-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      Search
+    </button>
+  </div>
+
+  <div id="dl-status" class="dl-status" style="display:none"></div>
+
+  <div id="dl-results" class="dl-results"></div>
+
+  <audio id="dl-audio-player" style="display:none"></audio>
+</div>
+
+<script>
+(function() {
+  const input = document.getElementById('dl-search-input');
+  const btn = document.getElementById('dl-search-btn');
+  const resultsEl = document.getElementById('dl-results');
+  const statusEl = document.getElementById('dl-status');
+  const audioPlayer = document.getElementById('dl-audio-player');
+
+  let currentPreviewId = null;
+
+  function showStatus(msg, isError) {
+    statusEl.textContent = msg;
+    statusEl.className = 'dl-status' + (isError ? ' dl-status-error' : '');
+    statusEl.style.display = msg ? 'block' : 'none';
+  }
+
+  function doSearch() {
+    const q = input.value.trim();
+    if (!q) return;
+
+    stopPreview();
+    resultsEl.innerHTML = '';
+    showStatus('Searching…', false);
+    btn.disabled = true;
+
+    fetch('{% url "download_tracks_search" %}?q=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false;
+        if (!data.results || data.results.length === 0) {
+          showStatus('No results found. Try a different search.', false);
+          return;
+        }
+        showStatus('', false);
+        renderResults(data.results);
+      })
+      .catch(() => {
+        btn.disabled = false;
+        showStatus('Search failed. Please try again.', true);
+      });
+  }
+
+  let seekRaf = null;
+
+  function fmtTime(s) {
+    if (!isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return m + ':' + String(sec).padStart(2, '0');
+  }
+
+  function renderResults(results) {
+    resultsEl.innerHTML = '';
+    results.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'dl-result-card';
+      card.dataset.vid = r.video_id;
+      card.innerHTML =
+        '<img class="dl-result-thumb" src="' + escHtml(r.thumbnail) + '" alt="">' +
+        '<div class="dl-result-info">' +
+          '<div class="dl-result-title">' + escHtml(r.title) + '</div>' +
+          '<div class="dl-result-meta">' + escHtml(r.channel) + ' · ' + escHtml(r.duration_str) + '</div>' +
+        '</div>' +
+        '<div class="dl-result-actions">' +
+          '<button class="btn btn-sm dl-preview-btn" data-vid="' + escHtml(r.video_id) + '" title="Preview audio">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>' +
+          '</button>' +
+          '<a class="btn btn-sm btn-primary dl-download-btn" ' +
+            'href="/api/download-tracks/flac/' + encodeURIComponent(r.video_id) + '/?title=' + encodeURIComponent(r.title) + '" ' +
+            'title="Download as FLAC">' +
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>' +
+              '<polyline points="7 10 12 15 17 10"/>' +
+              '<line x1="12" y1="15" x2="12" y2="3"/>' +
+            '</svg> FLAC' +
+          '</a>' +
+        '</div>' +
+        '<div class="dl-seek-row">' +
+          '<input type="range" class="dl-seek-slider" min="0" max="100" step="0.1" value="0">' +
+          '<span class="dl-seek-time">0:00 / 0:00</span>' +
+        '</div>';
+      resultsEl.appendChild(card);
+    });
+
+    resultsEl.querySelectorAll('.dl-preview-btn').forEach(b => {
+      b.addEventListener('click', () => togglePreview(b.dataset.vid, b));
+    });
+
+    resultsEl.querySelectorAll('.dl-seek-slider').forEach(slider => {
+      let seeking = false;
+      slider.addEventListener('mousedown', () => { seeking = true; });
+      slider.addEventListener('touchstart', () => { seeking = true; }, { passive: true });
+      slider.addEventListener('input', () => {
+        if (audioPlayer.duration) {
+          audioPlayer.currentTime = (slider.value / 100) * audioPlayer.duration;
+        }
+      });
+      const endSeek = () => { seeking = false; };
+      slider.addEventListener('mouseup', endSeek);
+      slider.addEventListener('touchend', endSeek);
+      slider._isSeeking = () => seeking;
+    });
+  }
+
+  function updateSeekUI() {
+    if (!currentPreviewId) return;
+    const card = resultsEl.querySelector('.dl-result-card[data-vid="' + currentPreviewId + '"]');
+    if (!card) return;
+    const slider = card.querySelector('.dl-seek-slider');
+    const timeEl = card.querySelector('.dl-seek-time');
+    if (slider && !slider._isSeeking()) {
+      const pct = audioPlayer.duration ? (audioPlayer.currentTime / audioPlayer.duration) * 100 : 0;
+      slider.value = pct;
+    }
+    if (timeEl) {
+      timeEl.textContent = fmtTime(audioPlayer.currentTime) + ' / ' + fmtTime(audioPlayer.duration);
+    }
+    seekRaf = requestAnimationFrame(updateSeekUI);
+  }
+
+  function togglePreview(videoId, btnEl) {
+    if (currentPreviewId === videoId && !audioPlayer.paused) {
+      stopPreview();
+      return;
+    }
+
+    stopPreview();
+    currentPreviewId = videoId;
+    const card = btnEl.closest('.dl-result-card');
+    card.classList.add('dl-card-playing');
+    btnEl.classList.add('dl-previewing');
+    btnEl.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>';
+
+    audioPlayer.src = '/api/download-tracks/preview/' + encodeURIComponent(videoId) + '/';
+    audioPlayer.play().catch(() => {
+      stopPreview();
+      showStatus('Could not load audio preview.', true);
+    });
+
+    seekRaf = requestAnimationFrame(updateSeekUI);
+    audioPlayer.onended = () => stopPreview();
+  }
+
+  function stopPreview() {
+    audioPlayer.pause();
+    audioPlayer.removeAttribute('src');
+    currentPreviewId = null;
+    if (seekRaf) { cancelAnimationFrame(seekRaf); seekRaf = null; }
+    document.querySelectorAll('.dl-result-card').forEach(c => c.classList.remove('dl-card-playing'));
+    document.querySelectorAll('.dl-preview-btn').forEach(b => {
+      b.classList.remove('dl-previewing');
+      b.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>';
+    });
+    document.querySelectorAll('.dl-seek-slider').forEach(s => { s.value = 0; });
+    document.querySelectorAll('.dl-seek-time').forEach(t => { t.textContent = '0:00 / 0:00'; });
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  btn.addEventListener('click', doSearch);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+})();
+</script>
+{% endblock %}

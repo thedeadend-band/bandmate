@@ -12,3 +12,4 @@ build/
 .DS_Store
 /songs
 /.audio_cache
+/models

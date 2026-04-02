@@ -1,0 +1,10 @@
+<div class="wiz-steps">
+  {% for s in steps %}
+  <a href="{% if s.accessible %}{% url 'wizard_step' wizard.pk s.key %}{% else %}#{% endif %}"
+     class="wiz-step{% if s.active %} wiz-step-active{% endif %}{% if not s.accessible %} wiz-step-locked{% endif %}"
+     {% if not s.accessible %}aria-disabled="true"{% endif %}>
+    <span class="wiz-step-num">{{ s.index|add:1 }}</span>
+    <span class="wiz-step-label">{{ s.label }}</span>
+  </a>
+  {% endfor %}
+</div>

@@ -1,0 +1,117 @@
+{% extends "player/base.html" %}
+{% block title %}Review – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Review + Finalize</h1>
+  <p class="wiz-step-desc">Review everything before creating the song.</p>
+
+  {% if errors.finalize %}
+  <div class="error-message">{{ errors.finalize }}</div>
+  {% endif %}
+
+  <div class="wiz-review-section">
+    <h3 class="wiz-review-heading">Song Info</h3>
+    <div class="wiz-review-grid">
+      <div class="wiz-review-item">
+        <span class="wiz-review-label">Title</span>
+        <span class="wiz-review-value">{{ wizard.title }}</span>
+      </div>
+      <div class="wiz-review-item">
+        <span class="wiz-review-label">Artist</span>
+        <span class="wiz-review-value">{{ wizard.artist }}</span>
+      </div>
+      <div class="wiz-review-item">
+        <span class="wiz-review-label">Tempo</span>
+        <span class="wiz-review-value">{{ wizard.tempo|default:"—" }} BPM</span>
+      </div>
+      <div class="wiz-review-item">
+        <span class="wiz-review-label">Key</span>
+        <span class="wiz-review-value">{{ wizard.key|default:"—" }}</span>
+      </div>
+      <div class="wiz-review-item">
+        <span class="wiz-review-label">Time Signature</span>
+        <span class="wiz-review-value">{{ wizard.time_signature }}</span>
+      </div>
+      <div class="wiz-review-item">
+        <span class="wiz-review-label">Track Source</span>
+        <span class="wiz-review-value">{{ wizard.track_source|title }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wiz-review-section">
+    <h3 class="wiz-review-heading">Audio Files</h3>
+    <div class="wiz-staged-list">
+      {% for f in staged_files %}
+      <li class="wiz-staged-item{% if 'Master' in f %} wiz-staged-master{% endif %}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+        {{ f }}
+      </li>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if wizard.lyrics_content %}
+  <div class="wiz-review-section">
+    <h3 class="wiz-review-heading">Lyrics</h3>
+    <pre class="wiz-review-lyrics">{{ wizard.lyrics_content|truncatechars:500 }}</pre>
+    <p class="form-hint">Lyric offset: {{ wizard.lyric_offset_secs }}s</p>
+  </div>
+  {% endif %}
+
+  {% if wizard.band_details %}
+  <div class="wiz-review-section">
+    <h3 class="wiz-review-heading">Band Details</h3>
+    <div class="wiz-review-grid">
+      {% for key, value in wizard.band_details.items %}
+      <div class="wiz-review-item">
+        <span class="wiz-review-label">{{ key|title }}</span>
+        <span class="wiz-review-value">
+          {% if value.items %}
+            {% for k, v in value.items %}{{ k }}: {{ v }}{% if not forloop.last %}, {% endif %}{% endfor %}
+          {% else %}
+            {{ value }}
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="wiz-actions">
+      <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      <button type="submit" name="action" value="finalize" class="btn btn-primary wiz-btn-next wiz-btn-finalize">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Create Song
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
+  </form>
+</div>
+{% endblock %}

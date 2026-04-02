@@ -1,0 +1,134 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}Stem Separation – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Stem Separation</h1>
+  <p class="wiz-step-desc">Separate the master audio into individual stems (Vocals, Drums, Bass, Guitar, Keys, Other) using Demucs + BS-RoFormer AI.</p>
+
+  {% if errors.stems %}
+  <div class="error-message">{{ errors.stems }}</div>
+  {% endif %}
+
+  <div class="wiz-stems-grid">
+    {% for name in stem_names %}
+    <label class="wiz-stem-card{% if name in existing_stems %} wiz-stem-done{% endif %}">
+      <input type="checkbox" class="stem-checkbox" value="{{ name }}"
+             {% if name not in existing_stems %}checked{% endif %}>
+      <span class="wiz-stem-name">{{ name }}</span>
+      {% if name in existing_stems %}
+      <span class="wiz-stem-badge">uploaded</span>
+      {% endif %}
+    </label>
+    {% endfor %}
+  </div>
+
+  {% if not demucs_available %}
+  <div class="wiz-notice">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+    </svg>
+    Demucs is not installed on this server. Install dependencies with <code>pip install demucs bs-roformer-infer</code> to enable AI stem separation.
+  </div>
+  {% else %}
+  <div class="wiz-beat-controls">
+    <button type="button" class="btn btn-primary" id="demucs-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      Run Stem Separation
+    </button>
+  </div>
+  {% endif %}
+
+  <div id="demucs-progress" class="wiz-dl-progress" style="display:none">
+    <div class="wiz-dl-bar-wrap">
+      <div class="wiz-dl-bar" id="demucs-bar" style="width:0%"></div>
+    </div>
+    <p class="wiz-dl-msg" id="demucs-msg">Starting...</p>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="wiz-actions">
+      <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      {% if can_skip %}
+      <button type="submit" name="action" value="skip" class="btn btn-secondary">Skip (stems already uploaded)</button>
+      {% endif %}
+      <button type="submit" name="action" value="next" class="btn btn-primary wiz-btn-next" id="next-btn" {% if not has_all_stems %}disabled{% endif %}>
+        Next: Lyrics
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
+  </form>
+</div>
+
+<script src="{% static 'player/js/wizard.js' %}"></script>
+<script>
+(function() {
+  var wizardId = {{ wizard.pk }};
+  var demucsBtn = document.getElementById('demucs-btn');
+  var progressDiv = document.getElementById('demucs-progress');
+  var dBar = document.getElementById('demucs-bar');
+  var dMsg = document.getElementById('demucs-msg');
+  var nextBtn = document.getElementById('next-btn');
+
+  if (demucsBtn) {
+    demucsBtn.addEventListener('click', function() {
+      var selected = Array.from(document.querySelectorAll('.stem-checkbox:checked'))
+                         .map(function(cb) { return cb.value; });
+      if (selected.length === 0) {
+        alert('Select at least one stem to separate.');
+        return;
+      }
+
+      demucsBtn.disabled = true;
+      document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = true; });
+      progressDiv.style.display = '';
+
+      Wizard.postJSON('/api/songs/new/' + wizardId + '/demucs/', {stems: selected})
+        .then(function() {
+          Wizard.pollTaskStatus(wizardId, function(data) {
+            dBar.style.width = data.progress + '%';
+            dMsg.textContent = data.message || data.status;
+            if (data.status === 'done') {
+              nextBtn.disabled = false;
+              window.location.reload();
+            } else if (data.status === 'error') {
+              demucsBtn.disabled = false;
+              document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = false; });
+            }
+          });
+        })
+        .catch(function(err) {
+          dMsg.textContent = 'Failed: ' + err.message;
+          demucsBtn.disabled = false;
+          document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = false; });
+        });
+    });
+  }
+})();
+</script>
+{% endblock %}

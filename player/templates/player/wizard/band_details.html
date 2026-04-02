@@ -1,0 +1,107 @@
+{% extends "player/base.html" %}
+{% block title %}Band Details – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Band Details</h1>
+  <p class="wiz-step-desc">Enter guitar setups, vocal assignments, and who starts the song. All fields are optional.</p>
+
+  <form method="post" class="wiz-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="next">
+
+    <h3 class="wiz-section-title">Lead Guitar</h3>
+    <div class="wiz-form-row">
+      <div class="form-group">
+        <label for="lg-type">Type</label>
+        <input type="text" id="lg-type" name="lead_guitar_type" value="{{ details.lead_guitar.type|default:'' }}" placeholder="e.g. Electric" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="lg-tuning">Tuning</label>
+        <input type="text" id="lg-tuning" name="lead_guitar_tuning" value="{{ details.lead_guitar.tuning|default:'' }}" placeholder="e.g. Standard" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="lg-capo">Capo</label>
+        <input type="text" id="lg-capo" name="lead_guitar_capo" value="{{ details.lead_guitar.capo|default:'' }}" placeholder="e.g. 2" class="form-input">
+      </div>
+    </div>
+
+    <h3 class="wiz-section-title">Rhythm Guitar</h3>
+    <div class="wiz-form-row">
+      <div class="form-group">
+        <label for="rg-type">Type</label>
+        <input type="text" id="rg-type" name="rhythm_guitar_type" value="{{ details.rhythm_guitar.type|default:'' }}" placeholder="e.g. Acoustic" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="rg-tuning">Tuning</label>
+        <input type="text" id="rg-tuning" name="rhythm_guitar_tuning" value="{{ details.rhythm_guitar.tuning|default:'' }}" placeholder="e.g. Drop D" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="rg-capo">Capo</label>
+        <input type="text" id="rg-capo" name="rhythm_guitar_capo" value="{{ details.rhythm_guitar.capo|default:'' }}" placeholder="e.g. none" class="form-input">
+      </div>
+    </div>
+
+    <h3 class="wiz-section-title">Bass</h3>
+    <div class="wiz-form-row">
+      <div class="form-group">
+        <label for="bg-tuning">Tuning</label>
+        <input type="text" id="bg-tuning" name="bass_guitar_tuning" value="{{ details.bass_guitar.tuning|default:'' }}" placeholder="e.g. Standard" class="form-input">
+      </div>
+    </div>
+
+    <h3 class="wiz-section-title">Vocals</h3>
+    <div class="wiz-form-row">
+      <div class="form-group">
+        <label for="lv">Lead Vocal</label>
+        <input type="text" id="lv" name="lead_vocal" value="{{ details.lead_vocal|default:'' }}" placeholder="e.g. John" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="bv">Backing Vocals</label>
+        <input type="text" id="bv" name="backing_vocal" value="{{ details.backing_vocal|default:'' }}" placeholder="e.g. Mike, Sarah" class="form-input">
+      </div>
+    </div>
+
+    <h3 class="wiz-section-title">Song Start</h3>
+    <div class="wiz-form-row">
+      <div class="form-group">
+        <label for="starts">Who starts?</label>
+        <input type="text" id="starts" name="starts" value="{{ details.starts|default:'' }}" placeholder="e.g. Drums" class="form-input">
+      </div>
+      <div class="form-group">
+        <label for="starts-with">Starts with</label>
+        <input type="text" id="starts-with" name="starts_with" value="{{ details.starts_with|default:'' }}" placeholder="e.g. Intro riff" class="form-input">
+      </div>
+    </div>
+
+    <div class="wiz-actions">
+      <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      <button type="submit" class="btn btn-primary wiz-btn-next">
+        Next: Review
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
+  </form>
+</div>
+{% endblock %}

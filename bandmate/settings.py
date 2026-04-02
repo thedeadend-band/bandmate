@@ -31,6 +31,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'player.middleware.WizardCleanupMiddleware',
 ]
 
 ROOT_URLCONF = 'bandmate.urls'
@@ -93,6 +94,9 @@ WAVEFORM_CACHE_DIR = os.environ.get('WAVEFORM_CACHE_DIR', str(BASE_DIR / '.wavef
 
 # Directory for caching transcoded audio files (OGG Vorbis).
 AUDIO_CACHE_DIR = os.environ.get('AUDIO_CACHE_DIR', str(BASE_DIR / '.audio_cache'))
+
+# Directory for wizard staging files (temporary audio during song creation).
+STAGING_DIR = os.environ.get('STAGING_DIR', str(BASE_DIR / '.song_staging'))
 
 # ---------------------------------------------------------------------------
 # Upload / request size limits

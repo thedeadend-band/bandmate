@@ -14,7 +14,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.models import User
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django_ratelimit.decorators import ratelimit
 
@@ -115,7 +115,11 @@ def _load_song_info(song_path: Path):
     try:
         data = json.loads(info_path.read_text(encoding='utf-8'))
         if data.get('lyric_offset'):
-            data['lyric_offset_secs'] = _parse_lrc_time(data['lyric_offset'])
+            offset = data['lyric_offset']
+            if isinstance(offset, (int, float)):
+                data['lyric_offset_secs'] = float(offset)
+            else:
+                data['lyric_offset_secs'] = _parse_lrc_time(str(offset))
         else:
             data['lyric_offset_secs'] = 0
         return data
@@ -237,6 +241,39 @@ def song_player(request, song_name: str):
         'song_info': song_info,
         'lyrics': lyrics,
     })
+
+
+@login_required
+def song_download_zip(request, song_name: str):
+    """Stream all audio tracks for a song as a ZIP archive."""
+    import io
+    import zipfile
+
+    song_path = _safe_song_path(song_name)
+    tracks = _get_tracks(song_path)
+    if not tracks:
+        raise Http404
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+        for track in tracks:
+            file_path = song_path / track['filename']
+            if file_path.is_file():
+                zf.write(file_path, track['filename'])
+
+        info_path = song_path / 'info.json'
+        if info_path.is_file():
+            zf.write(info_path, 'info.json')
+
+        lyrics_path = song_path / 'lyrics.lrc'
+        if lyrics_path.is_file():
+            zf.write(lyrics_path, 'lyrics.lrc')
+
+    buf.seek(0)
+    safe_name = re.sub(r'[^\w\s\-]', '', song_name).strip()
+    response = HttpResponse(buf.read(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{safe_name}.zip"'
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +533,8 @@ def admin_settings(request):
     success = None
     if request.method == 'POST':
         site.google_calendar_url = request.POST.get('google_calendar_url', '').strip()
+        site.getsongbpm_api_key = request.POST.get('getsongbpm_api_key', '').strip()
+        site.getsongkey_api_key = request.POST.get('getsongkey_api_key', '').strip()
         site.save()
         success = 'Settings saved.'
     return render(request, 'player/admin_settings.html', {
@@ -515,6 +554,12 @@ def calendar_view(request):
     return render(request, 'player/calendar.html', {
         'calendar_url': site.google_calendar_url,
         'nav_active': 'calendar',
+    })
+
+
+def attributions(request):
+    return render(request, 'player/attributions.html', {
+        'nav_active': 'attributions',
     })
 
 
@@ -872,3 +917,57 @@ def song_delete(request, song_name: str):
         shutil.rmtree(song_path)
 
     return redirect('song_list')
+
+
+# ---------------------------------------------------------------------------
+# Download Tracks page – search YouTube, preview, download as FLAC
+# ---------------------------------------------------------------------------
+
+@login_required
+def download_tracks(request):
+    return render(request, 'player/download_tracks.html')
+
+
+@login_required
+def download_tracks_search(request):
+    from .wizard_services import youtube_search
+
+    q = request.GET.get('q', '').strip()
+    if not q:
+        return JsonResponse({'results': []})
+    results = youtube_search(q, max_results=10)
+    return JsonResponse({'results': results})
+
+
+@login_required
+def download_tracks_preview(request, video_id: str):
+    """Redirect to a streamable audio URL extracted by yt-dlp."""
+    from .wizard_services import get_youtube_audio_stream_url
+
+    stream_url = get_youtube_audio_stream_url(video_id)
+    if not stream_url:
+        raise Http404
+    return redirect(stream_url)
+
+
+@login_required
+def download_tracks_flac(request, video_id: str):
+    """Download a YouTube video's audio as FLAC."""
+    import tempfile
+    from .wizard_services import download_youtube_as_flac
+
+    title = request.GET.get('title', video_id)
+    safe_title = re.sub(r'[^\w\s\-]', '', title).strip() or video_id
+
+    tmp_dir = tempfile.mkdtemp(prefix='bandmate_dl_')
+    try:
+        flac_path = download_youtube_as_flac(video_id, tmp_dir)
+        with open(flac_path, 'rb') as f:
+            data = f.read()
+        response = HttpResponse(data, content_type='audio/flac')
+        response['Content-Disposition'] = f'attachment; filename="{safe_title}.flac"'
+        return response
+    except Exception:
+        raise Http404
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)

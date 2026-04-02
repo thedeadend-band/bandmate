@@ -1,0 +1,35 @@
+{% extends "player/base.html" %}
+{% block title %}New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+<div class="wiz-start-page">
+  <h1 class="page-title">New Song Wizard</h1>
+  <p class="wiz-start-desc">Create a new song step by step: enter song info, look up tempo and key, choose a track source, detect beats, quantize, separate stems, add lyrics, and finalize.</p>
+
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary wiz-start-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Start New Song
+    </button>
+  </form>
+
+  <a href="{% url 'download_tracks' %}" class="btn btn-secondary wiz-dl-tracks-btn">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+    Download Tracks
+  </a>
+</div>
+{% endblock %}

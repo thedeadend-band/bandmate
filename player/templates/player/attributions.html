@@ -1,0 +1,27 @@
+{% extends "player/base.html" %}
+{% block title %}Attributions — BandMate{% endblock %}
+
+{% block content %}
+<h1>Attributions</h1>
+<p>BandMate gratefully uses the following services:</p>
+
+<div class="attributions-list">
+  <div class="attribution-card">
+    <h3>GetSongBPM</h3>
+    <p>Song tempo (BPM) database used for automatic tempo lookup.</p>
+    <a href="https://getsongbpm.com" target="_blank" rel="noopener">getsongbpm.com</a>
+  </div>
+
+  <div class="attribution-card">
+    <h3>GetSongKey</h3>
+    <p>Song key database used for automatic key detection.</p>
+    <a href="https://getsongkey.com" target="_blank" rel="noopener">getsongkey.com</a>
+  </div>
+
+  <div class="attribution-card">
+    <h3>LRCLIB</h3>
+    <p>Synchronized lyrics database for lyric lookup.</p>
+    <a href="https://lrclib.net" target="_blank" rel="noopener">lrclib.net</a>
+  </div>
+</div>
+{% endblock %}

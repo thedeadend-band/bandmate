@@ -1,26 +1,26 @@
 # New Song Wizard
 
-> Build a multi-step web UI wizard in the Django app that automates adding new songs: searching YouTube for stems (with Demucs fallback for AI separation), downloading audio, aligning stems interactively, detecting and adjusting beats, quantizing to a fixed tempo with a click intro, fetching lyrics with offset, looking up tempo/key, and collecting manual band metadata -- all from a step-by-step interface.
+> Build a multi-step web UI wizard in the Django app that automates adding new songs. The user either uploads pre-made stems or points the wizard at a YouTube audio source -- the backend then downloads, detects beats, quantizes to a fixed tempo with a click intro, and runs Demucs AI separation to produce stems (guitar, vocals, drums, bass, other, master). The wizard also fetches song info, tempo/key, lyrics, and band details, with a final review step before publishing.
 
 ## Architecture Overview
 
-A new multi-step wizard accessible from the sidebar (staff only), backed by a Django model that persists wizard state across steps. Long-running operations (downloads, beat detection, quantization) run in background threads with AJAX polling for progress. All processing happens in a staging directory; final files are moved to `SONGS_DIR` on completion.
+A new multi-step wizard accessible from the sidebar (staff only), backed by a Django model that persists wizard state across steps. Long-running operations (downloads, beat detection, quantization, Demucs) run in background threads with AJAX polling for progress. All processing happens in a staging directory; final files are moved to `SONGS_DIR` on completion.
 
 ```mermaid
 flowchart LR
     subgraph wizard [Wizard Steps]
         S1["1. Song Info\n(name, artist)"]
         S2["2. Tempo/Key Lookup"]
-        S3["3. Stem Source\n(YouTube / Demucs)"]
-        S4["4. Download /\nSeparate"]
-        S4b["5. Align Stems"]
-        S5["6. Beat Detection\n+ Review"]
-        S6["7. Quantize +\nClick Intro"]
-        S7["8. Lyrics"]
-        S8["9. Band Details"]
-        S9["10. Review +\nFinalize"]
+        S3["3. Track Source\n(Upload / YouTube)"]
+        S4["4. Download or\nUpload"]
+        S5["5. Beat Detection\n+ Review"]
+        S6["6. Quantize +\nClick Intro"]
+        S7["7. Stem Separation\n(Demucs)"]
+        S8["8. Lyrics"]
+        S9["9. Band Details"]
+        S10["10. Review +\nFinalize"]
     end
-    S1 --> S2 --> S3 --> S4 --> S4b --> S5 --> S6 --> S7 --> S8 --> S9
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10
 ```
 
 ## New Dependencies
@@ -46,11 +46,11 @@ class SongWizard(models.Model):
     STEP_CHOICES = [
         ('song_info', 'Song Info'),
         ('tempo_key', 'Tempo/Key Lookup'),
-        ('stem_source', 'Stem Source'),
-        ('download', 'Download / Separate'),
-        ('align', 'Align Stems'),
+        ('track_source', 'Track Source'),
+        ('download_upload', 'Download / Upload'),
         ('beat_detect', 'Beat Detection'),
         ('quantize', 'Quantize + Click'),
+        ('stem_separation', 'Stem Separation'),
         ('lyrics', 'Lyrics'),
         ('band_details', 'Band Details'),
         ('review', 'Review'),
@@ -65,17 +65,12 @@ class SongWizard(models.Model):
     key = models.CharField(max_length=20, blank=True, default='')
     time_signature = models.CharField(max_length=10, default='4/4')
 
-    # How stems were sourced: 'youtube', 'demucs', or 'mixed'
-    stem_source = models.CharField(max_length=20, default='youtube')
+    # How tracks were sourced: 'youtube' or 'upload'
+    track_source = models.CharField(max_length=20, default='youtube')
 
-    # YouTube selections stored as JSON
-    # e.g. {"guitar": {"video_id": "...", "title": "..."}, "bass": {...}, ...}
-    stem_selections = models.JSONField(default=dict, blank=True)
-    master_selection = models.JSONField(default=dict, blank=True)
-
-    # Per-stem alignment offsets in seconds (positive = shift right / delay)
-    # e.g. {"Guitar": 0.12, "Bass": -0.05, "Vocals": 0.08, "Drums": 0.0}
-    stem_offsets = models.JSONField(default=dict, blank=True)
+    # YouTube selection for the master audio
+    # e.g. {"video_id": "...", "title": "...", "duration": "..."}
+    youtube_selection = models.JSONField(default=dict, blank=True)
 
     # Beat detection results: list of beat times in seconds
     detected_beats = models.JSONField(default=list, blank=True)
@@ -114,61 +109,40 @@ Staging files go in a new `STAGING_DIR` setting (default `<project>/.song_stagin
 - Display results with editable fields so the user can override
 - If no API keys configured, skip straight to manual entry
 
-### Step 3: Stem Source Selection (YouTube or Demucs)
+### Step 3: Track Source Selection
 
 Two paths, chosen by the user:
 
-**Path A -- YouTube stems:**
+**Path A -- Upload stems:**
 
-- For each stem type (Drums, Bass, Guitar, Vocals), search YouTube using `yt-dlp`'s search:
-  - `"{artist} {title} drums isolated"`, `"... drums stem"`, `"... drums only"`
-  - Same pattern for bass, guitar, vocals
-  - Additional keyword variants: "backing track", "multitrack", "acapella" (for vocals)
-- Also search for the master: `"{artist} {title} official audio"`, `"... official music video"`
-- Display a card per stem type, each showing top 5 YouTube results (thumbnail, title, duration, channel)
-- User selects one video per stem (or marks a stem as "skip")
-- User selects the master track
-- Store selections in `stem_selections` / `master_selection` JSON fields
+- User uploads their own pre-made stem files (WAV, MP3, FLAC, etc.)
+- Upload interface accepts multiple files with labels (Drums, Bass, Guitar, Vocals, Master, etc.)
+- At minimum, a Master track is required
+- Uploaded files are saved to the staging directory
+- If all stems are provided, the Demucs step (Step 7) can be skipped
 
-**Path B -- Demucs AI separation:**
+**Path B -- YouTube download + Demucs:**
 
-- User searches for / selects just the master track from YouTube (or uploads one)
-- After master is downloaded, run Demucs `htdemucs_6s` model to split into 6 stems: vocals, drums, bass, guitar, other/keys
-- Background thread with progress (Demucs logs progress per step)
-- Output: `staging_dir/Vocals.wav`, `Drums.wav`, `Bass.wav`, `Guitar.wav`, `Keys.wav`, `Master.wav`
-- Demucs option is only shown if `demucs` is importable (graceful degradation)
+- User searches YouTube for the song's audio using `yt-dlp` search
+  - Search queries: `"{artist} {title} official audio"`, `"... audio"`, `"... official music video"`
+- Display top results with thumbnail, title, duration, and channel name
+- User selects one video as the source audio
+- Store selection in `youtube_selection` JSON field
+- Stems will be generated automatically via Demucs in Step 7
 
-**Mixed mode:** User can start with YouTube stems and fall back to Demucs for any stems they couldn't find (e.g., found drums and vocals on YouTube but not bass -- run Demucs on the master and use its bass output).
+### Step 4: Download or Upload
 
-### Step 4: Download / Separate
+- **YouTube path**: Use `yt-dlp` to download audio from the selected video. Format: best audio, post-process to WAV. Save as `staging_dir/Master.wav`.
+- **Upload path**: Files are already in staging from Step 3. Validate and convert to WAV if needed.
+- Background thread with progress updates for downloads
+- UI shows a progress bar
 
-- **YouTube path**: Use `yt-dlp` to download audio from selected videos. Format: best audio, post-process to WAV. Save as `staging_dir/Drums.wav`, `Guitar.wav`, etc.
-- **Demucs path**: Download master, then run `demucs --two-stems` or full 6-stem separation
-- Background thread with progress updates (per-file percentage for downloads, model progress for Demucs)
-- UI shows a progress bar per stem
+### Step 5: Beat Detection + Review
 
-### Step 5: Stem Alignment
-
-YouTube-sourced stems almost certainly have different amounts of leading silence and won't be time-aligned. This step lets the user drag each stem into alignment against the master.
-
-- **Multi-waveform alignment UI**:
-  - Stacked horizontal waveforms: Master (fixed, reference) on top, each stem below
-  - Each stem waveform is **horizontally draggable** -- user slides it left/right to adjust its offset relative to the master
-  - Offset displayed in milliseconds next to each stem (also editable as a number input for precision)
-  - **Playback controls**: play/pause with all stems mixed, plus solo/mute toggles per stem so the user can audition one stem against the master to check alignment
-  - Zoom in/out for fine-grained alignment (sample-accurate at high zoom)
-  - Visual alignment aids: vertical cursor line synced across all waveforms
-  - "Auto-align" button (stretch goal): cross-correlate each stem with the master to estimate the best offset automatically
-- For Demucs-sourced stems, offsets default to 0 (they're inherently aligned since they came from the same master) -- this step can be skipped or confirmed quickly
-- Save per-stem offsets (in seconds) to `stem_offsets` JSON field
-- When proceeding, stems are trimmed/padded to apply offsets, producing aligned WAV files in staging
-
-### Step 6: Beat Detection + Review
-
-- Run `librosa.beat.beat_track()` on the drums stem (or master if no drums)
+- Run `librosa.beat.beat_track()` on the master audio
 - Store detected beat times as a JSON array of float seconds
 - **Interactive beat editor UI**:
-  - Canvas-based waveform of the drums stem (reuse existing waveform rendering pattern from `player/static/player/js/player.js`)
+  - Canvas-based waveform of the master (reuse existing waveform rendering pattern from `player/static/player/js/player.js`)
   - Vertical beat markers overlaid on the waveform at detected positions
   - Drag markers left/right to adjust timing
   - Click between markers to add a new beat
@@ -179,22 +153,31 @@ YouTube-sourced stems almost certainly have different amounts of leading silence
   - Zoom in/out for fine adjustment
 - Save adjusted beats back to the model
 
-### Step 7: Quantize + Click Intro
+### Step 6: Quantize + Click Intro
 
-- **Quantization**: For each stem + master:
+- **Quantization**: For the master (and any uploaded stems):
   - Split audio at adjusted beat boundaries into segments
   - Calculate each segment's actual duration vs. target duration (beat interval = 60/tempo)
   - Time-stretch each segment using `pyrubberband.pyrb.time_stretch()` to match target tempo
   - Concatenate the warped segments
-  - **Prepend silence**: add exactly `click_intro_duration` seconds of silence to the start of every stem and the master (so all tracks start at 0:00 but the music begins after the click intro)
+  - **Prepend silence**: add exactly `click_intro_duration` seconds of silence to the start (so the music begins after the click intro)
 - **Click track generation**: Generate `Click.ogg` that is the full song duration (including intro):
   - 8 beats of audible click during the intro (2 bars of 4/4 at the target tempo)
   - Accented click (higher pitch, e.g., 1000 Hz) on beat 1 of each bar, normal click (800 Hz) on beats 2-4
   - Continue the click through the entire song (so musicians can hear the grid while playing)
   - Render as OGG Opus using ffmpeg (consistent with the existing lossy audio pipeline)
-- Background thread with progress (per-stem)
+- Background thread with progress
 - Output: quantized WAV files + `Click.ogg` in staging directory
 - UI shows before/after playback comparison
+
+### Step 7: Stem Separation (Demucs)
+
+- **YouTube path**: Run Demucs `htdemucs_6s` model on the quantized master to produce 6 stems: Vocals, Drums, Bass, Guitar, Other/Keys, plus keep the quantized Master
+- **Upload path with all stems**: Skip this step (user already provided stems, and they were quantized in Step 6)
+- **Upload path with master only**: Run Demucs on the quantized master, same as the YouTube path
+- Background thread with progress (Demucs logs progress per step)
+- Output: `staging_dir/Vocals.wav`, `Drums.wav`, `Bass.wav`, `Guitar.wav`, `Keys.wav`, `Master.wav`
+- Demucs option is only available if `demucs` is importable (graceful degradation)
 
 ### Step 8: Lyrics
 
@@ -217,11 +200,11 @@ YouTube-sourced stems almost certainly have different amounts of leading silence
 ### Step 10: Review + Finalize
 
 - Summary of everything: title, artist, tempo, key, stems list, lyrics preview, band details
-- Playback preview of the final quantized + aligned stems with click track
+- Playback preview of the final stems with click track
 - "Create Song" button:
   - Generates `info.json` from all collected metadata (including `lyric_offset`)
   - Writes `lyrics.lrc` with offset applied
-  - Copies quantized audio files + `Click.ogg` to `SONGS_DIR/{Artist} - {Title}/`
+  - Copies audio files + `Click.ogg` to `SONGS_DIR/{Artist} - {Title}/`
   - Cleans up staging directory
   - Marks wizard as `complete`
 - Redirect to the new song's player page
@@ -234,13 +217,13 @@ All under `/songs/new/` prefix, staff-only:
 - `/songs/new/<wizard_id>/step/<step_name>/` -- each step page
 - `/api/songs/new/<wizard_id>/youtube-search/` -- AJAX: YouTube search
 - `/api/songs/new/<wizard_id>/download/` -- AJAX: start download
+- `/api/songs/new/<wizard_id>/upload/` -- AJAX: upload stems
 - `/api/songs/new/<wizard_id>/demucs/` -- AJAX: start Demucs separation
-- `/api/songs/new/<wizard_id>/stem-offsets/` -- GET/PUT stem alignment offsets
-- `/api/songs/new/<wizard_id>/stem-audio/<stem_name>/` -- serve staging audio for playback in alignment/beat editor
 - `/api/songs/new/<wizard_id>/detect-beats/` -- AJAX: start beat detection
 - `/api/songs/new/<wizard_id>/quantize/` -- AJAX: start quantization
 - `/api/songs/new/<wizard_id>/task-status/` -- AJAX: poll background task progress
 - `/api/songs/new/<wizard_id>/beats/` -- GET/PUT beat positions
+- `/api/songs/new/<wizard_id>/stem-audio/<stem_name>/` -- serve staging audio for playback
 
 ## UI / Navigation
 
@@ -253,10 +236,9 @@ All under `/songs/new/` prefix, staff-only:
 ## File Structure (new files)
 
 - `player/wizard_views.py` -- all wizard views (keeps `views.py` from growing further)
-- `player/wizard_services.py` -- business logic: YouTube search, download, Demucs, beat detection, quantization, click generation, lyrics
+- `player/wizard_services.py` -- business logic: YouTube search/download, Demucs, beat detection, quantization, click generation, lyrics
 - `player/templates/player/wizard/` -- templates for each step
 - `player/static/player/js/beat_editor.js` -- interactive beat editor component (Canvas waveform + draggable markers)
-- `player/static/player/js/stem_aligner.js` -- interactive stem alignment component (stacked waveforms with drag offsets + solo/mute)
 - `player/static/player/js/wizard.js` -- wizard UI logic (progress polling, step navigation)
 
 ## Implementation Phases
@@ -264,19 +246,17 @@ All under `/songs/new/` prefix, staff-only:
 Given the complexity, this should be built incrementally. Each phase produces a working subset:
 
 - **Phase A**: Foundation + Steps 1-2 (model, migration, wizard shell with step indicator, song info form, tempo/key lookup via Spotify or manual)
-- **Phase B**: Steps 3-4 (YouTube search UI, stem selection cards, Demucs option with graceful fallback, background download/separation with progress)
-- **Phase B2**: Step 5 (interactive stem alignment -- stacked waveforms with drag offsets, solo/mute, playback against master)
-- **Phase C**: Step 6 (beat detection + interactive beat editor -- the hardest frontend work)
-- **Phase D**: Step 7 (quantization engine, silence prepend on all stems, Click.ogg generation -- the hardest backend work)
-- **Phase E**: Steps 8-10 (lyrics with auto-offset, band details form, review/finalize with full preview playback)
+- **Phase B**: Steps 3-4 (Track source selection UI -- upload interface and YouTube search with result cards, background download with progress)
+- **Phase C**: Step 5 (beat detection + interactive beat editor -- the hardest frontend work)
+- **Phase D**: Step 6 (quantization engine, silence prepend on all stems/master, Click.ogg generation -- the hardest backend work)
+- **Phase E**: Step 7 (Demucs stem separation on the quantized master, with progress tracking and graceful fallback if Demucs is unavailable)
+- **Phase F**: Steps 8-10 (lyrics with auto-offset, band details form, review/finalize with full preview playback)
 
 ## Key Risks and Mitigations
 
 - **Beat detection accuracy**: `librosa` beat tracking is good but not perfect, especially for songs with complex rhythms. The semi-automated review step mitigates this -- the user corrects misdetections.
 - **Time-stretch quality**: Rubber Band is the gold standard, but extreme stretch ratios (>15% change) can produce artifacts. Most pop/rock songs vary within 5% of their nominal tempo, so this should be fine.
-- **YouTube search relevance**: Stem videos are inconsistently named. Using multiple search query variants and letting the user pick from results mitigates this. Demucs fallback ensures stems are always obtainable even when YouTube has nothing.
-- **Stem alignment accuracy**: YouTube stems will have different leading silence. The interactive alignment UI is the primary mitigation. A stretch goal "auto-align" via cross-correlation could help automate this.
-- **Demucs quality**: AI separation is imperfect -- there will be bleed between stems. For rehearsal/practice purposes this is usually acceptable. The option to use YouTube stems (which are often cleaner isolated recordings) when available is the mitigation.
+- **Demucs quality**: AI separation is imperfect -- there will be bleed between stems. For rehearsal/practice purposes this is usually acceptable. The upload path provides an alternative when cleaner stems are available.
 - **Demucs dependency size**: `torch` + `demucs` is ~2 GB. Making it optional (import check) means the app works without it, just without the AI separation feature.
 - **yt-dlp breakage**: YouTube frequently changes its API; `yt-dlp` is actively maintained but may need periodic updates.
 - **Spotify API access**: Requires developer credentials. The plan includes fallback to manual entry if unconfigured.

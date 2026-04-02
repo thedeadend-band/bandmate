@@ -1,0 +1,103 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}Quantize – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Quantize + Click Intro</h1>
+  <p class="wiz-step-desc">
+    Quantize all audio to {{ wizard.tempo|default:"120" }} BPM with a 2-bar click intro.
+    This will time-stretch each beat segment and generate a click track.
+  </p>
+
+  {% if errors.quantize %}
+  <div class="error-message">{{ errors.quantize }}</div>
+  {% endif %}
+
+  <div class="wiz-beat-controls">
+    <button type="button" class="btn btn-primary" id="quantize-btn" {% if has_click %}disabled{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      {% if has_click %}Quantization Complete{% else %}Run Quantization{% endif %}
+    </button>
+  </div>
+
+  <div id="q-progress" class="wiz-dl-progress" style="display:none">
+    <div class="wiz-dl-bar-wrap">
+      <div class="wiz-dl-bar" id="q-bar" style="width:0%"></div>
+    </div>
+    <p class="wiz-dl-msg" id="q-msg">Starting...</p>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="wiz-actions">
+      <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      <button type="submit" name="action" value="next" class="btn btn-primary wiz-btn-next" id="next-btn" {% if not has_click %}disabled{% endif %}>
+        Next: Stem Separation
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
+  </form>
+</div>
+
+<script src="{% static 'player/js/wizard.js' %}"></script>
+<script>
+(function() {
+  var wizardId = {{ wizard.pk }};
+  var qBtn = document.getElementById('quantize-btn');
+  var progressDiv = document.getElementById('q-progress');
+  var qBar = document.getElementById('q-bar');
+  var qMsg = document.getElementById('q-msg');
+  var nextBtn = document.getElementById('next-btn');
+
+  qBtn.addEventListener('click', function() {
+    qBtn.disabled = true;
+    progressDiv.style.display = '';
+    qBar.style.width = '0%';
+    qMsg.textContent = 'Starting quantization...';
+
+    Wizard.postJSON('/api/songs/new/' + wizardId + '/quantize/', {})
+      .then(function() {
+        Wizard.pollTaskStatus(wizardId, function(data) {
+          qBar.style.width = data.progress + '%';
+          qMsg.textContent = data.message || data.status;
+          if (data.status === 'done') {
+            nextBtn.disabled = false;
+            qBtn.textContent = 'Quantization Complete';
+          } else if (data.status === 'error') {
+            qBtn.disabled = false;
+            qBtn.textContent = 'Retry Quantization';
+          }
+        });
+      })
+      .catch(function(err) {
+        qMsg.textContent = 'Failed: ' + err.message;
+        qBtn.disabled = false;
+      });
+  });
+})();
+</script>
+{% endblock %}

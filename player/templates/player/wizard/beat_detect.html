@@ -1,0 +1,140 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}Beat Detection – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Beat Detection</h1>
+  <p class="wiz-step-desc">Detect beats in the master audio, then review and adjust them.</p>
+
+  {% if errors.beats %}
+  <div class="error-message">{{ errors.beats }}</div>
+  {% endif %}
+
+  <div class="wiz-beat-controls">
+    <button type="button" class="btn btn-secondary" id="detect-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      {% if has_beats %}Re-detect Beats{% else %}Detect Beats{% endif %}
+    </button>
+    <span class="wiz-beat-count" id="beat-count">
+      {% if has_beats %}{{ beat_count }} beats detected{% endif %}
+    </span>
+  </div>
+
+  <div id="beat-progress" class="wiz-dl-progress" style="display:none">
+    <div class="wiz-dl-bar-wrap">
+      <div class="wiz-dl-bar" id="beat-bar" style="width:0%"></div>
+    </div>
+    <p class="wiz-dl-msg" id="beat-msg">Starting...</p>
+  </div>
+
+  <div id="waveform-wrap" class="wiz-waveform-wrap" style="{% if not has_beats %}display:none{% endif %}">
+    <canvas id="beat-canvas" class="wiz-beat-canvas" width="800" height="200"></canvas>
+    <div class="wiz-beat-legend">
+      <span>Click between markers to add. Right-click to remove. Drag to adjust.</span>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="wiz-actions">
+      <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      <button type="submit" name="action" value="next" class="btn btn-primary wiz-btn-next" id="next-btn" {% if not has_beats %}disabled{% endif %}>
+        Next: Quantize
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
+  </form>
+</div>
+
+<script src="{% static 'player/js/wizard.js' %}"></script>
+<script src="{% static 'player/js/beat_editor.js' %}"></script>
+<script>
+(function() {
+  var wizardId = {{ wizard.pk }};
+  var detectBtn = document.getElementById('detect-btn');
+  var progressDiv = document.getElementById('beat-progress');
+  var beatBar = document.getElementById('beat-bar');
+  var beatMsg = document.getElementById('beat-msg');
+  var beatCount = document.getElementById('beat-count');
+  var waveformWrap = document.getElementById('waveform-wrap');
+  var nextBtn = document.getElementById('next-btn');
+  var canvas = document.getElementById('beat-canvas');
+  var editor = null;
+
+  {% if has_beats %}
+  initEditor();
+  {% endif %}
+
+  detectBtn.addEventListener('click', function() {
+    detectBtn.disabled = true;
+    progressDiv.style.display = '';
+    beatBar.style.width = '0%';
+    beatMsg.textContent = 'Starting beat detection...';
+
+    Wizard.postJSON('/api/songs/new/' + wizardId + '/detect-beats/', {})
+      .then(function() { pollDetection(); })
+      .catch(function(err) {
+        beatMsg.textContent = 'Failed: ' + err.message;
+        detectBtn.disabled = false;
+      });
+  });
+
+  function pollDetection() {
+    Wizard.pollTaskStatus(wizardId, function(data) {
+      beatBar.style.width = data.progress + '%';
+      beatMsg.textContent = data.message || data.status;
+      if (data.status === 'done') {
+        detectBtn.disabled = false;
+        nextBtn.disabled = false;
+        initEditor();
+      } else if (data.status === 'error') {
+        detectBtn.disabled = false;
+      }
+    });
+  }
+
+  function initEditor() {
+    waveformWrap.style.display = '';
+    fetch('/api/songs/new/' + wizardId + '/waveform/')
+      .then(function(r) { return r.json(); })
+      .then(function(wf) {
+        fetch('/api/songs/new/' + wizardId + '/beats/')
+          .then(function(r) { return r.json(); })
+          .then(function(bd) {
+            var beats = bd.adjusted && bd.adjusted.length ? bd.adjusted : bd.detected;
+            editor = new BeatEditor(canvas, wf.peaks, wf.duration, beats);
+            beatCount.textContent = beats.length + ' beats';
+            editor.onChange = function(newBeats) {
+              beatCount.textContent = newBeats.length + ' beats';
+              Wizard.postJSON('/api/songs/new/' + wizardId + '/save-beats/', { beats: newBeats });
+            };
+          });
+      });
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}Track Source – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Track Source</h1>
+  <p class="wiz-step-desc">Choose how to provide audio for <strong>{{ wizard.artist }} – {{ wizard.title }}</strong>.</p>
+
+  {% if errors.files %}
+  <div class="error-message">{{ errors.files }}</div>
+  {% endif %}
+
+  <div class="wiz-source-options">
+    <div class="wiz-source-card">
+      <div class="wiz-source-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="23 7 16 12 23 17 23 7"/>
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+        </svg>
+      </div>
+      <h3>YouTube Search</h3>
+      <p>Search for the song on YouTube, download the audio, and generate stems automatically with Demucs AI.</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="youtube">
+        <button type="submit" class="btn btn-primary wiz-source-btn">Search YouTube</button>
+      </form>
+    </div>
+
+    <div class="wiz-source-card">
+      <div class="wiz-source-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <h3>Upload Stems</h3>
+      <p>Upload your own audio files (WAV, MP3, FLAC, etc.). A Master track is required. Additional stems are optional.</p>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload">
+        <label class="wiz-file-label" id="file-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span id="file-text">Choose files...</span>
+          <input type="file" name="audio_files" multiple accept=".wav,.mp3,.flac,.ogg,.aiff,.aif" id="file-input" style="display:none">
+        </label>
+        <button type="submit" class="btn btn-primary wiz-source-btn" id="upload-submit" disabled>Upload &amp; Continue</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="wiz-actions">
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="back">
+      <button type="submit" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+    </form>
+    <span></span>
+  </div>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">
+      Cancel Wizard
+    </button>
+  </form>
+</div>
+
+<script>
+(function() {
+  var input = document.getElementById('file-input');
+  var label = document.getElementById('file-text');
+  var submitBtn = document.getElementById('upload-submit');
+  if (!input) return;
+  input.addEventListener('change', function() {
+    var n = input.files.length;
+    label.textContent = n ? n + ' file' + (n > 1 ? 's' : '') + ' selected' : 'Choose files...';
+    submitBtn.disabled = !n;
+  });
+})();
+</script>
+{% endblock %}

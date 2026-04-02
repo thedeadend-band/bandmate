@@ -1,0 +1,66 @@
+{% extends "player/base.html" %}
+{% block title %}Song Info – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Song Info</h1>
+  <p class="wiz-step-desc">Enter the song title, artist, and time signature to get started.</p>
+
+  {% if errors %}
+  <div class="error-message">
+    {% for field, msg in errors.items %}{{ msg }}{% if not forloop.last %} {% endif %}{% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" class="wiz-form">
+    {% csrf_token %}
+    <div class="form-group">
+      <label for="wiz-title">Song Title</label>
+      <input type="text" id="wiz-title" name="title" value="{{ wizard.title }}" autocomplete="off" required autofocus>
+    </div>
+
+    <div class="form-group">
+      <label for="wiz-artist">Artist</label>
+      <input type="text" id="wiz-artist" name="artist" value="{{ wizard.artist }}" autocomplete="off" required>
+    </div>
+
+    <div class="form-group">
+      <label for="wiz-time-sig">Time Signature</label>
+      <select id="wiz-time-sig" name="time_signature" class="form-input">
+        <option value="4/4"{% if wizard.time_signature == "4/4" %} selected{% endif %}>4/4</option>
+        <option value="3/4"{% if wizard.time_signature == "3/4" %} selected{% endif %}>3/4</option>
+        <option value="6/8"{% if wizard.time_signature == "6/8" %} selected{% endif %}>6/8</option>
+        <option value="2/4"{% if wizard.time_signature == "2/4" %} selected{% endif %}>2/4</option>
+        <option value="5/4"{% if wizard.time_signature == "5/4" %} selected{% endif %}>5/4</option>
+        <option value="7/8"{% if wizard.time_signature == "7/8" %} selected{% endif %}>7/8</option>
+      </select>
+    </div>
+
+    <div class="wiz-actions">
+      <span></span>
+      <button type="submit" class="btn btn-primary wiz-btn-next">
+        Next: Tempo / Key
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">
+      Cancel Wizard
+    </button>
+  </form>
+</div>
+{% endblock %}

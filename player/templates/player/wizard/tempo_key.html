@@ -1,0 +1,134 @@
+{% extends "player/base.html" %}
+{% block title %}Tempo / Key – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Tempo / Key Lookup</h1>
+  <p class="wiz-step-desc">Look up the tempo and key for <strong>{{ wizard.artist }} – {{ wizard.title }}</strong>, or enter them manually.</p>
+
+  {% if errors %}
+  <div class="error-message">
+    {% for field, msg in errors.items %}{{ msg }}{% if not forloop.last %} {% endif %}{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if has_bpm_key or has_key_key %}
+  <form method="post" class="wiz-lookup-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="lookup">
+    <button type="submit" class="btn btn-secondary wiz-btn-lookup" id="lookup-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      Look Up Tempo &amp; Key
+    </button>
+    <p class="wiz-attribution">Powered by <a href="https://getsongbpm.com" target="_blank" rel="noopener">GetSongBPM.com</a> &amp; <a href="https://getsongkey.com" target="_blank" rel="noopener">GetSongKey.com</a></p>
+  </form>
+  {% if not has_bpm_key %}
+  <div class="wiz-notice">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+    </svg>
+    GetSongBPM API key not configured — tempo lookup will be skipped. Add one in <a href="{% url 'admin_settings' %}" style="color:var(--accent-blue)">Settings</a>.
+  </div>
+  {% endif %}
+  {% if not has_key_key %}
+  <div class="wiz-notice">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+    </svg>
+    GetSongKey API key not configured — key lookup will be skipped. Add one in <a href="{% url 'admin_settings' %}" style="color:var(--accent-blue)">Settings</a>.
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="wiz-notice">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+    </svg>
+    No API keys configured. Add a <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--accent-blue)">GetSongBPM</a> and/or <a href="https://getsongkey.com/api" target="_blank" style="color:var(--accent-blue)">GetSongKey</a> key in <a href="{% url 'admin_settings' %}" style="color:var(--accent-blue)">Settings</a> to enable lookup, or enter values manually below.
+  </div>
+  {% endif %}
+
+  {% if lookup_result and lookup_result.source %}
+  <div class="wiz-lookup-result">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+    Found{% if lookup_result.tempo %}: {{ lookup_result.tempo }} BPM{% endif %}{% if lookup_result.key %}{% if lookup_result.tempo %},{% else %}:{% endif %} key of {{ lookup_result.key }}{% endif %}
+  </div>
+  {% elif lookup_result.error %}
+  <div class="wiz-lookup-noresult">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+    </svg>
+    {{ lookup_result.error }}
+  </div>
+  {% elif lookup_result %}
+  <div class="wiz-lookup-noresult">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+    </svg>
+    Lookup returned no data. Enter values manually.
+  </div>
+  {% endif %}
+
+  <form method="post" class="wiz-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="next">
+
+    <div class="form-group">
+      <label for="wiz-tempo">Tempo (BPM)</label>
+      <input type="number" id="wiz-tempo" name="tempo" value="{{ wizard.tempo|default_if_none:'' }}" min="20" max="300" placeholder="e.g. 120" autocomplete="off">
+      <p class="form-hint">Leave blank if unknown — can be detected from audio later.</p>
+    </div>
+
+    <div class="form-group">
+      <label for="wiz-key">Key</label>
+      <input type="text" id="wiz-key" name="key" value="{{ wizard.key }}" placeholder="e.g. G major" autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <label for="wiz-time-sig">Time Signature</label>
+      <select id="wiz-time-sig" name="time_signature" class="form-input">
+        <option value="4/4"{% if wizard.time_signature == "4/4" %} selected{% endif %}>4/4</option>
+        <option value="3/4"{% if wizard.time_signature == "3/4" %} selected{% endif %}>3/4</option>
+        <option value="6/8"{% if wizard.time_signature == "6/8" %} selected{% endif %}>6/8</option>
+        <option value="2/4"{% if wizard.time_signature == "2/4" %} selected{% endif %}>2/4</option>
+        <option value="5/4"{% if wizard.time_signature == "5/4" %} selected{% endif %}>5/4</option>
+        <option value="7/8"{% if wizard.time_signature == "7/8" %} selected{% endif %}>7/8</option>
+      </select>
+    </div>
+
+    <div class="wiz-actions">
+      <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      <button type="submit" class="btn btn-primary wiz-btn-next">
+        Next: Track Source
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">
+      Cancel Wizard
+    </button>
+  </form>
+</div>
+{% endblock %}

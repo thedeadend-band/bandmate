@@ -1,0 +1,256 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}Download / Upload – New Song – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'song_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Multitrack
+</a>
+
+{% include "player/wizard/_step_indicator.html" %}
+
+<div class="wiz-content">
+  <h1 class="page-title">Download / Upload</h1>
+
+  {% if errors.download %}
+  <div class="error-message">{{ errors.download }}</div>
+  {% endif %}
+
+  {% if is_youtube %}
+  <p class="wiz-step-desc">Search YouTube for <strong>{{ wizard.artist }} – {{ wizard.title }}</strong> and download the audio.</p>
+
+  <div class="wiz-yt-search">
+    <div class="wiz-yt-search-bar">
+      <input type="text" id="yt-query" class="form-input" placeholder="Search YouTube..." value="{{ wizard.artist }} {{ wizard.title }} official audio">
+      <button type="button" class="btn btn-secondary" id="yt-search-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        Search
+      </button>
+    </div>
+
+    <div id="yt-results" class="wiz-yt-results">
+      <p class="wiz-yt-hint">Click Search to find videos.</p>
+    </div>
+  </div>
+
+  <div id="download-progress" class="wiz-dl-progress" style="display:none">
+    <div class="wiz-dl-bar-wrap">
+      <div class="wiz-dl-bar" id="dl-bar" style="width:0%"></div>
+    </div>
+    <p class="wiz-dl-msg" id="dl-msg">Starting download...</p>
+  </div>
+
+  {% else %}
+  <p class="wiz-step-desc">Your uploaded files are listed below. You can upload additional files if needed.</p>
+
+  <form id="extra-upload-form" class="wiz-extra-upload">
+    <label class="wiz-file-label" id="extra-file-label">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span id="extra-file-text">Add more files...</span>
+      <input type="file" name="audio_files" multiple accept=".wav,.mp3,.flac,.ogg,.aiff,.aif" id="extra-file-input" style="display:none">
+    </label>
+    <button type="button" class="btn btn-secondary" id="extra-upload-btn" disabled>Upload</button>
+  </form>
+  {% endif %}
+
+  <div id="staged-files" class="wiz-staged-files">
+    <h3 class="wiz-staged-title">Staged Files</h3>
+    {% if staged_files %}
+    <ul class="wiz-staged-list" id="staged-list">
+      {% for f in staged_files %}
+      <li class="wiz-staged-item{% if f == 'Master.wav' %} wiz-staged-master{% endif %}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+        {{ f }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="wiz-staged-empty" id="staged-empty">No files yet.</p>
+    {% endif %}
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="wiz-actions">
+      <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Back
+      </button>
+      <button type="submit" name="action" value="next" class="btn btn-primary wiz-btn-next" id="next-btn" {% if not has_master %}disabled{% endif %}>
+        Next: Beat Detection
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18"/>
+        </svg>
+      </button>
+    </div>
+  </form>
+
+  <form method="post" action="{% url 'wizard_cancel' wizard.pk %}" class="wiz-cancel-form">
+    {% csrf_token %}
+    <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">
+      Cancel Wizard
+    </button>
+  </form>
+</div>
+
+<script src="{% static 'player/js/wizard.js' %}"></script>
+<script>
+(function() {
+  var wizardId = {{ wizard.pk }};
+  var isYoutube = {{ is_youtube|yesno:"true,false" }};
+
+  /* ---------- YouTube search + download ---------- */
+  if (isYoutube) {
+    var searchBtn = document.getElementById('yt-search-btn');
+    var queryInput = document.getElementById('yt-query');
+    var resultsDiv = document.getElementById('yt-results');
+    var progressDiv = document.getElementById('download-progress');
+    var dlBar = document.getElementById('dl-bar');
+    var dlMsg = document.getElementById('dl-msg');
+    var nextBtn = document.getElementById('next-btn');
+
+    searchBtn.addEventListener('click', doSearch);
+    queryInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+    });
+
+    function doSearch() {
+      var q = queryInput.value.trim();
+      if (!q) return;
+      searchBtn.disabled = true;
+      searchBtn.textContent = 'Searching...';
+      resultsDiv.innerHTML = '<p class="wiz-yt-hint">Searching...</p>';
+
+      fetch('/api/songs/new/' + wizardId + '/youtube-search/?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          searchBtn.disabled = false;
+          searchBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Search';
+
+          if (!data.results || !data.results.length) {
+            resultsDiv.innerHTML = '<p class="wiz-yt-hint">No results found. Try a different search.</p>';
+            return;
+          }
+          renderResults(data.results);
+        })
+        .catch(function(err) {
+          searchBtn.disabled = false;
+          searchBtn.textContent = 'Search';
+          resultsDiv.innerHTML = '<p class="wiz-yt-hint">Search failed: ' + err.message + '</p>';
+        });
+    }
+
+    function renderResults(items) {
+      resultsDiv.innerHTML = '';
+      items.forEach(function(item) {
+        var card = document.createElement('div');
+        card.className = 'wiz-yt-card';
+        card.innerHTML =
+          '<img src="' + escapeHtml(item.thumbnail) + '" class="wiz-yt-thumb" alt="">' +
+          '<div class="wiz-yt-info">' +
+            '<div class="wiz-yt-title">' + escapeHtml(item.title) + '</div>' +
+            '<div class="wiz-yt-meta">' + escapeHtml(item.channel) + ' · ' + escapeHtml(item.duration_str) + '</div>' +
+          '</div>' +
+          '<button type="button" class="btn btn-primary wiz-yt-select" data-vid="' + escapeHtml(item.video_id) + '" data-title="' + escapeHtml(item.title) + '">Download</button>';
+        resultsDiv.appendChild(card);
+      });
+
+      resultsDiv.querySelectorAll('.wiz-yt-select').forEach(function(btn) {
+        btn.addEventListener('click', function() { startDownload(btn.dataset.vid, btn.dataset.title); });
+      });
+    }
+
+    function startDownload(videoId, title) {
+      progressDiv.style.display = '';
+      dlBar.style.width = '0%';
+      dlMsg.textContent = 'Starting download...';
+
+      resultsDiv.querySelectorAll('.wiz-yt-select').forEach(function(b) { b.disabled = true; });
+
+      Wizard.postJSON('/api/songs/new/' + wizardId + '/download/', { video_id: videoId, title: title })
+        .then(function() { pollDownload(); })
+        .catch(function(err) {
+          dlMsg.textContent = 'Failed to start: ' + err.message;
+        });
+    }
+
+    function pollDownload() {
+      Wizard.pollTaskStatus(wizardId, function(data) {
+        dlBar.style.width = data.progress + '%';
+        dlMsg.textContent = data.message || data.status;
+
+        if (data.status === 'done') {
+          nextBtn.disabled = false;
+          refreshStagedFiles();
+        } else if (data.status === 'error') {
+          dlMsg.textContent = 'Error: ' + (data.message || 'Download failed');
+          resultsDiv.querySelectorAll('.wiz-yt-select').forEach(function(b) { b.disabled = false; });
+        }
+      });
+    }
+  }
+
+  /* ---------- Extra upload (upload path) ---------- */
+  var extraInput = document.getElementById('extra-file-input');
+  var extraBtn = document.getElementById('extra-upload-btn');
+  var extraText = document.getElementById('extra-file-text');
+
+  if (extraInput) {
+    extraInput.addEventListener('change', function() {
+      var n = extraInput.files.length;
+      extraText.textContent = n ? n + ' file' + (n > 1 ? 's' : '') + ' selected' : 'Add more files...';
+      extraBtn.disabled = !n;
+    });
+
+    extraBtn.addEventListener('click', function() {
+      var form = new FormData();
+      for (var i = 0; i < extraInput.files.length; i++) {
+        form.append('audio_files', extraInput.files[i]);
+      }
+      extraBtn.disabled = true;
+      extraBtn.textContent = 'Uploading...';
+
+      fetch('/api/songs/new/' + wizardId + '/upload/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': Wizard.getCSRFToken() },
+        body: form,
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { alert(data.error); }
+        else { refreshStagedFiles(); }
+        extraBtn.textContent = 'Upload';
+        extraInput.value = '';
+        extraText.textContent = 'Add more files...';
+      })
+      .catch(function(err) { alert('Upload failed: ' + err.message); extraBtn.textContent = 'Upload'; });
+    });
+  }
+
+  /* ---------- Refresh staged file list ---------- */
+  function refreshStagedFiles() {
+    window.location.reload();
+  }
+
+  /* ---------- Utility ---------- */
+  function escapeHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+})();
+</script>
+{% endblock %}
