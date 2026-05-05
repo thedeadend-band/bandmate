@@ -171,9 +171,10 @@ def step_tempo_key(request, wiz):
 
         if action == 'lookup':
             site = SiteSettings.load()
-            bpm_key = site.getsongbpm_api_key or os.environ.get('GETSONGBPM_API_KEY', '')
-            key_key = site.getsongkey_api_key or os.environ.get('GETSONGKEY_API_KEY', '')
-            lookup_result = lookup_tempo_key(wiz.title, wiz.artist, bpm_key, key_key)
+            api_key = (site.song_api_key or site.getsongbpm_api_key
+                       or site.getsongkey_api_key
+                       or os.environ.get('SONG_API_KEY', ''))
+            lookup_result = lookup_tempo_key(wiz.title, wiz.artist, api_key)
             if lookup_result.get('tempo'):
                 wiz.tempo = lookup_result['tempo']
             if lookup_result.get('key'):
@@ -209,14 +210,14 @@ def step_tempo_key(request, wiz):
             return redirect('wizard_step', wizard_id=wiz.pk, step_name='song_info')
 
     site = SiteSettings.load()
-    has_bpm_key = bool(site.getsongbpm_api_key or os.environ.get('GETSONGBPM_API_KEY'))
-    has_key_key = bool(site.getsongkey_api_key or os.environ.get('GETSONGKEY_API_KEY'))
+    has_api_key = bool(site.song_api_key or site.getsongbpm_api_key
+                       or site.getsongkey_api_key
+                       or os.environ.get('SONG_API_KEY'))
 
     return render(request, 'player/wizard/tempo_key.html', _wizard_context(wiz, 'tempo_key', {
         'errors': errors,
         'lookup_result': lookup_result,
-        'has_bpm_key': has_bpm_key,
-        'has_key_key': has_key_key,
+        'has_api_key': has_api_key,
     }))
 
 

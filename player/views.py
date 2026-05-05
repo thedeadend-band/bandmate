@@ -533,8 +533,7 @@ def admin_settings(request):
     success = None
     if request.method == 'POST':
         site.google_calendar_url = request.POST.get('google_calendar_url', '').strip()
-        site.getsongbpm_api_key = request.POST.get('getsongbpm_api_key', '').strip()
-        site.getsongkey_api_key = request.POST.get('getsongkey_api_key', '').strip()
+        site.song_api_key = request.POST.get('song_api_key', '').strip()
         site.save()
         success = 'Settings saved.'
     return render(request, 'player/admin_settings.html', {

@@ -25,12 +25,11 @@ USER_AGENT = 'BandMate SongWizard/1.0'
 # Tempo / Key lookup via GetSongBPM.com + GetSongKey.com APIs
 # ---------------------------------------------------------------------------
 
-GETSONGBPM_BASE = 'https://api.getsongbpm.com'
-GETSONGKEY_BASE = 'https://api.getsong.co'
+GETSONG_API_BASE = 'https://api.getsong.co'
 
 
 def _api_get(base_url: str, path: str, params: dict) -> dict:
-    """Make a GET request to a GetSongBPM / GetSongKey API endpoint."""
+    """Make a GET request to the GetSong API."""
     qs = urllib.parse.urlencode(params)
     url = f'{base_url}{path}?{qs}'
     req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
@@ -38,11 +37,23 @@ def _api_get(base_url: str, path: str, params: dict) -> dict:
         return json.loads(resp.read().decode())
 
 
-def _lookup_tempo(title: str, artist: str, api_key: str) -> dict:
-    """Look up tempo and time signature via GetSongBPM.com."""
-    result: dict = {'tempo': None, 'time_signature': None, 'error': None}
+def lookup_tempo_key(title: str, artist: str, api_key: str = '') -> dict:
+    """
+    Look up tempo, key, and time signature via api.getsong.co.
+
+    GetSongBPM and GetSongKey share the same API. A single search + song
+    detail call returns tempo, key, and time signature.
+
+    Returns a dict with keys: tempo, key, time_signature, source, error.
+    """
+    result = {'tempo': None, 'key': None, 'time_signature': None, 'source': None, 'error': None}
+
+    if not api_key:
+        result['error'] = 'No API key configured. Add a GetSongBPM/GetSongKey key in Settings.'
+        return result
+
     try:
-        search_data = _api_get(GETSONGBPM_BASE, '/search/', {
+        search_data = _api_get(GETSONG_API_BASE, '/search/', {
             'api_key': api_key,
             'type': 'both',
             'lookup': f'song:{title} artist:{artist}',
@@ -50,15 +61,15 @@ def _lookup_tempo(title: str, artist: str, api_key: str) -> dict:
 
         search_results = search_data.get('search', [])
         if not search_results:
-            result['error'] = 'No results on GetSongBPM.'
+            result['error'] = 'No results found.'
             return result
 
         song_id = search_results[0].get('id')
         if not song_id:
-            result['error'] = 'GetSongBPM search returned no song ID.'
+            result['error'] = 'Search returned no song ID.'
             return result
 
-        song_data = _api_get(GETSONGBPM_BASE, '/song/', {
+        song_data = _api_get(GETSONG_API_BASE, '/song/', {
             'api_key': api_key,
             'id': song_id,
         })
@@ -71,114 +82,24 @@ def _lookup_tempo(title: str, artist: str, api_key: str) -> dict:
             except (ValueError, TypeError):
                 pass
 
+        key_info = song.get('key_of')
+        if key_info:
+            result['key'] = key_info
+
         time_sig = song.get('time_sig')
         if time_sig:
             result['time_signature'] = str(time_sig)
 
-        if not result['tempo']:
-            result['error'] = 'Track found on GetSongBPM but no tempo data.'
-
-    except urllib.error.HTTPError as e:
-        result['error'] = f'GetSongBPM error: HTTP {e.code}'
-    except Exception as e:
-        logger.exception('GetSongBPM lookup failed')
-        result['error'] = f'GetSongBPM error: {e}'
-
-    return result
-
-
-def _lookup_key(title: str, artist: str, api_key: str) -> dict:
-    """Look up song key via GetSongKey.com."""
-    result: dict = {'key': None, 'error': None}
-    try:
-        search_data = _api_get(GETSONGKEY_BASE, '/search/', {
-            'api_key': api_key,
-            'type': 'both',
-            'lookup': f'song:{title} artist:{artist}',
-        })
-
-        search_results = search_data.get('search', [])
-        if not search_results:
-            result['error'] = 'No results on GetSongKey.'
-            return result
-
-        song_id = search_results[0].get('id')
-        if not song_id:
-            result['error'] = 'GetSongKey search returned no song ID.'
-            return result
-
-        song_data = _api_get(GETSONGKEY_BASE, '/song/', {
-            'api_key': api_key,
-            'id': song_id,
-        })
-        song = song_data.get('song', {})
-
-        key_info = song.get('key_of')
-        if key_info:
-            result['key'] = key_info
+        if result['tempo'] or result['key']:
+            result['source'] = 'getsongbpm'
         else:
-            result['error'] = 'Track found on GetSongKey but no key data.'
+            result['error'] = 'Track found but no tempo or key data available.'
 
     except urllib.error.HTTPError as e:
-        result['error'] = f'GetSongKey error: HTTP {e.code}'
+        result['error'] = f'API error: HTTP {e.code}'
     except Exception as e:
-        logger.exception('GetSongKey lookup failed')
-        result['error'] = f'GetSongKey error: {e}'
-
-    return result
-
-
-def lookup_tempo_key(
-    title: str,
-    artist: str,
-    bpm_api_key: str = '',
-    key_api_key: str = '',
-) -> dict:
-    """
-    Look up tempo via GetSongBPM.com and key via GetSongKey.com.
-
-    Each API is called independently; if only one key is configured the
-    other lookup is skipped gracefully.
-
-    Returns a dict with keys: tempo, key, time_signature, source, error.
-    """
-    result = {'tempo': None, 'key': None, 'time_signature': None, 'source': None, 'error': None}
-
-    if not bpm_api_key and not key_api_key:
-        result['error'] = 'No API keys configured. Add GetSongBPM and/or GetSongKey keys in Settings.'
-        return result
-
-    errors = []
-    sources = []
-
-    if bpm_api_key:
-        bpm = _lookup_tempo(title, artist, bpm_api_key)
-        result['tempo'] = bpm.get('tempo')
-        result['time_signature'] = bpm.get('time_signature')
-        if bpm.get('error'):
-            errors.append(bpm['error'])
-        if result['tempo']:
-            sources.append('getsongbpm')
-    else:
-        errors.append('GetSongBPM API key not configured.')
-
-    if key_api_key:
-        key_result = _lookup_key(title, artist, key_api_key)
-        result['key'] = key_result.get('key')
-        if key_result.get('error'):
-            errors.append(key_result['error'])
-        if result['key']:
-            sources.append('getsongkey')
-    else:
-        errors.append('GetSongKey API key not configured.')
-
-    if sources:
-        result['source'] = ' + '.join(sources)
-
-    if not result['tempo'] and not result['key']:
-        result['error'] = ' '.join(errors) if errors else 'No tempo or key data found.'
-    elif errors:
-        result['error'] = ' '.join(errors)
+        logger.exception('Tempo/key lookup failed')
+        result['error'] = f'Lookup error: {e}'
 
     return result
 

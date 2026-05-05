@@ -123,6 +123,7 @@ class SiteSettings(models.Model):
     spotify_client_secret = models.CharField(max_length=255, blank=True, default='')
     getsongbpm_api_key = models.CharField(max_length=255, blank=True, default='')
     getsongkey_api_key = models.CharField(max_length=255, blank=True, default='')
+    song_api_key = models.CharField(max_length=255, blank=True, default='')
 
     class Meta:
         verbose_name_plural = 'Site settings'
