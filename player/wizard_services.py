@@ -700,35 +700,29 @@ import sys as _sys
 import time as _time
 
 
-# Model configuration: best model per stem
-_STEM_MODELS = {
-    'Vocals': {
+# Model configuration: which model provides each stem at best quality.
+# Stems are grouped by model so each model only loads once.
+_MODEL_CONFIGS = [
+    {
         'model': 'model_bs_roformer_ep_317_sdr_12.9755.ckpt',
-        'single_stem': 'Vocals',
+        'label': 'RoFormer',
+        'provides': {'Vocals': 'Vocals'},
     },
-    'Drums': {
+    {
         'model': 'htdemucs_ft.yaml',
-        'single_stem': 'Drums',
+        'label': 'htdemucs_ft',
+        'provides': {'Drums': 'Drums', 'Bass': 'Bass', 'Other': 'Other'},
     },
-    'Bass': {
-        'model': 'htdemucs_ft.yaml',
-        'single_stem': 'Bass',
-    },
-    'Guitar': {
+    {
         'model': 'htdemucs_6s.yaml',
-        'single_stem': 'Guitar',
+        'label': 'htdemucs_6s',
+        'provides': {'Guitar': 'Guitar', 'Keys': 'Piano'},
     },
-    'Keys': {
-        'model': 'htdemucs_6s.yaml',
-        'single_stem': 'Piano',
-    },
-    'Other': {
-        'model': 'htdemucs_ft.yaml',
-        'single_stem': 'Other',
-    },
-}
+]
 
-ALL_STEMS = set(_STEM_MODELS.keys())
+ALL_STEMS = set()
+for _cfg in _MODEL_CONFIGS:
+    ALL_STEMS.update(_cfg['provides'].keys())
 
 _PROGRESS_RE = _re.compile(r'(\d+)%\|')
 
@@ -736,24 +730,28 @@ _PROGRESS_RE = _re.compile(r'(\d+)%\|')
 def _run_separator_pass(
     master_path: str,
     model_filename: str,
-    single_stem: str,
     output_dir: str,
     wizard_model,
     progress_lo: int,
     progress_hi: int,
     label: str,
+    single_stem: str | None = None,
 ) -> list[str]:
-    """Run audio-separator for a single stem and return output file paths."""
+    """Run audio-separator and return output file paths.
+
+    If single_stem is None, all stems the model produces are output.
+    """
     separator_bin = str(Path(_sys.executable).parent / 'audio-separator')
 
     cmd = [
         separator_bin,
         master_path,
         '--model_filename', model_filename,
-        '--single_stem', single_stem,
         '--output_dir', output_dir,
         '--output_format', 'FLAC',
     ]
+    if single_stem:
+        cmd.extend(['--single_stem', single_stem])
     logger.info('Running audio-separator: %s', ' '.join(cmd))
 
     proc = subprocess.Popen(
@@ -799,7 +797,8 @@ def _run_separator_pass(
             now = _time.monotonic()
             if now - last_update > 2.0:
                 wizard_model.bg_task_progress = min(progress, progress_hi)
-                wizard_model.bg_task_message = f'Separating {label}… {max_pct}%'
+                wizard_model.bg_task_message = (
+                    f'[{label}] Processing… {max_pct}%')
                 try:
                     wizard_model.save(
                         update_fields=['bg_task_progress', 'bg_task_message'])
@@ -825,9 +824,11 @@ def run_stem_separation(wizard_model) -> None:
     """
     Multi-pass stem separation using audio-separator with best model per stem.
 
-    Uses RoFormer for vocals, htdemucs_ft for drums/bass/other, and
-    htdemucs_6s for guitar/piano.  Only selected stems are processed.
-    Models are grouped so each is only loaded once.
+    Each model is loaded only once and all needed stems are extracted from its
+    output.  This minimizes model loads (3 max) for maximum speed:
+      - RoFormer → Vocals
+      - htdemucs_ft → Drums, Bass, Other
+      - htdemucs_6s → Guitar, Keys (Piano)
     """
     staging = Path(wizard_model.staging_dir)
     master = staging / 'Master.wav'
@@ -843,17 +844,23 @@ def run_stem_separation(wizard_model) -> None:
     if not selected:
         selected = ALL_STEMS.copy()
 
-    # Group stems by model to minimize model loads
-    model_groups: dict[str, list[str]] = {}
-    for stem_name in sorted(selected):
-        cfg = _STEM_MODELS.get(stem_name)
-        if not cfg:
-            continue
-        model = cfg['model']
-        model_groups.setdefault(model, []).append(stem_name)
+    # Determine which models need to run and which stems to extract from each
+    runs = []
+    for cfg in _MODEL_CONFIGS:
+        needed = {
+            stem: output_name
+            for stem, output_name in cfg['provides'].items()
+            if stem in selected
+        }
+        if needed:
+            runs.append({
+                'model': cfg['model'],
+                'label': cfg['label'],
+                'stems': needed,
+            })
 
-    total_stems = sum(len(v) for v in model_groups.values())
-    if total_stems == 0:
+    total_runs = len(runs)
+    if total_runs == 0:
         wizard_model.bg_task_status = 'done'
         wizard_model.bg_task_progress = 100
         wizard_model.bg_task_message = 'No stems to separate'
@@ -862,56 +869,79 @@ def run_stem_separation(wizard_model) -> None:
         return
 
     try:
-        stem_idx = 0
         separated_stems = []
 
-        for model_name, stems in model_groups.items():
-            for stem_name in stems:
-                cfg = _STEM_MODELS[stem_name]
-                progress_lo = 2 + int(stem_idx / total_stems * 90)
-                progress_hi = 2 + int((stem_idx + 1) / total_stems * 90)
+        for run_idx, run in enumerate(runs):
+            model_name = run['model']
+            model_label = run['label']
+            stems_needed = run['stems']
+            stem_names_str = ', '.join(sorted(stems_needed.keys()))
 
-                wizard_model.bg_task_progress = progress_lo
+            progress_lo = 2 + int(run_idx / total_runs * 90)
+            progress_hi = 2 + int((run_idx + 1) / total_runs * 90)
+
+            # If only one stem needed from this model, use --single_stem
+            single_stem = None
+            if len(stems_needed) == 1:
+                single_stem = list(stems_needed.values())[0]
+
+            wizard_model.bg_task_progress = progress_lo
+            wizard_model.bg_task_message = (
+                f'[{stem_names_str}] Running {model_label} '
+                f'({run_idx + 1}/{total_runs})')
+            try:
+                wizard_model.save(update_fields=[
+                    'bg_task_progress', 'bg_task_message'])
+            except Exception:
+                pass
+
+            sep_out = staging / f'_sep_run_{run_idx}'
+            sep_out.mkdir(exist_ok=True)
+
+            try:
+                output_files = _run_separator_pass(
+                    master_path=str(master),
+                    model_filename=model_name,
+                    output_dir=str(sep_out),
+                    wizard_model=wizard_model,
+                    progress_lo=progress_lo,
+                    progress_hi=progress_hi,
+                    label=stem_names_str,
+                    single_stem=single_stem,
+                )
+
+                # Match output files to requested stems
+                # Output naming: {input_stem}_({StemName})_{model}.flac
+                for stem_name, output_stem_name in stems_needed.items():
+                    target_tag = f'({output_stem_name})'
+                    matched = False
+                    for out_file in output_files:
+                        if target_tag.lower() in out_file.lower():
+                            out_path = Path(out_file)
+                            dest = staging / f'{stem_name}{out_path.suffix}'
+                            for old in staging.glob(f'{stem_name}.*'):
+                                if old.suffix.lower() in ('.wav', '.flac'):
+                                    old.unlink()
+                            shutil.copy2(str(out_path), str(dest))
+                            separated_stems.append(stem_name)
+                            logger.info('Separated %s → %s', stem_name,
+                                        dest.name)
+                            matched = True
+                            break
+                    if not matched:
+                        logger.warning(
+                            'Stem %s (%s) not found in output files: %s',
+                            stem_name, target_tag, output_files)
+
                 wizard_model.bg_task_message = (
-                    f'Separating {stem_name} ({stem_idx + 1}/{total_stems})…')
+                    f'[{stem_names_str}] Done ✓')
                 try:
-                    wizard_model.save(update_fields=[
-                        'bg_task_progress', 'bg_task_message'])
+                    wizard_model.save(update_fields=['bg_task_message'])
                 except Exception:
                     pass
 
-                sep_out = staging / f'_sep_{stem_name}'
-                sep_out.mkdir(exist_ok=True)
-
-                try:
-                    output_files = _run_separator_pass(
-                        master_path=str(master),
-                        model_filename=model_name,
-                        single_stem=cfg['single_stem'],
-                        output_dir=str(sep_out),
-                        wizard_model=wizard_model,
-                        progress_lo=progress_lo,
-                        progress_hi=progress_hi,
-                        label=stem_name,
-                    )
-
-                    # Copy the output stem file to staging with correct name
-                    for out_file in output_files:
-                        out_path = Path(out_file)
-                        dest = staging / f'{stem_name}{out_path.suffix}'
-                        # Remove any existing file for this stem
-                        for old in staging.glob(f'{stem_name}.*'):
-                            if old.suffix.lower() in ('.wav', '.flac'):
-                                old.unlink()
-                        shutil.copy2(str(out_path), str(dest))
-                        separated_stems.append(stem_name)
-                        logger.info('Separated %s → %s', stem_name, dest.name)
-                        break
-
-                finally:
-                    shutil.rmtree(str(sep_out), ignore_errors=True)
-
-                stem_idx += 1
+            finally:
+                shutil.rmtree(str(sep_out), ignore_errors=True)
 
         # ── Wrap up ──────────────────────────────────────────────────
         missing = [
