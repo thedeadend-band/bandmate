@@ -70,7 +70,7 @@ fi
 
 # ---------- Step 4: Collect static files -------------------------------------
 bold "[4/5] Collecting static files..."
-if python manage.py collectstatic --noinput -q; then
+if python manage.py collectstatic --noinput --verbosity 0; then
     green "  ✓ Static files collected"
 else
     red "  ✗ collectstatic failed"
