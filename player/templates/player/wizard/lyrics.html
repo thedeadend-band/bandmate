@@ -21,16 +21,22 @@
   </div>
   {% endif %}
 
-  <form method="post" class="wiz-lookup-form">
+  <form method="post" class="wiz-lookup-form" id="lyrics-lookup-form">
     {% csrf_token %}
     <input type="hidden" name="action" value="lookup">
-    <button type="submit" class="btn btn-secondary wiz-btn-lookup">
+    <button type="submit" class="btn btn-secondary wiz-btn-lookup" id="lyrics-lookup-btn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
       Look Up on LRCLIB
     </button>
   </form>
+  <div id="lyrics-progress" class="wiz-dl-progress" style="display:none">
+    <div class="wiz-dl-bar-wrap">
+      <div class="wiz-dl-bar" style="width:100%"></div>
+    </div>
+    <p class="wiz-dl-msg">Searching for lyrics...</p>
+  </div>
 
   <form method="post" class="wiz-form">
     {% csrf_token %}
@@ -39,6 +45,7 @@
     <div class="form-group">
       <label for="wiz-lyrics">Synced Lyrics (LRC format)</label>
       <textarea id="wiz-lyrics" name="lyrics" rows="14" class="form-input wiz-lyrics-textarea" placeholder="[00:12.34] First line of lyrics...">{{ wizard.lyrics_content }}</textarea>
+      <p class="form-hint">Optional. You can skip this step if lyrics aren't available.</p>
     </div>
 
     <div class="form-group">
@@ -70,4 +77,19 @@
     <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
   </form>
 </div>
+
+<script>
+(function() {
+  var form = document.getElementById('lyrics-lookup-form');
+  if (form) {
+    form.addEventListener('submit', function() {
+      var btn = document.getElementById('lyrics-lookup-btn');
+      btn.disabled = true;
+      btn.textContent = 'Searching...';
+      var prog = document.getElementById('lyrics-progress');
+      if (prog) prog.style.display = '';
+    });
+  }
+})();
+</script>
 {% endblock %}

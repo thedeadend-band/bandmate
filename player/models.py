@@ -43,7 +43,7 @@ class SetlistEntry(models.Model):
 class SongWizard(models.Model):
     STEPS = [
         ('song_info', 'Song Info'),
-        ('tempo_key', 'Tempo/Key Lookup'),
+        ('tempo_key', 'Metadata Lookup'),
         ('lyrics', 'Lyrics'),
         ('band_details', 'Band Details'),
         ('track_source', 'Track Source'),

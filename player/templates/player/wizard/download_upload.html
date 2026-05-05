@@ -131,7 +131,7 @@
       var q = queryInput.value.trim();
       if (!q) return;
       searchBtn.disabled = true;
-      searchBtn.textContent = 'Searching...';
+      searchBtn.innerHTML = '<span class="wiz-spinner" style="width:14px;height:14px"></span> Searching\u2026';
       resultsDiv.innerHTML = '<p class="wiz-yt-hint">Searching...</p>';
 
       fetch('/api/songs/new/' + wizardId + '/youtube-search/?q=' + encodeURIComponent(q))

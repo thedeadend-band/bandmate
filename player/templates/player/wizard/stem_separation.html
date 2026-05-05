@@ -56,7 +56,7 @@
         Submit (skip separation)
       </button>
       {% endif %}
-      <button type="submit" name="action" value="submit_queue" class="btn btn-primary wiz-btn-next"
+      <button type="submit" name="action" value="submit_queue" class="btn btn-primary wiz-btn-next" id="submit-btn"
               {% if not demucs_available and not can_skip %}disabled{% endif %}>
         Submit to Queue
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -71,4 +71,18 @@
     <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
   </form>
 </div>
+
+<script>
+(function() {
+  var submitBtn = document.getElementById('submit-btn');
+  var checkboxes = document.querySelectorAll('.stem-checkbox');
+  if (!submitBtn || !checkboxes.length) return;
+  function check() {
+    var any = Array.from(checkboxes).some(function(cb) { return cb.checked; });
+    submitBtn.disabled = !any;
+  }
+  checkboxes.forEach(function(cb) { cb.addEventListener('change', check); });
+  check();
+})();
+</script>
 {% endblock %}

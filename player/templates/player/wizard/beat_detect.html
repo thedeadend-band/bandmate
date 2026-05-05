@@ -14,7 +14,7 @@
 
 <div class="wiz-content">
   <h1 class="page-title">Beat Detection</h1>
-  <p class="wiz-step-desc">Detect beats in the master audio, then review and adjust them.</p>
+  <p class="wiz-step-desc">Detect beats in the master audio, then review and adjust them. You may skip this step if beat quantization is not needed.</p>
 
   {% if errors.beats %}
   <div class="error-message">{{ errors.beats }}</div>
@@ -55,8 +55,8 @@
         </svg>
         Back
       </button>
-      <button type="submit" name="action" value="next" class="btn btn-primary wiz-btn-next" id="next-btn" {% if not has_beats %}disabled{% endif %}>
-        Next: Quantize
+      <button type="submit" name="action" value="next" class="btn btn-primary wiz-btn-next" id="next-btn">
+        {% if has_beats %}Next: Quantize{% else %}Skip to Stem Separation{% endif %}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 6 15 12 9 18"/>
         </svg>
@@ -109,7 +109,7 @@
       beatMsg.textContent = data.message || data.status;
       if (data.status === 'done') {
         detectBtn.disabled = false;
-        nextBtn.disabled = false;
+        nextBtn.textContent = 'Next: Quantize';
         initEditor();
       } else if (data.status === 'error') {
         detectBtn.disabled = false;

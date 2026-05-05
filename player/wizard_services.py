@@ -763,7 +763,9 @@ def _run_separator_pass(
     buf = ''
     span = progress_hi - progress_lo
     all_output = ''
-    max_pct = 0
+    current_pct = 0
+    pass_num = 1
+    idle_since = None
 
     while True:
         try:
@@ -774,6 +776,7 @@ def _run_separator_pass(
             text = raw.decode('utf-8', errors='replace')
             buf += text
             all_output += text
+            idle_since = None
         elif proc.poll() is not None:
             try:
                 remaining = proc.stdout.read()
@@ -784,21 +787,37 @@ def _run_separator_pass(
                 pass
             break
         else:
+            if idle_since is None:
+                idle_since = _time.monotonic()
+                if current_pct >= 100:
+                    wizard_model.bg_task_message = (
+                        f'[{label}] Writing output (this may take a few minutes)…')
+                    try:
+                        wizard_model.save(update_fields=['bg_task_message'])
+                    except Exception:
+                        pass
+            if idle_since and (_time.monotonic() - idle_since) > 600:
+                logger.warning(
+                    'audio-separator stuck for 10min for %s, killing', label)
+                proc.kill()
+                proc.wait()
+                break
             _time.sleep(0.2)
             continue
 
         matches = _PROGRESS_RE.findall(buf)
         if matches:
             pct = int(matches[-1])
-            # Never let progress go backward (multi-pass models reset to 0%)
-            if pct >= max_pct:
-                max_pct = pct
-            progress = progress_lo + int(max_pct / 100.0 * span)
+            if pct < current_pct - 10:
+                pass_num += 1
+            current_pct = pct
+            progress = progress_lo + int(pct / 100.0 * span)
             now = _time.monotonic()
             if now - last_update > 2.0:
                 wizard_model.bg_task_progress = min(progress, progress_hi)
+                pass_str = f' (pass {pass_num})' if pass_num > 1 else ''
                 wizard_model.bg_task_message = (
-                    f'[{label}] Processing… {max_pct}%')
+                    f'[{label}] Processing… {pct}%{pass_str}')
                 try:
                     wizard_model.save(
                         update_fields=['bg_task_progress', 'bg_task_message'])
@@ -808,9 +827,13 @@ def _run_separator_pass(
 
         buf = buf[-400:]
 
-    proc.wait()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
 
-    if proc.returncode != 0:
+    if proc.returncode not in (0, -9, None):
         raise RuntimeError(
             f'audio-separator failed for {label} (rc={proc.returncode}): '
             f'{all_output[-300:]}')

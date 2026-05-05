@@ -126,7 +126,6 @@ def step_song_info(request, wiz):
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         artist = request.POST.get('artist', '').strip()
-        time_sig = request.POST.get('time_signature', '4/4').strip()
 
         if not title:
             errors['title'] = 'Title is required.'
@@ -136,9 +135,8 @@ def step_song_info(request, wiz):
         if not errors:
             wiz.title = title
             wiz.artist = artist
-            wiz.time_signature = time_sig
             wiz.current_step = 'tempo_key'
-            wiz.save(update_fields=['title', 'artist', 'time_signature', 'current_step'])
+            wiz.save(update_fields=['title', 'artist', 'current_step'])
             return redirect('wizard_step', wizard_id=wiz.pk, step_name='tempo_key')
 
     return render(request, 'player/wizard/song_info.html', _wizard_context(wiz, 'song_info', {
@@ -180,11 +178,16 @@ def step_tempo_key(request, wiz):
             key_val = request.POST.get('key', '').strip()
             time_sig = request.POST.get('time_signature', '4/4').strip()
 
-            if tempo_str:
+            if not tempo_str:
+                errors['tempo'] = 'Tempo is required.'
+            else:
                 try:
                     wiz.tempo = int(tempo_str)
                 except ValueError:
                     errors['tempo'] = 'Tempo must be a number.'
+
+            if not key_val:
+                errors['key'] = 'Key is required.'
 
             if not errors:
                 wiz.key = key_val
@@ -334,7 +337,9 @@ def step_beat_detect(request, wiz):
                 wiz.save(update_fields=['current_step'])
                 return redirect('wizard_step', wizard_id=wiz.pk, step_name='quantize')
             else:
-                errors['beats'] = 'Run beat detection first.'
+                wiz.current_step = 'stem_separation'
+                wiz.save(update_fields=['current_step'])
+                return redirect('wizard_step', wizard_id=wiz.pk, step_name='stem_separation')
 
     has_beats = bool(wiz.detected_beats)
     return render(request, 'player/wizard/beat_detect.html', _wizard_context(wiz, 'beat_detect', {
