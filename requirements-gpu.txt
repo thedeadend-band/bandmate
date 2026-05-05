@@ -1,4 +1,13 @@
+# CUDA runtime libraries for onnxruntime-gpu
 nvidia-cublas-cu12
 nvidia-cudnn-cu12
 nvidia-cufft-cu12
 nvidia-curand-cu12
+
+# PyTorch with CUDA cannot be specified here because it requires a custom
+# index URL. Install manually:
+#
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu118
+#
+# Use cu118 for NVIDIA driver 535.x (CUDA 12.2) or older.
+# Use cu121 or cu124 for newer drivers (550+).

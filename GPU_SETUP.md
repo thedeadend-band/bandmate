@@ -150,24 +150,56 @@ You should see your GPU listed inside the container.
 
 ---
 
-## 4. Install onnxruntime-gpu for BandMate
+## 4. Install GPU Python Packages for BandMate
 
 ```bash
 source /srv/bandmate/.venv/bin/activate
+```
+
+### Install onnxruntime-gpu and CUDA libraries
+
+```bash
 pip uninstall onnxruntime -y
 pip install onnxruntime-gpu
 pip install -r requirements-gpu.txt
 ```
 
-### Verify GPU is available to ONNX Runtime
+Verify ONNX can see the GPU:
 
 ```bash
 python3 -c "import onnxruntime; print(onnxruntime.get_available_providers())"
 ```
 
 Expected output includes `'CUDAExecutionProvider'`. A warning about
-`/sys/class/drm/card0` is harmless and can be ignored — it's just ONNX looking
-for DRM display devices which aren't needed for compute.
+`/sys/class/drm/card0` is harmless and can be ignored.
+
+### Install PyTorch with CUDA
+
+The stem separation models (RoFormer, htdemucs) use PyTorch, not ONNX. You
+must install a CUDA-enabled PyTorch build. This requires a special index URL
+and cannot be automated via `requirements.txt`.
+
+For **driver 535.x** (CUDA 12.2 or older):
+
+```bash
+pip uninstall torch torchaudio -y
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+For **driver 550+** (CUDA 12.4):
+
+```bash
+pip uninstall torch torchaudio -y
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+```
+
+Verify PyTorch can see the GPU:
+
+```bash
+python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+```
+
+Should output `True` and your GPU name.
 
 ### Restart BandMate
 
@@ -175,7 +207,9 @@ for DRM display devices which aren't needed for compute.
 systemctl restart bandmate
 ```
 
-`audio-separator` will now automatically use the GPU for stem separation.
+`audio-separator` will now use the GPU for stem separation. You can confirm by
+checking `nvidia-smi` while a job is processing — the python process should
+appear with GPU memory allocated.
 
 ---
 
@@ -218,6 +252,24 @@ git config --global --add safe.directory /srv/bandmate
 Make sure you're installing the correct version:
 - CUDA 12.x → `pip install onnxruntime-gpu` (latest)
 - CUDA 11.x → `pip install onnxruntime-gpu==1.18.1`
+
+### PyTorch says "The NVIDIA driver on your system is too old"
+
+This means the PyTorch CUDA build requires a newer driver than what you have.
+- Driver 535.x → use `cu118` index URL
+- Driver 550+ → use `cu121` or `cu124` index URL
+
+### update-service.sh overwrites GPU packages
+
+The update script runs `pip install -r requirements.txt` which may pull in
+CPU-only torch (as a dependency of `audio-separator`). After running the update
+script on a GPU server, re-run:
+
+```bash
+source /srv/bandmate/.venv/bin/activate
+pip install -r requirements-gpu.txt
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
 
 ### Host reboot loses /dev/nvidia-uvm devices
 

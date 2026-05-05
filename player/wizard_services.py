@@ -793,9 +793,11 @@ def _run_separator_pass(
             idle_since = None
             if gpu_detected is None:
                 lower = all_output.lower()
-                if 'cudaexecutionprovider' in lower and 'enabling acceleration' in lower:
+                if ('cudaexecutionprovider' in lower and 'enabling acceleration' in lower) \
+                        or 'setting torch device to cuda' in lower:
                     gpu_detected = True
-                elif 'acceleration will not be enabled' in lower:
+                elif 'acceleration will not be enabled' in lower \
+                        or 'setting torch device to cpu' in lower:
                     gpu_detected = False
         elif proc.poll() is not None:
             try:
@@ -858,7 +860,7 @@ def _run_separator_pass(
             now = _time.monotonic()
             if now - last_update > 2.0:
                 wizard_model.bg_task_progress = min(progress, progress_hi)
-                pass_str = f' (pass {pass_num})' if pass_num > 1 else ''
+                pass_str = f' (pass {pass_num})'
                 wizard_model.bg_task_message = (
                     f'[{label}] Processing… {pct}%{pass_str}')
                 try:
@@ -1185,7 +1187,26 @@ def _finalize_song(job) -> None:
         'lyric_offset': job.lyric_offset_secs,
     }
     if job.band_details:
-        info.update(job.band_details)
+        bd = job.band_details
+        guitars = {}
+        for role in ('lead_guitar', 'rhythm_guitar', 'bass_guitar'):
+            if role in bd:
+                guitars[role] = bd[role]
+        if guitars:
+            info['guitars'] = guitars
+
+        vocals = {}
+        if bd.get('lead_vocal'):
+            vocals['lead'] = [v.strip() for v in bd['lead_vocal'].split(',')]
+        if bd.get('backing_vocal'):
+            vocals['backing'] = [v.strip() for v in bd['backing_vocal'].split(',')]
+        if vocals:
+            info['vocals'] = vocals
+
+        if bd.get('starts'):
+            info['starts'] = bd['starts']
+        if bd.get('starts_with'):
+            info['starts_with'] = bd['starts_with']
 
     info_path = song_dir / 'info.json'
     with open(info_path, 'w') as f:
