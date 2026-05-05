@@ -14,7 +14,7 @@
 
 <div class="wiz-content">
   <h1 class="page-title">Stem Separation</h1>
-  <p class="wiz-step-desc">Separate the master audio into individual stems (Vocals, Drums, Bass, Guitar, Keys, Other) using Demucs + BS-RoFormer AI.</p>
+  <p class="wiz-step-desc">Separate the master audio into individual stems (Vocals, Drums, Bass, Guitar, Keys, Other) using AI models via audio-separator.</p>
 
   {% if errors.stems %}
   <div class="error-message">{{ errors.stems }}</div>
@@ -38,7 +38,7 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
     </svg>
-    Demucs is not installed on this server. Install dependencies with <code>pip install demucs bs-roformer-infer</code> to enable AI stem separation.
+    audio-separator is not installed on this server. Install dependencies with <code>pip install audio-separator</code> to enable AI stem separation.
   </div>
   {% else %}
   <div class="wiz-beat-controls">

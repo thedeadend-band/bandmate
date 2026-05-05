@@ -772,201 +772,141 @@ def start_quantize(wizard_model) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Stem separation  (hybrid: htdemucs_ft + BS-RoFormer-SW)
+# Stem separation via audio-separator (multi-pass, best model per stem)
 # ---------------------------------------------------------------------------
 
+import os as _os
 import re as _re
 import sys as _sys
 import time as _time
 
-_DEMUCS_PCT_RE = _re.compile(r'(\d+)%\|')
-_DEMUCS_BAG_RE = _re.compile(r'bag of (\d+) models')
 
-_DEMUCS_STEM_LABELS = {
-    0: 'vocals', 1: 'drums', 2: 'bass', 3: 'other',
+# Model configuration: best model per stem
+_STEM_MODELS = {
+    'Vocals': {
+        'model': 'model_bs_roformer_ep_317_sdr_12.9755.ckpt',
+        'single_stem': 'Vocals',
+    },
+    'Drums': {
+        'model': 'htdemucs_ft.yaml',
+        'single_stem': 'Drums',
+    },
+    'Bass': {
+        'model': 'htdemucs_ft.yaml',
+        'single_stem': 'Bass',
+    },
+    'Guitar': {
+        'model': 'htdemucs_6s.yaml',
+        'single_stem': 'Guitar',
+    },
+    'Keys': {
+        'model': 'htdemucs_6s.yaml',
+        'single_stem': 'Piano',
+    },
+    'Other': {
+        'model': 'htdemucs_ft.yaml',
+        'single_stem': 'Other',
+    },
 }
 
-_BS_ROFORMER_MODEL_NAME = 'roformer-model-bs-roformer-sw-by-jarredou'
-_BS_ROFORMER_CKPT = 'BS-Rofo-SW-Fixed.ckpt'
-_BS_ROFORMER_YAML = 'BS-Rofo-SW-Fixed.yaml'
+ALL_STEMS = set(_STEM_MODELS.keys())
+
+_PROGRESS_RE = _re.compile(r'(\d+)%\|')
 
 
-def _get_models_dir() -> Path:
-    """Return the project-level ``models/`` directory."""
-    return Path(__file__).resolve().parent.parent / 'models'
+def _run_separator_pass(
+    master_path: str,
+    model_filename: str,
+    single_stem: str,
+    output_dir: str,
+    wizard_model,
+    progress_lo: int,
+    progress_hi: int,
+    label: str,
+) -> list[str]:
+    """Run audio-separator for a single stem and return output file paths."""
+    separator_bin = str(Path(_sys.executable).parent / 'audio-separator')
 
+    cmd = [
+        separator_bin,
+        master_path,
+        '--model_filename', model_filename,
+        '--single_stem', single_stem,
+        '--output_dir', output_dir,
+        '--output_format', 'FLAC',
+    ]
+    logger.info('Running audio-separator: %s', ' '.join(cmd))
 
-def _ensure_bs_roformer_model() -> tuple[Path, Path]:
-    """Ensure BS-RoFormer-SW weights and config are present, downloading if needed.
-
-    Returns (ckpt_path, config_path).
-    """
-    models_dir = _get_models_dir()
-    model_dir = models_dir / _BS_ROFORMER_MODEL_NAME
-    ckpt = model_dir / _BS_ROFORMER_CKPT
-    cfg = model_dir / _BS_ROFORMER_YAML
-
-    if ckpt.exists() and cfg.exists():
-        return ckpt, cfg
-
-    logger.info('BS-RoFormer model not found – downloading…')
-    download_bin = str(
-        Path(_sys.executable).parent / 'bs-roformer-download')
-    result = subprocess.run(
-        [download_bin, '--model', _BS_ROFORMER_MODEL_NAME],
-        capture_output=True, text=True, timeout=600,
-        cwd=str(models_dir.parent),
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f'BS-RoFormer model download failed: {(result.stderr or "")[-300:]}'
-        )
-    if not ckpt.exists() or not cfg.exists():
-        raise FileNotFoundError(
-            f'Download succeeded but model files missing at {model_dir}'
-        )
-    return ckpt, cfg
-
-
-def _detect_torch_device() -> str:
-    """Return the best available torch device string."""
-    try:
-        import torch
-        if torch.cuda.is_available():
-            return 'cuda'
-        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-            return 'mps'
-    except ImportError:
-        pass
-    return 'cpu'
-
-
-# -- Demucs helpers --------------------------------------------------------
-
-def _run_demucs_with_progress(cmd: list, wizard_model,
-                              progress_lo: int = 5,
-                              progress_hi: int = 40) -> int:
-    """Run a demucs command, parsing stderr progress bars to update the DB.
-
-    Progress is mapped into the [progress_lo, progress_hi] range so callers
-    can control which slice of the overall progress bar Demucs occupies.
-    """
     proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=False,
     )
+    _os.set_blocking(proc.stdout.fileno(), False)
+
     last_update = 0.0
     buf = ''
-    total_passes = 1
-    current_pass = 0
-    prev_pct = 0
     span = progress_hi - progress_lo
+    all_output = ''
 
     while True:
-        chunk = proc.stderr.read(256)
-        if not chunk and proc.poll() is not None:
+        try:
+            raw = proc.stdout.read(512)
+        except (OSError, IOError):
+            raw = None
+        if raw:
+            text = raw.decode('utf-8', errors='replace')
+            buf += text
+            all_output += text
+        elif proc.poll() is not None:
+            # Read any remaining output
+            try:
+                remaining = proc.stdout.read()
+                if remaining:
+                    text = remaining.decode('utf-8', errors='replace')
+                    all_output += text
+                    buf += text
+            except (OSError, IOError):
+                pass
             break
-        if not chunk:
+        else:
+            _time.sleep(0.2)
             continue
-        buf += chunk
 
-        bag_match = _DEMUCS_BAG_RE.search(buf)
-        if bag_match:
-            total_passes = int(bag_match.group(1))
-
-        matches = _DEMUCS_PCT_RE.findall(buf)
+        matches = _PROGRESS_RE.findall(buf)
         if matches:
             pct = int(matches[-1])
-            if pct < prev_pct and prev_pct > 80:
-                current_pass += 1
-            prev_pct = pct
-
-            overall = ((current_pass * 100) + pct) / total_passes
-            progress = progress_lo + int(overall / 100.0 * span)
-            stem_label = _DEMUCS_STEM_LABELS.get(
-                current_pass, f'pass {current_pass + 1}')
-
+            progress = progress_lo + int(pct / 100.0 * span)
             now = _time.monotonic()
             if now - last_update > 2.0:
                 wizard_model.bg_task_progress = min(progress, progress_hi)
-                wizard_model.bg_task_message = (
-                    f'Demucs: separating {stem_label}… {int(overall)}%')
-                wizard_model.save(
-                    update_fields=['bg_task_progress', 'bg_task_message'])
-                last_update = now
-
-        buf = buf[-200:]
-
-    proc.wait()
-    return proc.returncode
-
-
-# -- BS-RoFormer helpers ---------------------------------------------------
-
-_ROFORMER_REMAINING_RE = _re.compile(
-    r'Estimated time remaining:\s*([\d.]+)\s*seconds')
-
-
-def _run_bs_roformer_with_progress(cmd: list, wizard_model,
-                                   progress_lo: int = 45,
-                                   progress_hi: int = 85) -> int:
-    """Run bs-roformer-infer and update wizard progress from stdout."""
-    proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-    )
-    last_update = 0.0
-    buf = ''
-    total_est: float | None = None
-    span = progress_hi - progress_lo
-
-    while True:
-        chunk = proc.stdout.read(128)
-        if not chunk and proc.poll() is not None:
-            break
-        if not chunk:
-            continue
-        buf += chunk
-
-        if total_est is None:
-            m = _re.search(
-                r'Estimated total processing time.*?:\s*([\d.]+)', buf)
-            if m:
-                total_est = float(m.group(1))
-
-        matches = _ROFORMER_REMAINING_RE.findall(buf)
-        if matches and total_est and total_est > 0:
-            remaining = float(matches[-1])
-            fraction = max(0.0, 1.0 - remaining / total_est)
-            progress = progress_lo + int(fraction * span)
-            now = _time.monotonic()
-            if now - last_update > 2.0:
-                wizard_model.bg_task_progress = min(progress, progress_hi)
-                wizard_model.bg_task_message = (
-                    f'BS-RoFormer: separating guitar/piano/other… '
-                    f'{int(fraction * 100)}%')
-                wizard_model.save(
-                    update_fields=['bg_task_progress', 'bg_task_message'])
+                wizard_model.bg_task_message = f'Separating {label}… {pct}%'
+                try:
+                    wizard_model.save(
+                        update_fields=['bg_task_progress', 'bg_task_message'])
+                except Exception:
+                    pass
                 last_update = now
 
         buf = buf[-400:]
 
     proc.wait()
-    return proc.returncode
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f'audio-separator failed for {label} (rc={proc.returncode}): '
+            f'{all_output[-300:]}')
+
+    output_path = Path(output_dir)
+    return [str(f) for f in output_path.iterdir()
+            if f.suffix.lower() in ('.wav', '.flac')]
 
 
-# -- Main stem separation entry point -------------------------------------
-
-_DEMUCS_PROVIDES = {'Vocals', 'Drums', 'Bass'}
-_ROFORMER_PROVIDES = {'Guitar', 'Keys', 'Other'}
-
-
-def run_demucs(wizard_model) -> None:
+def run_stem_separation(wizard_model) -> None:
     """
-    Hybrid stem separation combining two models for best quality.
+    Multi-pass stem separation using audio-separator with best model per stem.
 
-    Only the stems listed in ``wizard_model.selected_stems`` are generated.
-    Demucs (htdemucs_ft) is used for Vocals/Drums/Bass; BS-RoFormer-SW is
-    used for Guitar/Keys/Other.  Either phase is skipped entirely when none
-    of its stems are requested.
+    Uses RoFormer for vocals, htdemucs_ft for drums/bass/other, and
+    htdemucs_6s for guitar/piano.  Only selected stems are processed.
+    Models are grouped so each is only loaded once.
     """
     staging = Path(wizard_model.staging_dir)
     master = staging / 'Master.wav'
@@ -980,160 +920,77 @@ def run_demucs(wizard_model) -> None:
 
     selected = set(wizard_model.selected_stems or [])
     if not selected:
-        selected = _DEMUCS_PROVIDES | _ROFORMER_PROVIDES
+        selected = ALL_STEMS.copy()
 
-    need_demucs = bool(selected & _DEMUCS_PROVIDES)
-    need_roformer = bool(selected & _ROFORMER_PROVIDES)
+    # Group stems by model to minimize model loads
+    model_groups: dict[str, list[str]] = {}
+    for stem_name in sorted(selected):
+        cfg = _STEM_MODELS.get(stem_name)
+        if not cfg:
+            continue
+        model = cfg['model']
+        model_groups.setdefault(model, []).append(stem_name)
 
-    if need_demucs and need_roformer:
-        demucs_lo, demucs_hi = 3, 40
-        roformer_lo, roformer_hi = 46, 88
-    elif need_demucs:
-        demucs_lo, demucs_hi = 3, 90
-        roformer_lo, roformer_hi = 0, 0
-    else:
-        demucs_lo, demucs_hi = 0, 0
-        roformer_lo, roformer_hi = 3, 90
+    total_stems = sum(len(v) for v in model_groups.values())
+    if total_stems == 0:
+        wizard_model.bg_task_status = 'done'
+        wizard_model.bg_task_progress = 100
+        wizard_model.bg_task_message = 'No stems to separate'
+        wizard_model.save(update_fields=[
+            'bg_task_status', 'bg_task_progress', 'bg_task_message'])
+        return
 
     try:
-        python_bin = _sys.executable
-        device = _detect_torch_device()
+        stem_idx = 0
+        separated_stems = []
 
-        # ── Phase 1: htdemucs_ft for vocals / drums / bass ───────────
-        demucs_ok = False
-        if need_demucs:
-            wanted = sorted(selected & _DEMUCS_PROVIDES)
-            wizard_model.bg_task_progress = 2
-            wizard_model.bg_task_message = (
-                f'Phase 1 – Demucs ({", ".join(wanted)})…')
-            wizard_model.save(update_fields=[
-                'bg_task_progress', 'bg_task_message'])
+        for model_name, stems in model_groups.items():
+            for stem_name in stems:
+                cfg = _STEM_MODELS[stem_name]
+                progress_lo = 2 + int(stem_idx / total_stems * 90)
+                progress_hi = 2 + int((stem_idx + 1) / total_stems * 90)
 
-            demucs_out = staging / 'demucs_out'
-            demucs_out.mkdir(exist_ok=True)
-
-            for model_name in ('htdemucs_ft', 'htdemucs_6s', 'htdemucs'):
-                cmd = [
-                    python_bin, '-m', 'demucs',
-                    '-n', model_name,
-                    '-d', device,
-                    '--shifts', '5',
-                    '--flac',
-                    '-o', str(demucs_out),
-                    str(master),
-                ]
-                logger.info('Running demucs: %s', ' '.join(cmd))
-                try:
-                    rc = _run_demucs_with_progress(
-                        cmd, wizard_model,
-                        progress_lo=demucs_lo, progress_hi=demucs_hi)
-                    if rc == 0:
-                        logger.info('Demucs %s succeeded', model_name)
-                        demucs_ok = True
-                        break
-                    logger.warning('Demucs %s failed (rc=%d)',
-                                   model_name, rc)
-                except Exception as exc:
-                    logger.warning('Demucs %s exception: %s',
-                                   model_name, exc)
-                    continue
-
-            if not demucs_ok:
-                raise RuntimeError('All Demucs models failed. Check logs.')
-
-            demucs_stem_map = {
-                'vocals': 'Vocals', 'drums': 'Drums', 'bass': 'Bass',
-                'guitar': 'Guitar', 'piano': 'Keys', 'other': 'Other',
-            }
-            for model_dir in demucs_out.iterdir():
-                if not model_dir.is_dir():
-                    continue
-                for track_dir in model_dir.iterdir():
-                    if not track_dir.is_dir():
-                        continue
-                    for stem_file in track_dir.iterdir():
-                        if stem_file.suffix.lower() not in ('.wav', '.flac'):
-                            continue
-                        key = stem_file.stem.lower()
-                        dest_name = demucs_stem_map.get(key)
-                        if dest_name and dest_name in selected:
-                            dest = staging / f'{dest_name}{stem_file.suffix}'
-                            shutil.copy2(str(stem_file), str(dest))
-
-            shutil.rmtree(str(demucs_out), ignore_errors=True)
-
-        # ── Phase 2: BS-RoFormer-SW for guitar / piano / other ───────
-        roformer_ok = False
-        if need_roformer:
-            try:
-                ckpt, cfg = _ensure_bs_roformer_model()
-
-                wanted = sorted(selected & _ROFORMER_PROVIDES)
-                wizard_model.bg_task_progress = roformer_lo
+                wizard_model.bg_task_progress = progress_lo
                 wizard_model.bg_task_message = (
-                    f'Phase 2 – BS-RoFormer ({", ".join(wanted)})…')
-                wizard_model.save(update_fields=[
-                    'bg_task_progress', 'bg_task_message'])
+                    f'Separating {stem_name} ({stem_idx + 1}/{total_stems})…')
+                try:
+                    wizard_model.save(update_fields=[
+                        'bg_task_progress', 'bg_task_message'])
+                except Exception:
+                    pass
 
-                roformer_input = staging / '_roformer_in'
-                roformer_input.mkdir(exist_ok=True)
-                roformer_output = staging / '_roformer_out'
-                roformer_output.mkdir(exist_ok=True)
+                sep_out = staging / f'_sep_{stem_name}'
+                sep_out.mkdir(exist_ok=True)
 
-                master_wav = roformer_input / 'Master.wav'
-                if master.suffix.lower() == '.wav':
-                    shutil.copy2(str(master), str(master_wav))
-                else:
-                    import soundfile as sf
-                    data, sr = sf.read(str(master))
-                    sf.write(str(master_wav), data, sr)
+                try:
+                    output_files = _run_separator_pass(
+                        master_path=str(master),
+                        model_filename=model_name,
+                        single_stem=cfg['single_stem'],
+                        output_dir=str(sep_out),
+                        wizard_model=wizard_model,
+                        progress_lo=progress_lo,
+                        progress_hi=progress_hi,
+                        label=stem_name,
+                    )
 
-                roformer_bin = str(
-                    Path(python_bin).parent / 'bs-roformer-infer')
-                cmd = [
-                    roformer_bin,
-                    '--config_path', str(cfg),
-                    '--model_path', str(ckpt),
-                    '--input_folder', str(roformer_input),
-                    '--store_dir', str(roformer_output),
-                    '--device', device,
-                ]
-                logger.info('Running BS-RoFormer: %s', ' '.join(cmd))
+                    # Copy the output stem file to staging with correct name
+                    for out_file in output_files:
+                        out_path = Path(out_file)
+                        dest = staging / f'{stem_name}{out_path.suffix}'
+                        # Remove any existing file for this stem
+                        for old in staging.glob(f'{stem_name}.*'):
+                            if old.suffix.lower() in ('.wav', '.flac'):
+                                old.unlink()
+                        shutil.copy2(str(out_path), str(dest))
+                        separated_stems.append(stem_name)
+                        logger.info('Separated %s → %s', stem_name, dest.name)
+                        break
 
-                rc = _run_bs_roformer_with_progress(
-                    cmd, wizard_model,
-                    progress_lo=roformer_lo, progress_hi=roformer_hi)
+                finally:
+                    shutil.rmtree(str(sep_out), ignore_errors=True)
 
-                if rc == 0:
-                    roformer_stem_map = {
-                        'guitar': 'Guitar', 'piano': 'Keys',
-                        'other': 'Other',
-                    }
-                    for wav_file in roformer_output.iterdir():
-                        if wav_file.suffix.lower() != '.wav':
-                            continue
-                        stem_key = wav_file.stem.rsplit('_', 1)[-1].lower()
-                        dest_name = roformer_stem_map.get(stem_key)
-                        if dest_name and dest_name in selected:
-                            dest = staging / f'{dest_name}.wav'
-                            for old in staging.glob(f'{dest_name}.*'):
-                                if old.suffix.lower() in ('.wav', '.flac'):
-                                    old.unlink()
-                            shutil.copy2(str(wav_file), str(dest))
-                            logger.info('Using BS-RoFormer %s stem',
-                                        dest_name)
-                    roformer_ok = True
-                else:
-                    logger.warning('BS-RoFormer failed (rc=%d)', rc)
-
-                shutil.rmtree(str(roformer_input), ignore_errors=True)
-                shutil.rmtree(str(roformer_output), ignore_errors=True)
-
-            except Exception as exc:
-                logger.warning('BS-RoFormer phase skipped: %s', exc)
-                for tmp in (staging / '_roformer_in',
-                            staging / '_roformer_out'):
-                    shutil.rmtree(str(tmp), ignore_errors=True)
+                stem_idx += 1
 
         # ── Wrap up ──────────────────────────────────────────────────
         missing = [
@@ -1145,15 +1002,10 @@ def run_demucs(wizard_model) -> None:
             raise FileNotFoundError(
                 f'Missing stems after separation: {missing}')
 
-        parts = []
-        if demucs_ok:
-            parts.append('Demucs')
-        if roformer_ok:
-            parts.append('BS-RoFormer')
-        src = ' + '.join(parts) or 'N/A'
         wizard_model.bg_task_status = 'done'
         wizard_model.bg_task_progress = 100
-        wizard_model.bg_task_message = f'Stem separation complete ({src})'
+        wizard_model.bg_task_message = (
+            f'Stem separation complete ({len(separated_stems)} stems)')
         wizard_model.save(update_fields=[
             'bg_task_status', 'bg_task_progress', 'bg_task_message'])
 
@@ -1161,18 +1013,23 @@ def run_demucs(wizard_model) -> None:
         logger.exception('Stem separation failed')
         wizard_model.bg_task_status = 'error'
         wizard_model.bg_task_message = f'Stem separation failed: {e}'
-        wizard_model.save(update_fields=['bg_task_status', 'bg_task_message'])
+        try:
+            wizard_model.save(
+                update_fields=['bg_task_status', 'bg_task_message'])
+        except Exception:
+            pass
 
 
 def start_demucs(wizard_model) -> None:
-    """Kick off Demucs in a background thread."""
+    """Kick off stem separation in a background thread."""
     wizard_model.bg_task_status = 'running'
     wizard_model.bg_task_progress = 0
     wizard_model.bg_task_message = 'Starting stem separation...'
-    wizard_model.save(update_fields=['bg_task_status', 'bg_task_progress', 'bg_task_message'])
+    wizard_model.save(update_fields=[
+        'bg_task_status', 'bg_task_progress', 'bg_task_message'])
 
     t = threading.Thread(
-        target=run_demucs,
+        target=run_stem_separation,
         args=(wizard_model,),
         daemon=True,
     )
@@ -1180,18 +1037,6 @@ def start_demucs(wizard_model) -> None:
 
 
 def is_demucs_available() -> bool:
-    """Check if demucs is importable."""
-    try:
-        import demucs
-        return True
-    except ImportError:
-        return False
-
-
-def is_bs_roformer_available() -> bool:
-    """Check if bs-roformer-infer is importable."""
-    try:
-        import bs_roformer
-        return True
-    except ImportError:
-        return False
+    """Check if audio-separator is installed."""
+    separator_bin = Path(_sys.executable).parent / 'audio-separator'
+    return separator_bin.exists()

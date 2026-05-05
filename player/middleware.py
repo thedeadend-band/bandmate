@@ -1,7 +1,10 @@
+import logging
 import shutil
 from pathlib import Path
 
 from .models import SongWizard
+
+logger = logging.getLogger(__name__)
 
 
 class WizardCleanupMiddleware:
@@ -23,14 +26,16 @@ class WizardCleanupMiddleware:
         if any(path.startswith(p) for p in self.WIZARD_PATH_PREFIXES):
             return response
 
-        # Non-wizard page: cancel any in-progress wizards for this user
-        wizards = SongWizard.objects.filter(
-            created_by=request.user,
-        ).exclude(current_step__in=('complete', 'failed'))
+        try:
+            wizards = SongWizard.objects.filter(
+                created_by=request.user,
+            ).exclude(current_step__in=('complete', 'failed'))
 
-        for wiz in wizards:
-            if wiz.staging_dir and Path(wiz.staging_dir).exists():
-                shutil.rmtree(wiz.staging_dir, ignore_errors=True)
-            wiz.delete()
+            for wiz in wizards:
+                if wiz.staging_dir and Path(wiz.staging_dir).exists():
+                    shutil.rmtree(wiz.staging_dir, ignore_errors=True)
+                wiz.delete()
+        except Exception:
+            logger.debug('WizardCleanupMiddleware: cleanup skipped due to error', exc_info=True)
 
         return response

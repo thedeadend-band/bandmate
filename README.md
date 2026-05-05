@@ -21,7 +21,7 @@ and a scrub-able playhead.
   - Enter song info (title, artist) and look up tempo/key via GetSongBPM
   - Download audio from YouTube or upload your own stems
   - Beat detection, quantization with click-track intro
-  - AI stem separation using a hybrid Demucs + BS-RoFormer approach (vocals, drums, bass, guitar, keys, other)
+  - AI stem separation via audio-separator with best model per stem (vocals, drums, bass, guitar, keys, other)
   - Selective stem separation — choose which stems to generate
   - Lyrics lookup via LRCLIB
   - Band details (guitar setup, vocals, who starts)
@@ -127,7 +127,7 @@ The New Song Wizard (staff-only, accessible from the sidebar or `/songs/new/`) w
 4. **Download/Upload** – Search YouTube and download audio, or upload a master track and individual stems.
 5. **Beat Detection** – Analyze the master track for beat positions using librosa.
 6. **Quantize + Click** – Time-stretch each beat segment to a uniform tempo and generate a click track with a 2-bar count-in.
-7. **Stem Separation** – AI-powered stem separation using a hybrid approach: Demucs (`htdemucs_ft`) for vocals, drums, and bass; BS-RoFormer for guitar, keys, and other. Select which stems to generate — uploaded stems are preserved.
+7. **Stem Separation** – AI-powered stem separation via audio-separator, using the best model per stem (RoFormer for vocals, htdemucs_ft for drums/bass/other, htdemucs_6s for guitar/keys). Select which stems to generate — uploaded stems are preserved.
 8. **Lyrics** – Search LRCLIB for time-synced lyrics, or paste your own.
 9. **Band Details** – Guitar setup (tuning, type, capo), vocal assignments, who/what starts.
 10. **Review** – Preview all stems, confirm details, and finalize. Audio files are converted to FLAC for storage efficiency.
@@ -142,9 +142,7 @@ The wizard requires several additional Python packages (included in `requirement
 - `librosa` – Beat detection and audio analysis
 - `soundfile` – Audio file I/O
 - `pyrubberband` – Time-stretching (requires `rubberband-cli` system package)
-- `demucs` – Meta's AI stem separation
-- `bs-roformer-infer` – BS-RoFormer stem separation for guitar/keys/other
-- `torchcodec` – Audio codec support for PyTorch/torchaudio
+- `audio-separator` – AI stem separation (wraps RoFormer, Demucs, MDX-Net models)
 
 ### System dependencies
 
