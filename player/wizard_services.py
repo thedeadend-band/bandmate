@@ -41,8 +41,8 @@ def lookup_tempo_key(title: str, artist: str, api_key: str = '') -> dict:
     """
     Look up tempo, key, and time signature via api.getsong.co.
 
-    GetSongBPM and GetSongKey share the same API. A single search + song
-    detail call returns tempo, key, and time signature.
+    GetSongBPM and GetSongKey share the same API. The search endpoint
+    returns tempo, key, and time signature directly in results.
 
     Returns a dict with keys: tempo, key, time_signature, source, error.
     """
@@ -64,16 +64,14 @@ def lookup_tempo_key(title: str, artist: str, api_key: str = '') -> dict:
             result['error'] = 'No results found.'
             return result
 
-        song_id = search_results[0].get('id')
-        if not song_id:
-            result['error'] = 'Search returned no song ID.'
+        # search_results should be a list; handle dict edge case
+        if isinstance(search_results, dict):
+            search_results = list(search_results.values())
+        if not isinstance(search_results, list) or not search_results:
+            result['error'] = 'Unexpected search response format.'
             return result
 
-        song_data = _api_get(GETSONG_API_BASE, '/song/', {
-            'api_key': api_key,
-            'id': song_id,
-        })
-        song = song_data.get('song', {})
+        song = search_results[0]
 
         tempo = song.get('tempo')
         if tempo:
