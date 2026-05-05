@@ -765,6 +765,7 @@ def _run_separator_pass(
     buf = ''
     span = progress_hi - progress_lo
     all_output = ''
+    max_pct = 0
 
     while True:
         try:
@@ -776,13 +777,11 @@ def _run_separator_pass(
             buf += text
             all_output += text
         elif proc.poll() is not None:
-            # Read any remaining output
             try:
                 remaining = proc.stdout.read()
                 if remaining:
                     text = remaining.decode('utf-8', errors='replace')
                     all_output += text
-                    buf += text
             except (OSError, IOError):
                 pass
             break
@@ -793,11 +792,14 @@ def _run_separator_pass(
         matches = _PROGRESS_RE.findall(buf)
         if matches:
             pct = int(matches[-1])
-            progress = progress_lo + int(pct / 100.0 * span)
+            # Never let progress go backward (multi-pass models reset to 0%)
+            if pct >= max_pct:
+                max_pct = pct
+            progress = progress_lo + int(max_pct / 100.0 * span)
             now = _time.monotonic()
             if now - last_update > 2.0:
                 wizard_model.bg_task_progress = min(progress, progress_hi)
-                wizard_model.bg_task_message = f'Separating {label}… {pct}%'
+                wizard_model.bg_task_message = f'Separating {label}… {max_pct}%'
                 try:
                     wizard_model.save(
                         update_fields=['bg_task_progress', 'bg_task_message'])

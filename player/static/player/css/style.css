@@ -2144,6 +2144,56 @@ body {
   color: var(--text-secondary);
 }
 
+/* Stem separation log output */
+.wiz-sep-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.wiz-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--bg-card);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: wiz-spin 0.8s linear infinite;
+}
+
+.wiz-spinner-done {
+  border-color: var(--accent-green, #4caf50);
+  border-top-color: var(--accent-green, #4caf50);
+  animation: none;
+}
+
+.wiz-spinner-error {
+  border-color: var(--error-color, #e53935);
+  border-top-color: var(--error-color, #e53935);
+  animation: none;
+}
+
+@keyframes wiz-spin {
+  to { transform: rotate(360deg); }
+}
+
+.wiz-sep-log {
+  width: 100%;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background: var(--bg-surface, #1a1a2e);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  padding: 12px;
+  resize: vertical;
+  margin-bottom: 20px;
+}
+
 /* Staged files list */
 .wiz-staged-files {
   margin-bottom: 24px;

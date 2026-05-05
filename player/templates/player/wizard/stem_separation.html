@@ -51,11 +51,12 @@
   </div>
   {% endif %}
 
-  <div id="demucs-progress" class="wiz-dl-progress" style="display:none">
-    <div class="wiz-dl-bar-wrap">
-      <div class="wiz-dl-bar" id="demucs-bar" style="width:0%"></div>
+  <div id="demucs-progress" style="display:none">
+    <div class="wiz-sep-status">
+      <span class="wiz-spinner" id="sep-spinner"></span>
+      <span id="sep-status-text">Starting stem separation…</span>
     </div>
-    <p class="wiz-dl-msg" id="demucs-msg">Starting...</p>
+    <textarea id="sep-log" class="wiz-sep-log" readonly rows="12"></textarea>
   </div>
 
   <form method="post">
@@ -91,9 +92,11 @@
   var wizardId = {{ wizard.pk }};
   var demucsBtn = document.getElementById('demucs-btn');
   var progressDiv = document.getElementById('demucs-progress');
-  var dBar = document.getElementById('demucs-bar');
-  var dMsg = document.getElementById('demucs-msg');
+  var logArea = document.getElementById('sep-log');
+  var spinner = document.getElementById('sep-spinner');
+  var statusText = document.getElementById('sep-status-text');
   var nextBtn = document.getElementById('next-btn');
+  var lastMessage = '';
 
   if (demucsBtn) {
     demucsBtn.addEventListener('click', function() {
@@ -107,23 +110,34 @@
       demucsBtn.disabled = true;
       document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = true; });
       progressDiv.style.display = '';
+      logArea.value = '';
 
       Wizard.postJSON('/api/songs/new/' + wizardId + '/demucs/', {stems: selected})
         .then(function() {
           Wizard.pollTaskStatus(wizardId, function(data) {
-            dBar.style.width = data.progress + '%';
-            dMsg.textContent = data.message || data.status;
+            var msg = data.message || data.status;
+            if (msg && msg !== lastMessage) {
+              logArea.value += msg + '\n';
+              logArea.scrollTop = logArea.scrollHeight;
+              lastMessage = msg;
+            }
+            statusText.textContent = msg;
+
             if (data.status === 'done') {
+              spinner.classList.add('wiz-spinner-done');
               nextBtn.disabled = false;
               window.location.reload();
             } else if (data.status === 'error') {
+              spinner.classList.add('wiz-spinner-error');
+              statusText.textContent = 'Separation failed';
               demucsBtn.disabled = false;
               document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = false; });
             }
           });
         })
         .catch(function(err) {
-          dMsg.textContent = 'Failed: ' + err.message;
+          statusText.textContent = 'Failed: ' + err.message;
+          spinner.classList.add('wiz-spinner-error');
           demucsBtn.disabled = false;
           document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = false; });
         });
