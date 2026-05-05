@@ -44,14 +44,13 @@ class SongWizard(models.Model):
     STEPS = [
         ('song_info', 'Song Info'),
         ('tempo_key', 'Tempo/Key Lookup'),
+        ('lyrics', 'Lyrics'),
+        ('band_details', 'Band Details'),
         ('track_source', 'Track Source'),
         ('download_upload', 'Download / Upload'),
         ('beat_detect', 'Beat Detection'),
         ('quantize', 'Quantize + Click'),
         ('stem_separation', 'Stem Separation'),
-        ('lyrics', 'Lyrics'),
-        ('band_details', 'Band Details'),
-        ('review', 'Review'),
         ('complete', 'Complete'),
         ('failed', 'Failed'),
     ]
@@ -135,3 +134,40 @@ class SiteSettings(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class StemSeparationJob(models.Model):
+    STATUS_CHOICES = [
+        ('queued', 'Queued'),
+        ('processing', 'Processing'),
+        ('done', 'Done'),
+        ('failed', 'Failed'),
+    ]
+    title = models.CharField(max_length=255)
+    artist = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='stem_jobs',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='queued')
+    progress = models.IntegerField(default=0)
+    message = models.TextField(blank=True, default='')
+    selected_stems = models.JSONField(default=list, blank=True)
+    staging_dir = models.CharField(max_length=500)
+    song_dir = models.CharField(max_length=500, blank=True, default='')
+    tempo = models.IntegerField(null=True, blank=True)
+    key = models.CharField(max_length=20, blank=True, default='')
+    time_signature = models.CharField(max_length=10, default='4/4')
+    lyrics_content = models.TextField(blank=True, default='')
+    lyric_offset_secs = models.FloatField(default=0)
+    band_details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notified = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.artist} - {self.title} ({self.get_status_display()})'

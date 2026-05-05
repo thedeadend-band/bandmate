@@ -11,7 +11,7 @@ class WizardCleanupMiddleware:
     """Cancel any in-progress SongWizard when the user navigates away from
     wizard pages. This covers normal link navigation, logout, etc."""
 
-    WIZARD_PATH_PREFIXES = ('/songs/new/', '/api/songs/new/')
+    WIZARD_PATH_PREFIXES = ('/songs/new/', '/api/songs/new/', '/queue/')
 
     def __init__(self, get_response):
         self.get_response = get_response

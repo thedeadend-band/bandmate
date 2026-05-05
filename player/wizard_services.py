@@ -972,7 +972,7 @@ def run_stem_separation(wizard_model) -> None:
 
 
 def start_demucs(wizard_model) -> None:
-    """Kick off stem separation in a background thread."""
+    """Kick off stem separation in a background thread (legacy, unused)."""
     wizard_model.bg_task_status = 'running'
     wizard_model.bg_task_progress = 0
     wizard_model.bg_task_message = 'Starting stem separation...'
@@ -991,3 +991,188 @@ def is_demucs_available() -> bool:
     """Check if audio-separator is installed."""
     separator_bin = Path(_sys.executable).parent / 'audio-separator'
     return separator_bin.exists()
+
+
+# ---------------------------------------------------------------------------
+# Queue-based stem separation
+# ---------------------------------------------------------------------------
+
+_queue_lock = threading.Lock()
+_queue_running = False
+
+
+class _JobProgressAdapter:
+    """Adapter so run_stem_separation / _run_separator_pass can update a
+    StemSeparationJob using the same interface as a SongWizard model."""
+
+    def __init__(self, job):
+        self._job = job
+
+    _STATUS_MAP = {'error': 'failed', 'running': 'processing'}
+
+    @property
+    def bg_task_status(self):
+        return self._job.status
+
+    @bg_task_status.setter
+    def bg_task_status(self, value):
+        self._job.status = self._STATUS_MAP.get(value, value)
+
+    @property
+    def bg_task_progress(self):
+        return self._job.progress
+
+    @bg_task_progress.setter
+    def bg_task_progress(self, value):
+        self._job.progress = value
+
+    @property
+    def bg_task_message(self):
+        return self._job.message
+
+    @bg_task_message.setter
+    def bg_task_message(self, value):
+        self._job.message = value
+
+    @property
+    def staging_dir(self):
+        return self._job.staging_dir
+
+    @property
+    def selected_stems(self):
+        return self._job.selected_stems
+
+    def save(self, update_fields=None):
+        from .models import StemSeparationJob
+        field_map = {
+            'bg_task_progress': 'progress',
+            'bg_task_message': 'message',
+            'bg_task_status': 'status',
+        }
+        actual_fields = []
+        for f in (update_fields or []):
+            actual_fields.append(field_map.get(f, f))
+        StemSeparationJob.objects.filter(pk=self._job.pk).update(
+            **{f: getattr(self._job, f) for f in actual_fields})
+
+
+def _finalize_song(job) -> None:
+    """Move stems from staging to the final song directory and create metadata."""
+    import soundfile as sf
+    staging = Path(job.staging_dir)
+    song_dir = Path(job.song_dir)
+    song_dir.mkdir(parents=True, exist_ok=True)
+
+    audio_extensions = {'.mp3', '.wav', '.flac', '.ogg', '.aiff', '.aif'}
+    for f in staging.iterdir():
+        if f.is_file() and not f.name.endswith('_original.wav'):
+            shutil.copy2(str(f), str(song_dir / f.name))
+
+    for wav_file in list(song_dir.glob('*.wav')):
+        flac_file = wav_file.with_suffix('.flac')
+        if flac_file.exists():
+            wav_file.unlink()
+            continue
+        data, sr = sf.read(str(wav_file))
+        sf.write(str(flac_file), data, sr)
+        wav_file.unlink()
+
+    info = {
+        'title': job.title,
+        'artist': job.artist,
+        'tempo': job.tempo,
+        'key': job.key,
+        'time_signature': job.time_signature,
+        'lyric_offset': job.lyric_offset_secs,
+    }
+    if job.band_details:
+        info.update(job.band_details)
+
+    info_path = song_dir / 'info.json'
+    with open(info_path, 'w') as f:
+        import json as _json
+        _json.dump(info, f, indent=2)
+
+    if job.lyrics_content:
+        lrc_path = song_dir / 'lyrics.lrc'
+        lrc_path.write_text(job.lyrics_content.strip() + '\n', encoding='utf-8')
+
+
+def _process_queue_job(job) -> None:
+    """Process a single queue job: run stem separation then finalize."""
+    from .models import StemSeparationJob
+    from django.utils import timezone
+
+    job.status = 'processing'
+    job.progress = 0
+    job.message = 'Starting stem separation...'
+    job.save()
+
+    adapter = _JobProgressAdapter(job)
+
+    try:
+        selected = set(job.selected_stems or [])
+        if selected:
+            run_stem_separation(adapter)
+            job.refresh_from_db()
+            if job.status == 'failed':
+                return
+        else:
+            job.message = 'Skipping separation (stems uploaded)'
+            job.progress = 90
+            job.save()
+
+        job.message = 'Finalizing song...'
+        job.progress = 95
+        job.save()
+
+        _finalize_song(job)
+
+        if job.staging_dir and Path(job.staging_dir).exists():
+            shutil.rmtree(job.staging_dir, ignore_errors=True)
+
+        job.status = 'done'
+        job.progress = 100
+        job.message = 'Complete'
+        job.completed_at = timezone.now()
+        job.save()
+
+    except Exception as e:
+        logger.exception('Queue job %d failed', job.pk)
+        job.status = 'failed'
+        job.message = f'Failed: {e}'
+        try:
+            job.save()
+        except Exception:
+            pass
+
+
+def _queue_worker_loop() -> None:
+    """Process queued jobs sequentially until none remain."""
+    global _queue_running
+    from .models import StemSeparationJob
+
+    try:
+        while True:
+            job = (StemSeparationJob.objects
+                   .filter(status='queued')
+                   .order_by('created_at')
+                   .first())
+            if not job:
+                break
+            _process_queue_job(job)
+    finally:
+        with _queue_lock:
+            _queue_running = False
+
+
+def start_queue_worker() -> None:
+    """Start the queue worker thread if not already running."""
+    global _queue_running
+    with _queue_lock:
+        if _queue_running:
+            return
+        _queue_running = True
+
+    t = threading.Thread(target=_queue_worker_loop, daemon=True)
+    t.start()

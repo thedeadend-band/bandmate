@@ -76,6 +76,13 @@
         </svg>
         Calendar
       </a>
+      <a href="{% url 'queue_list' %}" class="sidebar-nav-item{% if nav_active == 'queue' %} active{% endif %}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+          <polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/>
+        </svg>
+        Queue
+      </a>
       <a href="{% url 'attributions' %}" class="sidebar-nav-item{% if nav_active == 'attributions' %} active{% endif %}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
@@ -107,6 +114,10 @@
     {% block content %}{% endblock %}
   </main>
 
+  {% if user.is_authenticated %}
+  <div id="bm-toast-container" class="bm-toast-container"></div>
+  {% endif %}
+
   <script>
     document.getElementById('theme-toggle')?.addEventListener('click', function() {
       var current = document.documentElement.getAttribute('data-theme');
@@ -127,6 +138,40 @@
       overlay.addEventListener('click', shut);
     })();
   </script>
+  {% if user.is_authenticated %}
+  <script>
+  (function() {
+    var container = document.getElementById('bm-toast-container');
+    if (!container) return;
+    function poll() {
+      fetch('/api/queue/notifications/')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          (data.notifications || []).forEach(function(n) {
+            showToast(n);
+          });
+        })
+        .catch(function() {});
+    }
+    function showToast(n) {
+      var el = document.createElement('div');
+      el.className = 'bm-toast bm-toast-' + n.status;
+      var msg = n.status === 'done'
+        ? '<strong>' + n.artist + ' \u2013 ' + n.title + '</strong> is ready!'
+        : '<strong>' + n.artist + ' \u2013 ' + n.title + '</strong> failed.';
+      var link = n.song_url ? ' <a href="' + n.song_url + '">View</a>' : '';
+      el.innerHTML = msg + link + '<button class="bm-toast-close">\u00d7</button>';
+      container.appendChild(el);
+      el.querySelector('.bm-toast-close').addEventListener('click', function() {
+        el.remove();
+      });
+      setTimeout(function() { el.remove(); }, 15000);
+    }
+    setInterval(poll, 10000);
+    setTimeout(poll, 2000);
+  })();
+  </script>
+  {% endif %}
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

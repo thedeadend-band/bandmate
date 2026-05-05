@@ -2,6 +2,7 @@ from django.urls import path
 
 from . import views
 from . import wizard_views
+from . import queue_views
 
 urlpatterns = [
     path('', views.song_list, name='song_list'),
@@ -43,6 +44,11 @@ urlpatterns = [
     path('api/download-tracks/search/', views.download_tracks_search, name='download_tracks_search'),
     path('api/download-tracks/preview/<str:video_id>/', views.download_tracks_preview, name='download_tracks_preview'),
     path('api/download-tracks/flac/<str:video_id>/', views.download_tracks_flac, name='download_tracks_flac'),
+    # Queue
+    path('queue/', queue_views.queue_list, name='queue_list'),
+    path('queue/<int:job_id>/delete/', queue_views.queue_delete, name='queue_delete'),
+    path('queue/<int:job_id>/status/', queue_views.queue_job_status, name='queue_job_status'),
+    path('api/queue/notifications/', queue_views.queue_notifications, name='queue_notifications'),
     # Attributions
     path('attributions/', views.attributions, name='attributions'),
     # Admin console
@@ -61,6 +67,5 @@ urlpatterns = [
     path('api/songs/new/<int:wizard_id>/save-beats/', wizard_views.wizard_save_beats, name='wizard_save_beats'),
     path('api/songs/new/<int:wizard_id>/waveform/', wizard_views.wizard_waveform, name='wizard_waveform'),
     path('api/songs/new/<int:wizard_id>/quantize/', wizard_views.wizard_start_quantize, name='wizard_start_quantize'),
-    path('api/songs/new/<int:wizard_id>/demucs/', wizard_views.wizard_start_demucs, name='wizard_start_demucs'),
     path('api/songs/new/<int:wizard_id>/stem-audio/<str:stem_name>/', wizard_views.wizard_stem_audio, name='wizard_stem_audio'),
 ]

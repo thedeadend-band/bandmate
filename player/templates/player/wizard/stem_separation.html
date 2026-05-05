@@ -14,53 +14,36 @@
 
 <div class="wiz-content">
   <h1 class="page-title">Stem Separation</h1>
-  <p class="wiz-step-desc">Separate the master audio into individual stems (Vocals, Drums, Bass, Guitar, Keys, Other) using AI models via audio-separator.</p>
+  <p class="wiz-step-desc">Select which stems to separate from the master audio. The separation will run in the background queue.</p>
 
   {% if errors.stems %}
   <div class="error-message">{{ errors.stems }}</div>
   {% endif %}
 
-  <div class="wiz-stems-grid">
-    {% for name in stem_names %}
-    <label class="wiz-stem-card{% if name in existing_stems %} wiz-stem-done{% endif %}">
-      <input type="checkbox" class="stem-checkbox" value="{{ name }}"
-             {% if name not in existing_stems %}checked{% endif %}>
-      <span class="wiz-stem-name">{{ name }}</span>
-      {% if name in existing_stems %}
-      <span class="wiz-stem-badge">uploaded</span>
-      {% endif %}
-    </label>
-    {% endfor %}
-  </div>
-
-  {% if not demucs_available %}
+  {% if not demucs_available and not can_skip %}
   <div class="wiz-notice">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
     </svg>
-    audio-separator is not installed on this server. Install dependencies with <code>pip install audio-separator</code> to enable AI stem separation.
-  </div>
-  {% else %}
-  <div class="wiz-beat-controls">
-    <button type="button" class="btn btn-primary" id="demucs-btn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="5 3 19 12 5 21 5 3"/>
-      </svg>
-      Run Stem Separation
-    </button>
+    audio-separator is not installed on this server. Install with <code>pip install audio-separator[gpu]</code> to enable AI stem separation.
   </div>
   {% endif %}
 
-  <div id="demucs-progress" style="display:none">
-    <div class="wiz-sep-status">
-      <span class="wiz-spinner" id="sep-spinner"></span>
-      <span id="sep-status-text">Starting stem separation…</span>
-    </div>
-    <textarea id="sep-log" class="wiz-sep-log" readonly rows="12"></textarea>
-  </div>
-
   <form method="post">
     {% csrf_token %}
+    <div class="wiz-stems-grid">
+      {% for name in stem_names %}
+      <label class="wiz-stem-card{% if name in existing_stems %} wiz-stem-done{% endif %}">
+        <input type="checkbox" class="stem-checkbox" name="stems" value="{{ name }}"
+               {% if name not in existing_stems %}checked{% endif %}>
+        <span class="wiz-stem-name">{{ name }}</span>
+        {% if name in existing_stems %}
+        <span class="wiz-stem-badge">uploaded</span>
+        {% endif %}
+      </label>
+      {% endfor %}
+    </div>
+
     <div class="wiz-actions">
       <button type="submit" name="action" value="back" class="btn btn-secondary wiz-btn-back">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -69,10 +52,13 @@
         Back
       </button>
       {% if can_skip %}
-      <button type="submit" name="action" value="skip" class="btn btn-secondary">Skip (stems already uploaded)</button>
+      <button type="submit" name="action" value="skip" class="btn btn-secondary">
+        Submit (skip separation)
+      </button>
       {% endif %}
-      <button type="submit" name="action" value="next" class="btn btn-primary wiz-btn-next" id="next-btn" {% if not has_all_stems %}disabled{% endif %}>
-        Next: Lyrics
+      <button type="submit" name="action" value="submit_queue" class="btn btn-primary wiz-btn-next"
+              {% if not demucs_available and not can_skip %}disabled{% endif %}>
+        Submit to Queue
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 6 15 12 9 18"/>
         </svg>
@@ -85,64 +71,4 @@
     <button type="submit" class="btn wiz-btn-cancel" onclick="return confirm('Discard this wizard and all its data?')">Cancel Wizard</button>
   </form>
 </div>
-
-<script src="{% static 'player/js/wizard.js' %}"></script>
-<script>
-(function() {
-  var wizardId = {{ wizard.pk }};
-  var demucsBtn = document.getElementById('demucs-btn');
-  var progressDiv = document.getElementById('demucs-progress');
-  var logArea = document.getElementById('sep-log');
-  var spinner = document.getElementById('sep-spinner');
-  var statusText = document.getElementById('sep-status-text');
-  var nextBtn = document.getElementById('next-btn');
-  var lastMessage = '';
-
-  if (demucsBtn) {
-    demucsBtn.addEventListener('click', function() {
-      var selected = Array.from(document.querySelectorAll('.stem-checkbox:checked'))
-                         .map(function(cb) { return cb.value; });
-      if (selected.length === 0) {
-        alert('Select at least one stem to separate.');
-        return;
-      }
-
-      demucsBtn.disabled = true;
-      document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = true; });
-      progressDiv.style.display = '';
-      logArea.value = '';
-
-      Wizard.postJSON('/api/songs/new/' + wizardId + '/demucs/', {stems: selected})
-        .then(function() {
-          Wizard.pollTaskStatus(wizardId, function(data) {
-            var msg = data.message || data.status;
-            if (msg && msg !== lastMessage) {
-              logArea.value += msg + '\n';
-              logArea.scrollTop = logArea.scrollHeight;
-              lastMessage = msg;
-            }
-            statusText.textContent = msg;
-
-            if (data.status === 'done') {
-              spinner.classList.add('wiz-spinner-done');
-              nextBtn.disabled = false;
-              window.location.reload();
-            } else if (data.status === 'error') {
-              spinner.classList.add('wiz-spinner-error');
-              statusText.textContent = 'Separation failed';
-              demucsBtn.disabled = false;
-              document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = false; });
-            }
-          });
-        })
-        .catch(function(err) {
-          statusText.textContent = 'Failed: ' + err.message;
-          spinner.classList.add('wiz-spinner-error');
-          demucsBtn.disabled = false;
-          document.querySelectorAll('.stem-checkbox').forEach(function(cb) { cb.disabled = false; });
-        });
-    });
-  }
-})();
-</script>
 {% endblock %}

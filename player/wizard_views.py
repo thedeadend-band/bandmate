@@ -17,11 +17,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from .models import SiteSettings, SongWizard
+from .models import SiteSettings, SongWizard, StemSeparationJob
 from .wizard_services import (
     lookup_tempo_key, youtube_search, start_youtube_download,
     start_beat_detection, generate_waveform_peaks, get_audio_duration,
-    start_quantize, start_demucs, is_demucs_available, search_lyrics,
+    start_quantize, is_demucs_available, search_lyrics,
+    start_queue_worker,
 )
 
 
@@ -38,18 +39,6 @@ def _staff_required(view_func):
 def _staging_dir() -> Path:
     return Path(getattr(settings, 'STAGING_DIR', settings.BASE_DIR / '.song_staging'))
 
-
-def _convert_wavs_to_flac(directory: Path) -> None:
-    """Convert all WAV files in a directory to FLAC, removing the originals."""
-    import soundfile as sf
-    for wav_file in list(directory.glob('*.wav')):
-        flac_file = wav_file.with_suffix('.flac')
-        if flac_file.exists():
-            wav_file.unlink()
-            continue
-        data, sr = sf.read(str(wav_file))
-        sf.write(str(flac_file), data, sr)
-        wav_file.unlink()
 
 
 # ---------------------------------------------------------------------------
@@ -200,9 +189,9 @@ def step_tempo_key(request, wiz):
             if not errors:
                 wiz.key = key_val
                 wiz.time_signature = time_sig
-                wiz.current_step = 'track_source'
+                wiz.current_step = 'lyrics'
                 wiz.save(update_fields=['tempo', 'key', 'time_signature', 'current_step'])
-                return redirect('wizard_step', wizard_id=wiz.pk, step_name='track_source')
+                return redirect('wizard_step', wizard_id=wiz.pk, step_name='lyrics')
 
         elif action == 'back':
             wiz.current_step = 'song_info'
@@ -222,7 +211,7 @@ def step_tempo_key(request, wiz):
 
 
 # ---------------------------------------------------------------------------
-# Step 3: Track Source Selection (Upload or YouTube)
+# Step 5: Track Source Selection (Upload or YouTube)
 # ---------------------------------------------------------------------------
 
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.aiff', '.aif'}
@@ -235,9 +224,9 @@ def step_track_source(request, wiz):
         action = request.POST.get('action', '')
 
         if action == 'back':
-            wiz.current_step = 'tempo_key'
+            wiz.current_step = 'band_details'
             wiz.save(update_fields=['current_step'])
-            return redirect('wizard_step', wizard_id=wiz.pk, step_name='tempo_key')
+            return redirect('wizard_step', wizard_id=wiz.pk, step_name='band_details')
 
         elif action == 'youtube':
             wiz.track_source = 'youtube'
@@ -280,7 +269,7 @@ def step_track_source(request, wiz):
 
 
 # ---------------------------------------------------------------------------
-# Step 4: Download / Upload (progress + confirmation)
+# Step 6: Download / Upload (progress + confirmation)
 # ---------------------------------------------------------------------------
 
 @_register_step('download_upload')
@@ -325,7 +314,7 @@ def step_download_upload(request, wiz):
 
 
 # ---------------------------------------------------------------------------
-# Step 5: Beat Detection + Review
+# Step 7: Beat Detection
 # ---------------------------------------------------------------------------
 
 @_register_step('beat_detect')
@@ -356,7 +345,7 @@ def step_beat_detect(request, wiz):
 
 
 # ---------------------------------------------------------------------------
-# Step 6: Quantize + Click Intro
+# Step 8: Quantize + Click Intro
 # ---------------------------------------------------------------------------
 
 @_register_step('quantize')
@@ -386,7 +375,7 @@ def step_quantize(request, wiz):
 
 
 # ---------------------------------------------------------------------------
-# Step 7: Stem Separation (Demucs)
+# Step 9: Stem Separation (submit to queue)
 # ---------------------------------------------------------------------------
 
 @_register_step('stem_separation')
@@ -412,17 +401,75 @@ def step_stem_separation(request, wiz):
             wiz.current_step = 'quantize'
             wiz.save(update_fields=['current_step'])
             return redirect('wizard_step', wizard_id=wiz.pk, step_name='quantize')
-        elif action == 'skip' and can_skip:
-            wiz.current_step = 'lyrics'
-            wiz.save(update_fields=['current_step'])
-            return redirect('wizard_step', wizard_id=wiz.pk, step_name='lyrics')
-        elif action == 'next':
-            if has_all_stems:
-                wiz.current_step = 'lyrics'
-                wiz.save(update_fields=['current_step'])
-                return redirect('wizard_step', wizard_id=wiz.pk, step_name='lyrics')
+
+        elif action == 'submit_queue':
+            stems = request.POST.getlist('stems')
+            valid_stems = {'Vocals', 'Drums', 'Bass', 'Guitar', 'Keys', 'Other'}
+            selected = [s for s in stems if s in valid_stems] or list(valid_stems)
+
+            songs_dir = Path(settings.SONGS_DIR)
+            dir_name = f'{wiz.artist} - {wiz.title}'.replace('/', '-').replace('\\', '-')
+            song_dir = songs_dir / dir_name
+
+            if song_dir.exists():
+                errors['stems'] = (
+                    f'A song named "{dir_name}" already exists. '
+                    f'Delete it first or change the artist/title.')
+            elif not demucs_available and not can_skip:
+                errors['stems'] = 'audio-separator is not installed.'
             else:
-                errors['stems'] = 'Run Demucs to generate stems first.'
+                job = StemSeparationJob.objects.create(
+                    title=wiz.title,
+                    artist=wiz.artist,
+                    created_by=request.user,
+                    selected_stems=selected,
+                    staging_dir=wiz.staging_dir,
+                    song_dir=str(song_dir),
+                    tempo=wiz.tempo,
+                    key=wiz.key,
+                    time_signature=wiz.time_signature,
+                    lyrics_content=wiz.lyrics_content,
+                    lyric_offset_secs=wiz.lyric_offset_secs,
+                    band_details=wiz.band_details or {},
+                )
+                wiz.current_step = 'complete'
+                wiz.staging_dir = ''
+                wiz.save(update_fields=['current_step', 'staging_dir'])
+
+                start_queue_worker()
+                return redirect('queue_list')
+
+        elif action == 'skip' and can_skip:
+            songs_dir = Path(settings.SONGS_DIR)
+            dir_name = f'{wiz.artist} - {wiz.title}'.replace('/', '-').replace('\\', '-')
+            song_dir = songs_dir / dir_name
+
+            if song_dir.exists():
+                errors['stems'] = (
+                    f'A song named "{dir_name}" already exists. '
+                    f'Delete it first or change the artist/title.')
+            else:
+                job = StemSeparationJob.objects.create(
+                    title=wiz.title,
+                    artist=wiz.artist,
+                    created_by=request.user,
+                    selected_stems=[],
+                    staging_dir=wiz.staging_dir,
+                    song_dir=str(song_dir),
+                    tempo=wiz.tempo,
+                    key=wiz.key,
+                    time_signature=wiz.time_signature,
+                    lyrics_content=wiz.lyrics_content,
+                    lyric_offset_secs=wiz.lyric_offset_secs,
+                    band_details=wiz.band_details or {},
+                    status='queued',
+                )
+                wiz.current_step = 'complete'
+                wiz.staging_dir = ''
+                wiz.save(update_fields=['current_step', 'staging_dir'])
+
+                start_queue_worker()
+                return redirect('queue_list')
 
     return render(request, 'player/wizard/stem_separation.html', _wizard_context(wiz, 'stem_separation', {
         'errors': errors,
@@ -435,7 +482,7 @@ def step_stem_separation(request, wiz):
 
 
 # ---------------------------------------------------------------------------
-# Step 8: Lyrics
+# Step 3: Lyrics
 # ---------------------------------------------------------------------------
 
 @_register_step('lyrics')
@@ -446,9 +493,9 @@ def step_lyrics(request, wiz):
     if request.method == 'POST':
         action = request.POST.get('action', '')
         if action == 'back':
-            wiz.current_step = 'stem_separation'
+            wiz.current_step = 'tempo_key'
             wiz.save(update_fields=['current_step'])
-            return redirect('wizard_step', wizard_id=wiz.pk, step_name='stem_separation')
+            return redirect('wizard_step', wizard_id=wiz.pk, step_name='tempo_key')
         elif action == 'lookup':
             result, err = search_lyrics(wiz.title, wiz.artist)
             if result:
@@ -483,7 +530,7 @@ def step_lyrics(request, wiz):
 
 
 # ---------------------------------------------------------------------------
-# Step 9: Band Details
+# Step 4: Band Details
 # ---------------------------------------------------------------------------
 
 @_register_step('band_details')
@@ -527,9 +574,9 @@ def step_band_details(request, wiz):
                 details['starts_with'] = starts_with
 
             wiz.band_details = details
-            wiz.current_step = 'review'
+            wiz.current_step = 'track_source'
             wiz.save(update_fields=['band_details', 'current_step'])
-            return redirect('wizard_step', wizard_id=wiz.pk, step_name='review')
+            return redirect('wizard_step', wizard_id=wiz.pk, step_name='track_source')
 
     return render(request, 'player/wizard/band_details.html', _wizard_context(wiz, 'band_details', {
         'errors': errors,
@@ -537,88 +584,6 @@ def step_band_details(request, wiz):
     }))
 
 
-# ---------------------------------------------------------------------------
-# Step 10: Review + Finalize
-# ---------------------------------------------------------------------------
-
-@_register_step('review')
-def step_review(request, wiz):
-    import shutil
-
-    errors = {}
-    staging = Path(wiz.staging_dir) if wiz.staging_dir else None
-
-    if request.method == 'POST':
-        action = request.POST.get('action', '')
-        if action == 'back':
-            wiz.current_step = 'band_details'
-            wiz.save(update_fields=['current_step'])
-            return redirect('wizard_step', wizard_id=wiz.pk, step_name='band_details')
-        elif action == 'finalize':
-            try:
-                songs_dir = Path(settings.SONGS_DIR)
-                dir_name = f'{wiz.artist} - {wiz.title}'.replace('/', '-').replace('\\', '-')
-                song_dir = songs_dir / dir_name
-
-                if song_dir.exists():
-                    errors['finalize'] = (
-                        f'A song named "{dir_name}" already exists. '
-                        f'Delete it first or change the artist/title.')
-                    raise ValueError(errors['finalize'])
-
-                song_dir.mkdir(parents=True, exist_ok=True)
-
-                if staging:
-                    for f in staging.iterdir():
-                        if f.is_file() and not f.name.endswith('_original.wav'):
-                            shutil.copy2(str(f), str(song_dir / f.name))
-
-                _convert_wavs_to_flac(song_dir)
-
-                info = {
-                    'title': wiz.title,
-                    'artist': wiz.artist,
-                    'tempo': wiz.tempo,
-                    'key': wiz.key,
-                    'time_signature': wiz.time_signature,
-                    'lyric_offset': wiz.lyric_offset_secs,
-                }
-                if wiz.band_details:
-                    info.update(wiz.band_details)
-
-                info_path = song_dir / 'info.json'
-                with open(info_path, 'w') as f:
-                    json.dump(info, f, indent=2)
-
-                if wiz.lyrics_content:
-                    lrc_path = song_dir / 'lyrics.lrc'
-                    lrc_path.write_text(wiz.lyrics_content.strip() + '\n', encoding='utf-8')
-
-                wiz.current_step = 'complete'
-                wiz.save(update_fields=['current_step'])
-
-                if wiz.staging_dir and Path(wiz.staging_dir).exists():
-                    shutil.rmtree(wiz.staging_dir, ignore_errors=True)
-
-                return redirect('song_player', song_name=dir_name)
-
-            except ValueError:
-                pass  # errors already set above
-            except Exception as e:
-                errors['finalize'] = f'Failed to create song: {e}'
-
-    staged_files = []
-    if staging and staging.exists():
-        staged_files = sorted([
-            f.name for f in staging.iterdir()
-            if f.is_file() and not f.name.endswith('_original.wav')
-            and f.suffix.lower() in (AUDIO_EXTENSIONS | {'.ogg'})
-        ])
-
-    return render(request, 'player/wizard/review.html', _wizard_context(wiz, 'review', {
-        'errors': errors,
-        'staged_files': staged_files,
-    }))
 
 
 # ---------------------------------------------------------------------------
@@ -688,29 +653,6 @@ def wizard_start_quantize(request, wizard_id):
     return JsonResponse({'ok': True})
 
 
-# ---------------------------------------------------------------------------
-# AJAX: Demucs stem separation
-# ---------------------------------------------------------------------------
-
-@_staff_required
-@require_POST
-def wizard_start_demucs(request, wizard_id):
-    wiz = get_object_or_404(SongWizard, pk=wizard_id, created_by=request.user)
-    if wiz.bg_task_status == 'running':
-        return JsonResponse({'error': 'A task is already running'}, status=409)
-
-    try:
-        body = json.loads(request.body)
-        stems = body.get('stems', [])
-    except (json.JSONDecodeError, AttributeError):
-        stems = []
-
-    valid_stems = {'Vocals', 'Drums', 'Bass', 'Guitar', 'Keys', 'Other'}
-    wiz.selected_stems = [s for s in stems if s in valid_stems] or list(valid_stems)
-    wiz.save(update_fields=['selected_stems'])
-
-    start_demucs(wiz)
-    return JsonResponse({'ok': True})
 
 
 # ---------------------------------------------------------------------------
