@@ -791,11 +791,29 @@ def _run_separator_pass(
                 idle_since = _time.monotonic()
                 if current_pct >= 100:
                     wizard_model.bg_task_message = (
-                        f'[{label}] Writing output (this may take a few minutes)…')
+                        f'[{label}] Writing output…')
                     try:
                         wizard_model.save(update_fields=['bg_task_message'])
                     except Exception:
                         pass
+            # Check if output files exist (process may be hung on cleanup)
+            if idle_since and (_time.monotonic() - idle_since) > 10:
+                out_files = [
+                    f for f in Path(output_dir).iterdir()
+                    if f.suffix.lower() in ('.wav', '.flac') and f.stat().st_size > 1000
+                ]
+                if out_files:
+                    # Files written — verify stable (not still being written)
+                    sizes = [f.stat().st_size for f in out_files]
+                    _time.sleep(10)
+                    new_sizes = [f.stat().st_size for f in out_files]
+                    if sizes == new_sizes:
+                        logger.info(
+                            'Output files ready for %s, killing hung process',
+                            label)
+                        proc.kill()
+                        proc.wait()
+                        break
             if idle_since and (_time.monotonic() - idle_since) > 600:
                 logger.warning(
                     'audio-separator stuck for 10min for %s, killing', label)
