@@ -163,6 +163,7 @@ class StemSeparationJob(models.Model):
     lyrics_content = models.TextField(blank=True, default='')
     lyric_offset_secs = models.FloatField(default=0)
     band_details = models.JSONField(default=dict, blank=True)
+    gpu_used = models.BooleanField(null=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     notified = models.BooleanField(default=False)

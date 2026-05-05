@@ -84,6 +84,7 @@ def queue_job_status(request, job_id):
         'status': job.status,
         'progress': job.progress,
         'message': job.message,
+        'gpu_used': job.gpu_used,
     })
 
 

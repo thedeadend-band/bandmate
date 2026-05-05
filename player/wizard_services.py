@@ -767,6 +767,7 @@ def _run_separator_pass(
     current_pct = 0
     pass_num = 1
     idle_since = None
+    gpu_detected = None
 
     while True:
         # Periodically check for pause (every 3 seconds)
@@ -790,6 +791,12 @@ def _run_separator_pass(
             buf += text
             all_output += text
             idle_since = None
+            if gpu_detected is None:
+                lower = all_output.lower()
+                if 'cudaexecutionprovider' in lower and 'enabling acceleration' in lower:
+                    gpu_detected = True
+                elif 'acceleration will not be enabled' in lower:
+                    gpu_detected = False
         elif proc.poll() is not None:
             try:
                 remaining = proc.stdout.read()
@@ -873,6 +880,9 @@ def _run_separator_pass(
         raise RuntimeError(
             f'audio-separator failed for {label} (rc={proc.returncode}): '
             f'{all_output[-300:]}')
+
+    if gpu_detected is not None and hasattr(wizard_model, '_gpu_detected'):
+        wizard_model._gpu_detected = gpu_detected
 
     output_path = Path(output_dir)
     return [str(f) for f in output_path.iterdir()
@@ -1086,6 +1096,7 @@ class _JobProgressAdapter:
 
     def __init__(self, job):
         self._job = job
+        self._gpu_detected = None
 
     _STATUS_MAP = {'error': 'failed', 'running': 'processing'}
 
@@ -1244,6 +1255,10 @@ def _process_queue_job(job) -> None:
         selected = set(job.selected_stems or [])
         if selected:
             run_stem_separation(adapter)
+            if adapter._gpu_detected is not None:
+                from .models import StemSeparationJob as _SJ
+                _SJ.objects.filter(pk=job.pk).update(
+                    gpu_used=adapter._gpu_detected)
             if not _job_still_exists(job):
                 logger.info('Queue job %d was deleted during processing', job.pk)
                 return

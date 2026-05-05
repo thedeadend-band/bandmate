@@ -156,6 +156,7 @@ You should see your GPU listed inside the container.
 source /srv/bandmate/.venv/bin/activate
 pip uninstall onnxruntime -y
 pip install onnxruntime-gpu
+pip install -r requirements-gpu.txt
 ```
 
 ### Verify GPU is available to ONNX Runtime

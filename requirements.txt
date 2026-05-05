@@ -10,4 +10,5 @@ librosa>=0.10.0
 soundfile>=0.12.0
 pyrubberband>=0.3.0
 audio-separator>=0.44.0
-onnxruntime>=1.16.0
+onnxruntime-gpu>=1.16.0
+# For GPU acceleration, also install: pip install -r requirements-gpu.txt

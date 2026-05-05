@@ -41,6 +41,7 @@
         {% endif %}
         <span class="queue-detail">
           {{ job.get_status_display }}{% if job.message %} &mdash; {{ job.message }}{% endif %}
+          {% if job.gpu_used == True %}<span class="badge badge-gpu">GPU</span>{% elif job.gpu_used == False %}<span class="badge badge-cpu">CPU</span>{% endif %}
         </span>
         <span class="queue-time">{{ job.created_at|timesince }} ago</span>
       </div>
@@ -111,8 +112,11 @@
           if (!el) return;
           var detail = el.querySelector('.queue-detail');
           if (detail && data.message) {
-            detail.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1) +
-              (data.message ? ' \u2014 ' + data.message : '');
+            var badge = '';
+            if (data.gpu_used === true) badge = ' <span class="badge badge-gpu">GPU</span>';
+            else if (data.gpu_used === false) badge = ' <span class="badge badge-cpu">CPU</span>';
+            detail.innerHTML = data.status.charAt(0).toUpperCase() + data.status.slice(1) +
+              (data.message ? ' \u2014 ' + data.message : '') + badge;
           }
         })
         .catch(function() {});

@@ -2557,6 +2557,25 @@ body {
   opacity: 0.75;
   border-left: 3px solid #f39c12;
 }
+.badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+.badge-gpu {
+  background: #2ecc71;
+  color: #111;
+}
+.badge-cpu {
+  background: #7f8c8d;
+  color: #fff;
+}
 .queue-card-actions {
   flex-shrink: 0;
   display: flex;
