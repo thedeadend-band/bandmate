@@ -15,6 +15,10 @@
       <div class="song-icon">
         {% if job.status == 'processing' %}
         <span class="wiz-spinner"></span>
+        {% elif job.status == 'paused' %}
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+        </svg>
         {% elif job.status == 'done' %}
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"/>
@@ -43,6 +47,26 @@
       <div class="queue-card-actions">
         {% if job.status == 'done' %}
         <a href="{{ job.song_page_url }}" class="btn btn-sm">View</a>
+        {% endif %}
+        {% if job.status == 'processing' %}
+        <form method="post" action="{% url 'queue_pause' job.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm" title="Pause">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+            </svg>
+          </button>
+        </form>
+        {% endif %}
+        {% if job.status == 'paused' or job.status == 'failed' %}
+        <form method="post" action="{% url 'queue_resume' job.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm" title="Resume">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+          </button>
+        </form>
         {% endif %}
         <form method="post" action="{% url 'queue_delete' job.pk %}" style="display:inline">
           {% csrf_token %}
@@ -80,7 +104,7 @@
       fetch('/queue/' + jobId + '/status/')
         .then(function(r) { return r.json(); })
         .then(function(data) {
-          if (data.status === 'done' || data.status === 'failed') {
+          if (data.status === 'done' || data.status === 'failed' || data.status === 'paused') {
             window.location.reload();
           }
           var el = document.querySelector('[data-job-id="' + jobId + '"]');

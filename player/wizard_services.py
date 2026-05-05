@@ -724,7 +724,7 @@ ALL_STEMS = set()
 for _cfg in _MODEL_CONFIGS:
     ALL_STEMS.update(_cfg['provides'].keys())
 
-_PROGRESS_RE = _re.compile(r'(\d+)%\|')
+_PROGRESS_RE = _re.compile(r'(\d+)%')
 
 
 def _run_separator_pass(
@@ -760,6 +760,7 @@ def _run_separator_pass(
     _os.set_blocking(proc.stdout.fileno(), False)
 
     last_update = 0.0
+    last_pause_check = 0.0
     buf = ''
     span = progress_hi - progress_lo
     all_output = ''
@@ -768,6 +769,18 @@ def _run_separator_pass(
     idle_since = None
 
     while True:
+        # Periodically check for pause (every 3 seconds)
+        now_mono = _time.monotonic()
+        if (now_mono - last_pause_check > 3.0
+                and hasattr(wizard_model, 'is_paused')
+                and wizard_model.is_paused()):
+            logger.info('Pause detected for %s, killing subprocess', label)
+            proc.kill()
+            proc.wait()
+            raise JobPausedError('Job paused by user')
+        if now_mono - last_pause_check > 3.0:
+            last_pause_check = now_mono
+
         try:
             raw = proc.stdout.read(512)
         except (OSError, IOError):
@@ -792,10 +805,16 @@ def _run_separator_pass(
                 if current_pct >= 100:
                     wizard_model.bg_task_message = (
                         f'[{label}] Writing output…')
-                    try:
-                        wizard_model.save(update_fields=['bg_task_message'])
-                    except Exception:
-                        pass
+                elif current_pct == 0:
+                    wizard_model.bg_task_message = (
+                        f'[{label}] Loading model…')
+                else:
+                    wizard_model.bg_task_message = (
+                        f'[{label}] Processing… {current_pct}%')
+                try:
+                    wizard_model.save(update_fields=['bg_task_message'])
+                except Exception:
+                    pass
             # Check if output files exist (process may be hung on cleanup)
             if idle_since and (_time.monotonic() - idle_since) > 10:
                 out_files = [
@@ -803,7 +822,6 @@ def _run_separator_pass(
                     if f.suffix.lower() in ('.wav', '.flac') and f.stat().st_size > 1000
                 ]
                 if out_files:
-                    # Files written — verify stable (not still being written)
                     sizes = [f.stat().st_size for f in out_files]
                     _time.sleep(10)
                     new_sizes = [f.stat().st_size for f in out_files]
@@ -885,13 +903,21 @@ def run_stem_separation(wizard_model) -> None:
     if not selected:
         selected = ALL_STEMS.copy()
 
+    # Skip stems that already exist in staging (supports resume after pause)
+    already_done = set()
+    for stem in list(selected):
+        if any((staging / f'{stem}{ext}').exists()
+               for ext in ('.wav', '.flac')):
+            already_done.add(stem)
+    remaining = selected - already_done
+
     # Determine which models need to run and which stems to extract from each
     runs = []
     for cfg in _MODEL_CONFIGS:
         needed = {
             stem: output_name
             for stem, output_name in cfg['provides'].items()
-            if stem in selected
+            if stem in remaining
         }
         if needed:
             runs.append({
@@ -902,9 +928,10 @@ def run_stem_separation(wizard_model) -> None:
 
     total_runs = len(runs)
     if total_runs == 0:
+        msg = 'All stems already separated' if already_done else 'No stems to separate'
         wizard_model.bg_task_status = 'done'
         wizard_model.bg_task_progress = 100
-        wizard_model.bg_task_message = 'No stems to separate'
+        wizard_model.bg_task_message = msg
         wizard_model.save(update_fields=[
             'bg_task_status', 'bg_task_progress', 'bg_task_message'])
         return
@@ -984,6 +1011,10 @@ def run_stem_separation(wizard_model) -> None:
             finally:
                 shutil.rmtree(str(sep_out), ignore_errors=True)
 
+            # Check for pause between model runs
+            if hasattr(wizard_model, 'is_paused') and wizard_model.is_paused():
+                raise JobPausedError('Job paused by user')
+
         # ── Wrap up ──────────────────────────────────────────────────
         missing = [
             s for s in selected
@@ -1001,6 +1032,8 @@ def run_stem_separation(wizard_model) -> None:
         wizard_model.save(update_fields=[
             'bg_task_status', 'bg_task_progress', 'bg_task_message'])
 
+    except JobPausedError:
+        raise
     except Exception as e:
         logger.exception('Stem separation failed')
         wizard_model.bg_task_status = 'error'
@@ -1040,6 +1073,11 @@ def is_demucs_available() -> bool:
 
 _queue_lock = threading.Lock()
 _queue_thread_active = False
+
+
+class JobPausedError(Exception):
+    """Raised when a queue job is paused mid-processing."""
+    pass
 
 
 class _JobProgressAdapter:
@@ -1082,6 +1120,15 @@ class _JobProgressAdapter:
     @property
     def selected_stems(self):
         return self._job.selected_stems
+
+    def is_paused(self) -> bool:
+        """Check the database for whether this job has been paused."""
+        from .models import StemSeparationJob
+        try:
+            current = StemSeparationJob.objects.only('status').get(pk=self._job.pk)
+            return current.status == 'paused'
+        except StemSeparationJob.DoesNotExist:
+            return False
 
     def save(self, update_fields=None):
         from .models import StemSeparationJob
@@ -1170,6 +1217,12 @@ def _queue_worker_loop() -> None:
                 job.save()
 
             _process_queue_job(job)
+
+            # If the job was paused, don't auto-start the next one
+            if _job_still_exists(job):
+                job.refresh_from_db()
+                if job.status == 'paused':
+                    break
     finally:
         with _queue_lock:
             _queue_thread_active = False
@@ -1195,7 +1248,7 @@ def _process_queue_job(job) -> None:
                 logger.info('Queue job %d was deleted during processing', job.pk)
                 return
             job.refresh_from_db()
-            if job.status == 'failed':
+            if job.status in ('failed', 'paused'):
                 return
         else:
             job.message = 'Skipping separation (stems uploaded)'
@@ -1221,6 +1274,13 @@ def _process_queue_job(job) -> None:
         job.completed_at = timezone.now()
         job.save()
 
+    except JobPausedError:
+        logger.info('Queue job %d paused by user', job.pk)
+        if _job_still_exists(job):
+            job.refresh_from_db()
+            job.status = 'paused'
+            job.message = 'Paused'
+            job.save()
     except StemSeparationJob.DoesNotExist:
         logger.info('Queue job %d was deleted during processing', job.pk)
     except Exception as e:

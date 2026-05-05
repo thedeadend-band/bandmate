@@ -140,6 +140,7 @@ class StemSeparationJob(models.Model):
     STATUS_CHOICES = [
         ('queued', 'Queued'),
         ('processing', 'Processing'),
+        ('paused', 'Paused'),
         ('done', 'Done'),
         ('failed', 'Failed'),
     ]

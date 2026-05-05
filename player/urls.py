@@ -47,6 +47,8 @@ urlpatterns = [
     # Queue
     path('queue/', queue_views.queue_list, name='queue_list'),
     path('queue/<int:job_id>/delete/', queue_views.queue_delete, name='queue_delete'),
+    path('queue/<int:job_id>/pause/', queue_views.queue_pause, name='queue_pause'),
+    path('queue/<int:job_id>/resume/', queue_views.queue_resume, name='queue_resume'),
     path('queue/<int:job_id>/status/', queue_views.queue_job_status, name='queue_job_status'),
     path('api/queue/notifications/', queue_views.queue_notifications, name='queue_notifications'),
     # Attributions

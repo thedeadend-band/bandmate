@@ -54,6 +54,30 @@ def queue_delete(request, job_id):
 
 
 @_staff_required
+@require_POST
+def queue_pause(request, job_id):
+    job = get_object_or_404(StemSeparationJob, pk=job_id)
+    if job.status == 'processing':
+        job.status = 'paused'
+        job.message = 'Pausing…'
+        job.save()
+    return redirect('queue_list')
+
+
+@_staff_required
+@require_POST
+def queue_resume(request, job_id):
+    from .wizard_services import start_queue_worker
+    job = get_object_or_404(StemSeparationJob, pk=job_id)
+    if job.status in ('paused', 'failed'):
+        job.status = 'queued'
+        job.message = 'Resuming…'
+        job.save()
+        start_queue_worker()
+    return redirect('queue_list')
+
+
+@_staff_required
 def queue_job_status(request, job_id):
     job = get_object_or_404(StemSeparationJob, pk=job_id)
     return JsonResponse({
