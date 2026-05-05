@@ -47,10 +47,9 @@ def queue_delete(request, job_id):
     from pathlib import Path
 
     job = get_object_or_404(StemSeparationJob, pk=job_id)
-    if job.status in ('failed', 'done'):
-        if job.staging_dir and Path(job.staging_dir).exists():
-            shutil.rmtree(job.staging_dir, ignore_errors=True)
-        job.delete()
+    if job.staging_dir and Path(job.staging_dir).exists():
+        shutil.rmtree(job.staging_dir, ignore_errors=True)
+    job.delete()
     return redirect('queue_list')
 
 

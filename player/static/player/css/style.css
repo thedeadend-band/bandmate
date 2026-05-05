@@ -2495,8 +2495,8 @@ body {
   max-width: 360px;
 }
 .bm-toast {
-  background: var(--bg-card, #23272e);
-  border: 1px solid var(--border, #333);
+  background: var(--bg-card, #151526);
+  border: 1px solid var(--border, #252540);
   border-radius: 8px;
   padding: 12px 16px;
   font-size: 0.9rem;

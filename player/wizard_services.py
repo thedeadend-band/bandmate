@@ -1134,6 +1134,11 @@ def _queue_worker_loop() -> None:
             _queue_thread_active = False
 
 
+def _job_still_exists(job) -> bool:
+    from .models import StemSeparationJob
+    return StemSeparationJob.objects.filter(pk=job.pk).exists()
+
+
 def _process_queue_job(job) -> None:
     """Process a single queue job: run stem separation then finalize."""
     from .models import StemSeparationJob
@@ -1145,6 +1150,9 @@ def _process_queue_job(job) -> None:
         selected = set(job.selected_stems or [])
         if selected:
             run_stem_separation(adapter)
+            if not _job_still_exists(job):
+                logger.info('Queue job %d was deleted during processing', job.pk)
+                return
             job.refresh_from_db()
             if job.status == 'failed':
                 return
@@ -1152,6 +1160,10 @@ def _process_queue_job(job) -> None:
             job.message = 'Skipping separation (stems uploaded)'
             job.progress = 90
             job.save()
+
+        if not _job_still_exists(job):
+            logger.info('Queue job %d was deleted during processing', job.pk)
+            return
 
         job.message = 'Finalizing song...'
         job.progress = 95
@@ -1168,14 +1180,17 @@ def _process_queue_job(job) -> None:
         job.completed_at = timezone.now()
         job.save()
 
+    except StemSeparationJob.DoesNotExist:
+        logger.info('Queue job %d was deleted during processing', job.pk)
     except Exception as e:
         logger.exception('Queue job %d failed', job.pk)
-        job.status = 'failed'
-        job.message = f'Failed: {e}'
-        try:
-            job.save()
-        except Exception:
-            pass
+        if _job_still_exists(job):
+            job.status = 'failed'
+            job.message = f'Failed: {e}'
+            try:
+                job.save()
+            except Exception:
+                pass
 
 
 def start_queue_worker() -> None:

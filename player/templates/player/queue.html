@@ -40,21 +40,20 @@
         </span>
         <span class="queue-time">{{ job.created_at|timesince }} ago</span>
       </div>
-      {% if job.status == 'done' or job.status == 'failed' %}
       <div class="queue-card-actions">
         {% if job.status == 'done' %}
         <a href="{{ job.song_page_url }}" class="btn btn-sm">View</a>
         {% endif %}
         <form method="post" action="{% url 'queue_delete' job.pk %}" style="display:inline">
           {% csrf_token %}
-          <button type="submit" class="btn btn-sm btn-danger" title="Remove">
+          <button type="submit" class="btn btn-sm btn-danger" title="Remove"
+                  {% if job.status == 'processing' %}onclick="return confirm('This will cancel the in-progress separation. Continue?')"{% endif %}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
             </svg>
           </button>
         </form>
       </div>
-      {% endif %}
     </div>
   </div>
   {% endfor %}
