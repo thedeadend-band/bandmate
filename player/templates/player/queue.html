@@ -3,64 +3,57 @@
 
 {% block content %}
 <div class="section-header">
-  <h1 class="page-title">Stem Separation Queue</h1>
+  <h1 class="page-title">Queue</h1>
 </div>
 
 {% if jobs %}
-<div class="queue-list">
+<h2 class="queue-subtitle">Songs</h2>
+<div class="songs-grid">
   {% for job in jobs %}
-  <div class="queue-item queue-item-{{ job.status }}" data-job-id="{{ job.pk }}">
-    <div class="queue-item-status">
-      {% if job.status == 'queued' %}
-      <span class="queue-icon queue-icon-queued" title="Queued">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
-      </span>
-      {% elif job.status == 'processing' %}
-      <span class="queue-icon queue-icon-processing" title="Processing">
+  <div class="song-row" data-job-id="{{ job.pk }}">
+    <div class="song-card queue-card queue-card-{{ job.status }}">
+      <div class="song-icon">
+        {% if job.status == 'processing' %}
         <span class="wiz-spinner"></span>
-      </span>
-      {% elif job.status == 'done' %}
-      <span class="queue-icon queue-icon-done" title="Done">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        {% elif job.status == 'done' %}
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
-      </span>
-      {% elif job.status == 'failed' %}
-      <span class="queue-icon queue-icon-failed" title="Failed">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        {% elif job.status == 'failed' %}
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
         </svg>
-      </span>
-      {% endif %}
-    </div>
-
-    <div class="queue-item-info">
-      {% if job.status == 'done' %}
-      <a href="{{ job.song_page_url }}" class="queue-item-title">
-        {{ job.artist }} &ndash; {{ job.title }}
-      </a>
-      {% else %}
-      <span class="queue-item-title">{{ job.artist }} &ndash; {{ job.title }}</span>
-      {% endif %}
-      <span class="queue-item-meta">
-        {{ job.get_status_display }}
-        {% if job.status == 'processing' and job.message %} &mdash; {{ job.message }}{% endif %}
-        {% if job.status == 'failed' and job.message %} &mdash; {{ job.message }}{% endif %}
-      </span>
-      <span class="queue-item-time">{{ job.created_at|timesince }} ago</span>
-    </div>
-
-    <div class="queue-item-actions">
-      {% if job.status == 'done' %}
-      <a href="{{ job.song_page_url }}" class="btn btn-sm">View Song</a>
-      {% endif %}
-      {% if job.status == 'failed' or job.status == 'done' %}
-      <form method="post" action="{% url 'queue_delete' job.pk %}" style="display:inline">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-danger" title="Remove from queue">Delete</button>
-      </form>
+        {% else %}
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        {% endif %}
+      </div>
+      <div class="song-info">
+        {% if job.status == 'done' %}
+        <a href="{{ job.song_page_url }}"><h3>{{ job.artist }} – {{ job.title }}</h3></a>
+        {% else %}
+        <h3>{{ job.artist }} – {{ job.title }}</h3>
+        {% endif %}
+        <span class="queue-detail">
+          {{ job.get_status_display }}{% if job.message %} &mdash; {{ job.message }}{% endif %}
+        </span>
+        <span class="queue-time">{{ job.created_at|timesince }} ago</span>
+      </div>
+      {% if job.status == 'done' or job.status == 'failed' %}
+      <div class="queue-card-actions">
+        {% if job.status == 'done' %}
+        <a href="{{ job.song_page_url }}" class="btn btn-sm">View</a>
+        {% endif %}
+        <form method="post" action="{% url 'queue_delete' job.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-danger" title="Remove">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+          </button>
+        </form>
+      </div>
       {% endif %}
     </div>
   </div>
@@ -75,29 +68,35 @@
 
 <script>
 (function() {
-  const processingItems = document.querySelectorAll('.queue-item-processing, .queue-item-queued');
-  if (!processingItems.length) return;
+  var items = document.querySelectorAll('[data-job-id]');
+  var activeIds = [];
+  items.forEach(function(el) {
+    var card = el.querySelector('.queue-card-processing, .queue-card-queued');
+    if (card) activeIds.push(el.dataset.jobId);
+  });
+  if (!activeIds.length) return;
 
-  function pollStatuses() {
-    processingItems.forEach(item => {
-      const jobId = item.dataset.jobId;
+  function poll() {
+    activeIds.forEach(function(jobId) {
       fetch('/queue/' + jobId + '/status/')
-        .then(r => r.json())
-        .then(data => {
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
           if (data.status === 'done' || data.status === 'failed') {
             window.location.reload();
           }
-          const meta = item.querySelector('.queue-item-meta');
-          if (meta && data.message) {
-            meta.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1) +
+          var el = document.querySelector('[data-job-id="' + jobId + '"]');
+          if (!el) return;
+          var detail = el.querySelector('.queue-detail');
+          if (detail && data.message) {
+            detail.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1) +
               (data.message ? ' \u2014 ' + data.message : '');
           }
         })
-        .catch(() => {});
+        .catch(function() {});
     });
   }
 
-  setInterval(pollStatuses, 3000);
+  setInterval(poll, 3000);
 })();
 </script>
 {% endblock %}

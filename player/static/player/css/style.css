@@ -2529,53 +2529,35 @@ body {
 }
 
 /* Queue page */
-.queue-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.queue-subtitle {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-secondary, #999);
+  margin: 0 0 12px;
 }
-.queue-item {
+.queue-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: var(--bg-card, #23272e);
-  border: 1px solid var(--border, #333);
-  border-radius: 10px;
+  gap: 14px;
   padding: 14px 18px;
 }
-.queue-item-status { flex-shrink: 0; width: 28px; display: flex; align-items: center; justify-content: center; }
-.queue-icon-done { color: #2ecc71; }
-.queue-icon-failed { color: #e74c3c; }
-.queue-icon-queued { color: var(--text-muted, #999); }
-.queue-icon-processing { color: var(--accent, #4a9eff); }
-.queue-item-info { flex: 1; min-width: 0; }
-.queue-item-title {
-  display: block;
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--text, #eee);
-  text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-a.queue-item-title:hover { color: var(--accent, #4a9eff); }
-.queue-item-meta {
+.queue-detail {
   display: block;
   font-size: 0.85rem;
-  color: var(--text-muted, #999);
+  color: var(--text-secondary, #999);
   margin-top: 2px;
 }
-.queue-item-time {
+.queue-time {
   display: block;
   font-size: 0.8rem;
-  color: var(--text-muted, #777);
+  color: var(--text-secondary, #777);
   margin-top: 2px;
 }
-.queue-item-actions {
+.queue-card-actions {
   flex-shrink: 0;
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  margin-left: auto;
   align-items: center;
 }
 .btn-sm {

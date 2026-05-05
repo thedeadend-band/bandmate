@@ -998,7 +998,7 @@ def is_demucs_available() -> bool:
 # ---------------------------------------------------------------------------
 
 _queue_lock = threading.Lock()
-_queue_running = False
+_queue_thread_active = False
 
 
 class _JobProgressAdapter:
@@ -1098,15 +1098,46 @@ def _finalize_song(job) -> None:
         lrc_path.write_text(job.lyrics_content.strip() + '\n', encoding='utf-8')
 
 
+def _queue_worker_loop() -> None:
+    """Process queued jobs one at a time until none remain.
+
+    Uses the DB to ensure only one job runs at a time across all processes:
+    skips starting if any job is already in 'processing' state.
+    """
+    global _queue_thread_active
+    from .models import StemSeparationJob
+    from django.db import transaction
+
+    try:
+        while True:
+            with transaction.atomic():
+                already_processing = StemSeparationJob.objects.filter(
+                    status='processing').exists()
+                if already_processing:
+                    break
+
+                job = (StemSeparationJob.objects
+                       .select_for_update(skip_locked=True)
+                       .filter(status='queued')
+                       .order_by('created_at')
+                       .first())
+                if not job:
+                    break
+                job.status = 'processing'
+                job.progress = 0
+                job.message = 'Starting stem separation...'
+                job.save()
+
+            _process_queue_job(job)
+    finally:
+        with _queue_lock:
+            _queue_thread_active = False
+
+
 def _process_queue_job(job) -> None:
     """Process a single queue job: run stem separation then finalize."""
     from .models import StemSeparationJob
     from django.utils import timezone
-
-    job.status = 'processing'
-    job.progress = 0
-    job.message = 'Starting stem separation...'
-    job.save()
 
     adapter = _JobProgressAdapter(job)
 
@@ -1147,32 +1178,17 @@ def _process_queue_job(job) -> None:
             pass
 
 
-def _queue_worker_loop() -> None:
-    """Process queued jobs sequentially until none remain."""
-    global _queue_running
-    from .models import StemSeparationJob
-
-    try:
-        while True:
-            job = (StemSeparationJob.objects
-                   .filter(status='queued')
-                   .order_by('created_at')
-                   .first())
-            if not job:
-                break
-            _process_queue_job(job)
-    finally:
-        with _queue_lock:
-            _queue_running = False
-
-
 def start_queue_worker() -> None:
-    """Start the queue worker thread if not already running."""
-    global _queue_running
+    """Start the queue worker thread if not already running in this process.
+
+    The DB-level check in _queue_worker_loop ensures only one job runs
+    at a time even across multiple gunicorn workers.
+    """
+    global _queue_thread_active
     with _queue_lock:
-        if _queue_running:
+        if _queue_thread_active:
             return
-        _queue_running = True
+        _queue_thread_active = True
 
     t = threading.Thread(target=_queue_worker_loop, daemon=True)
     t.start()
