@@ -114,3 +114,46 @@ if _proxy_header:
 _csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
 if _csrf_origins:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()]
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+_log_level = os.environ.get('DJANGO_LOG_LEVEL', 'WARNING' if not DEBUG else 'DEBUG')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{asctime} {levelname} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': _log_level,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': _log_level,
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'DEBUG' if _log_level == 'DEBUG' else 'ERROR',
+            'propagate': False,
+        },
+        'player': {
+            'handlers': ['console'],
+            'level': _log_level,
+            'propagate': False,
+        },
+    },
+}
