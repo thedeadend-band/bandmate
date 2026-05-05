@@ -26,7 +26,7 @@ USER_AGENT = 'BandMate SongWizard/1.0'
 # ---------------------------------------------------------------------------
 
 GETSONGBPM_BASE = 'https://api.getsongbpm.com'
-GETSONGKEY_BASE = 'https://api.getsongkey.com'
+GETSONGKEY_BASE = 'https://api.getsong.co'
 
 
 def _api_get(base_url: str, path: str, params: dict) -> dict:
