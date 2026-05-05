@@ -558,6 +558,13 @@ def step_review(request, wiz):
                 songs_dir = Path(settings.SONGS_DIR)
                 dir_name = f'{wiz.artist} - {wiz.title}'.replace('/', '-').replace('\\', '-')
                 song_dir = songs_dir / dir_name
+
+                if song_dir.exists():
+                    errors['finalize'] = (
+                        f'A song named "{dir_name}" already exists. '
+                        f'Delete it first or change the artist/title.')
+                    raise ValueError(errors['finalize'])
+
                 song_dir.mkdir(parents=True, exist_ok=True)
 
                 if staging:
@@ -594,6 +601,8 @@ def step_review(request, wiz):
 
                 return redirect('song_player', song_name=dir_name)
 
+            except ValueError:
+                pass  # errors already set above
             except Exception as e:
                 errors['finalize'] = f'Failed to create song: {e}'
 

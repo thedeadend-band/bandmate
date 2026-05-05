@@ -667,7 +667,7 @@ def setlist_edit(request, setlist_id: int):
         'form_name': request.POST.get('name', sl.name) if request.method == 'POST' and error else sl.name,
         'form_date': (
             request.POST.get('date', '') if request.method == 'POST' and error
-            else (sl.date.isoformat() if sl.date else '')
+            else (sl.date if isinstance(sl.date, str) else sl.date.isoformat() if sl.date else '')
         ),
         'error': error,
         'success': success,
@@ -841,19 +841,14 @@ def song_upload(request):
     if not names:
         return JsonResponse({'error': 'Zip file is empty'}, status=400)
 
-    # Determine folder name: use common top-level directory, or zip filename
+    # Determine wrapper directory structure
     top_dirs = set()
     for n in names:
         parts = n.split('/')
         if len(parts) > 1 and parts[0]:
             top_dirs.add(parts[0])
 
-    if len(top_dirs) == 1:
-        folder_name = top_dirs.pop()
-        has_wrapper = True
-    else:
-        folder_name = Path(uploaded.name).stem
-        has_wrapper = False
+    has_wrapper = len(top_dirs) == 1
 
     # Validate: at least one audio file in the zip
     audio_found = False
@@ -867,22 +862,46 @@ def song_upload(request):
             status=400,
         )
 
+    # Try to read info.json from the zip to get artist/title
+    info_json_path = None
+    for n in names:
+        rel = '/'.join(n.split('/')[1:]) if has_wrapper else n
+        if rel == 'info.json':
+            info_json_path = n
+            break
+
+    song_artist = ''
+    song_title = ''
+    if info_json_path:
+        try:
+            info_data = json.loads(zf.read(info_json_path).decode('utf-8'))
+            song_artist = info_data.get('artist', '').strip()
+            song_title = info_data.get('title', '').strip()
+        except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
+            pass
+
+    if song_artist and song_title:
+        folder_name = f'{song_artist} - {song_title}'.replace('/', '-').replace('\\', '-')
+    elif has_wrapper:
+        folder_name = top_dirs.pop()
+    else:
+        folder_name = Path(uploaded.name).stem
+
     songs_dir = _songs_dir()
     dest = songs_dir / folder_name
 
-    # Conflict detection
-    if dest.exists() and not request.POST.get('confirm'):
-        return JsonResponse({'exists': True, 'name': folder_name})
-
+    # Conflict detection — error if song already exists
     if dest.exists():
-        shutil.rmtree(dest)
+        return JsonResponse(
+            {'error': f'Song "{folder_name}" already exists. Delete it first or rename.'},
+            status=409,
+        )
 
     dest.mkdir(parents=True, exist_ok=True)
 
     for member in names:
         if member.endswith('/'):
             continue
-        # Strip the wrapper directory if present
         if has_wrapper:
             rel = '/'.join(member.split('/')[1:])
         else:

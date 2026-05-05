@@ -84,14 +84,13 @@
   input.addEventListener('change', () => {
     const file = input.files[0];
     if (!file) return;
-    uploadZip(file, false);
+    uploadZip(file);
     input.value = '';
   });
 
-  function uploadZip(file, confirm) {
+  function uploadZip(file) {
     const form = new FormData();
     form.append('zipfile', file);
-    if (confirm) form.append('confirm', '1');
 
     const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
       || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
@@ -108,12 +107,6 @@
       if (data.error) {
         alert('Upload failed: ' + data.error);
         resetBtn();
-      } else if (data.exists) {
-        if (window.confirm('"' + data.name + '" already exists. Overwrite it?')) {
-          uploadZip(file, true);
-        } else {
-          resetBtn();
-        }
       } else if (data.ok) {
         window.location.reload();
       }
