@@ -32,8 +32,15 @@ urlpatterns = [
     path('setlists/<int:setlist_id>/edit/', views.setlist_edit, name='setlist_edit'),
     path('setlists/<int:setlist_id>/delete/', views.setlist_delete, name='setlist_delete'),
     path('setlists/<int:setlist_id>/play/', views.setlist_player, name='setlist_player'),
+    path('setlists/import/spotify/', views.setlist_import_spotify, name='setlist_import_spotify'),
+    path('setlists/<int:setlist_id>/export-spotify/', views.setlist_export_spotify, name='setlist_export_spotify'),
     path('setlists/<int:setlist_id>/export/', views.setlist_export, name='setlist_export'),
     path('setlists/<int:setlist_id>/export-midi/', views.setlist_export_midi, name='setlist_export_midi'),
+    # Spotify OAuth
+    path('spotify/connect/', views.spotify_connect, name='spotify_connect'),
+    path('spotify/callback/', views.spotify_callback, name='spotify_callback'),
+    path('spotify/disconnect/', views.spotify_disconnect, name='spotify_disconnect'),
+    path('api/spotify/search-track/', views.spotify_track_search_api, name='spotify_track_search_api'),
     # Lyrics
     path('lyrics/', views.lyrics_home, name='lyrics_home'),
     path('lyrics/setlists/<int:setlist_id>/', views.lyrics_setlist_player, name='lyrics_setlist_player'),
@@ -41,6 +48,7 @@ urlpatterns = [
     path('api/songs/<str:song_name>/master/audio/', views.master_audio, name='master_audio'),
     path('api/songs/<str:song_name>/master/waveform/', views.master_waveform, name='master_waveform'),
     path('api/songs/<str:song_name>/info/', views.song_info_api, name='song_info_api'),
+    path('api/songs/<str:song_name>/links/', views.song_links_update, name='song_links_update'),
     # Calendar
     path('calendar/', views.calendar_view, name='calendar'),
     # Download Tracks

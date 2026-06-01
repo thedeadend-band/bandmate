@@ -4,7 +4,20 @@
 {% block content %}
 <div class="section-header">
   <h1 class="page-title">Setlists</h1>
-  <a href="{% url 'setlist_create' %}" class="btn btn-add">+ New Setlist</a>
+  <div class="section-header-actions">
+    {% if spotify_configured %}
+      {% if has_spotify %}
+      <a href="{% url 'setlist_import_spotify' %}" class="btn btn-secondary">Import Spotify</a>
+      <form method="post" action="{% url 'spotify_disconnect' %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-secondary">Disconnect Spotify</button>
+      </form>
+      {% else %}
+      <a href="{% url 'spotify_connect' %}?next={% url 'setlist_list' %}" class="btn btn-secondary">Connect Spotify</a>
+      {% endif %}
+    {% endif %}
+    <a href="{% url 'setlist_create' %}" class="btn btn-add">+ New Setlist</a>
+  </div>
 </div>
 
 {% if setlists %}
@@ -55,6 +68,13 @@
           <circle cx="18" cy="14" r="1.2" fill="currentColor" stroke="none"/>
         </svg>
       </a>
+      {% if spotify_configured %}
+      <a href="{% url 'setlist_export_spotify' sl.pk %}" class="admin-action-btn" title="Export to Spotify">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><path d="M7 10c3-1 7-1 10 1"/><path d="M8 13c2-.8 5-.8 8 .4"/><path d="M9 16c1.5-.4 3.2-.4 5 .2"/>
+        </svg>
+      </a>
+      {% endif %}
       <a href="{% url 'setlist_edit' sl.pk %}" class="admin-action-btn" title="Edit">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>

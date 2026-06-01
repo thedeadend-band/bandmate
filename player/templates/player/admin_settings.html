@@ -41,6 +41,23 @@
            class="form-input" autocomplete="off">
   </div>
 
+  <h3 class="admin-section-title">Spotify Integration</h3>
+  <p class="form-hint" style="margin-bottom:12px">
+    Configure Spotify app credentials so users can import/export setlists from/to Spotify playlists.
+    In your Spotify developer app, add this Redirect URI:
+    <code>{{ request.scheme }}://{{ request.get_host }}/spotify/callback/</code>
+  </p>
+  <div class="form-group">
+    <label for="spotify_client_id">Spotify Client ID</label>
+    <input type="text" id="spotify_client_id" name="spotify_client_id"
+           value="{{ site.spotify_client_id }}" class="form-input" autocomplete="off">
+  </div>
+  <div class="form-group">
+    <label for="spotify_client_secret">Spotify Client Secret</label>
+    <input type="password" id="spotify_client_secret" name="spotify_client_secret"
+           value="{{ site.spotify_client_secret }}" class="form-input" autocomplete="off">
+  </div>
+
   <button type="submit" class="btn btn-add">Save</button>
 </form>
 {% endblock %}

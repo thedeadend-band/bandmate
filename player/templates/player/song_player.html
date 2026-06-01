@@ -19,6 +19,8 @@
     </svg>
     Download ZIP
   </a>
+  <button type="button" class="download-zip-btn" id="link-spotify-btn">Link to Spotify</button>
+  <button type="button" class="download-zip-btn" id="link-youtube-btn">Link to YouTube</button>
 </div>
 
 {% if song_info.artist and song_info.title %}
@@ -26,6 +28,21 @@
 {% else %}
 <h1 class="song-title">{{ song_name }}</h1>
 {% endif %}
+
+<div id="song-link-panel" class="song-link-panel" hidden>
+  <div class="song-link-header">
+    <strong id="song-link-title">Link Track</strong>
+    <button type="button" class="btn btn-secondary" id="song-link-close">Close</button>
+  </div>
+  <div id="song-link-current" class="song-link-current"></div>
+  <div class="song-link-controls">
+    <input type="text" id="song-link-query" class="form-input" placeholder="">
+    <button type="button" class="btn btn-secondary" id="song-link-search">Search</button>
+    <button type="button" class="btn btn-primary" id="song-link-save">Save Link</button>
+    <button type="button" class="btn btn-danger" id="song-link-clear">Clear Link</button>
+  </div>
+  <div id="song-link-results" class="song-link-results"></div>
+</div>
 
 {% if song_info %}
 <div class="song-info-panel">
@@ -214,4 +231,124 @@
   const SONG_NAME = "{{ song_name|escapejs }}";
 </script>
 <script src="{% static 'player/js/player.js' %}"></script>
+<script>
+(function() {
+  const panel = document.getElementById('song-link-panel');
+  const openSpotifyBtn = document.getElementById('link-spotify-btn');
+  const openYoutubeBtn = document.getElementById('link-youtube-btn');
+  const closeBtn = document.getElementById('song-link-close');
+  const titleEl = document.getElementById('song-link-title');
+  const currentEl = document.getElementById('song-link-current');
+  const queryEl = document.getElementById('song-link-query');
+  const searchBtn = document.getElementById('song-link-search');
+  const saveBtn = document.getElementById('song-link-save');
+  const clearBtn = document.getElementById('song-link-clear');
+  const resultsEl = document.getElementById('song-link-results');
+  if (!panel) return;
+
+  let mode = 'spotify';
+  let selected = null;
+  let songInfo = {};
+  try { songInfo = JSON.parse(document.getElementById('song-info-data')?.textContent || '{}'); } catch (_) {}
+
+  function csrfToken() {
+    const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function renderCurrent() {
+    if (mode === 'spotify') {
+      currentEl.textContent = songInfo.spotify_track_uri ? `Current: ${songInfo.spotify_track_uri}` : 'Current: none';
+      queryEl.placeholder = 'Spotify URI/URL or search query';
+    } else {
+      currentEl.textContent = songInfo.youtube_video_id
+        ? `Current: ${songInfo.youtube_video_id}${songInfo.youtube_title ? ' (' + songInfo.youtube_title + ')' : ''}`
+        : 'Current: none';
+      queryEl.placeholder = 'YouTube URL/video id or search query';
+    }
+  }
+
+  function openPanel(nextMode) {
+    mode = nextMode;
+    selected = null;
+    queryEl.value = '';
+    resultsEl.innerHTML = '';
+    titleEl.textContent = mode === 'spotify' ? 'Link Spotify Track' : 'Link YouTube Track';
+    renderCurrent();
+    panel.hidden = false;
+  }
+
+  async function search() {
+    const q = queryEl.value.trim();
+    if (!q) return;
+    selected = null;
+    resultsEl.textContent = 'Searching...';
+    const url = mode === 'spotify'
+      ? `{% url 'spotify_track_search_api' %}?q=${encodeURIComponent(q)}`
+      : `{% url 'download_tracks_search' %}?q=${encodeURIComponent(q)}`;
+    const r = await fetch(url);
+    const data = await r.json();
+    const items = mode === 'spotify' ? (data.results || []) : (data.results || []);
+    if (!items.length) {
+      resultsEl.textContent = 'No results';
+      return;
+    }
+    resultsEl.innerHTML = '';
+    items.slice(0, 10).forEach((item) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'song-link-result';
+      const val = mode === 'spotify' ? item.uri : item.video_id;
+      row.dataset.value = val;
+      row.dataset.title = item.name || item.title || '';
+      row.textContent = mode === 'spotify'
+        ? `${item.name} — ${item.artist}`
+        : `${item.title}`;
+      row.addEventListener('click', () => {
+        selected = { value: val, title: row.dataset.title };
+        queryEl.value = val;
+        Array.from(resultsEl.querySelectorAll('.song-link-result')).forEach(n => n.classList.remove('active'));
+        row.classList.add('active');
+      });
+      resultsEl.appendChild(row);
+    });
+  }
+
+  async function save(clearOnly) {
+    const raw = clearOnly ? '' : (selected?.value || queryEl.value.trim());
+    const body = new URLSearchParams();
+    if (mode === 'spotify') {
+      body.append('spotify_track', raw);
+      body.append('youtube_video', songInfo.youtube_video_id || '');
+      body.append('youtube_title', songInfo.youtube_title || '');
+    } else {
+      body.append('spotify_track', songInfo.spotify_track_uri || '');
+      body.append('youtube_video', raw);
+      body.append('youtube_title', selected?.title || '');
+    }
+    const resp = await fetch(`{% url 'song_links_update' song_name %}`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken(), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      songInfo.spotify_track_uri = data.spotify_track_uri || '';
+      songInfo.youtube_video_id = data.youtube_video_id || '';
+      songInfo.youtube_title = data.youtube_title || '';
+      renderCurrent();
+      resultsEl.textContent = 'Saved';
+    } else {
+      resultsEl.textContent = 'Failed to save';
+    }
+  }
+
+  openSpotifyBtn?.addEventListener('click', () => openPanel('spotify'));
+  openYoutubeBtn?.addEventListener('click', () => openPanel('youtube'));
+  closeBtn?.addEventListener('click', () => { panel.hidden = true; });
+  searchBtn?.addEventListener('click', search);
+  saveBtn?.addEventListener('click', () => save(false));
+  clearBtn?.addEventListener('click', () => save(true));
+})();
+</script>
 {% endblock %}

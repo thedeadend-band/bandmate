@@ -409,6 +409,9 @@ def step_stem_separation(request, wiz):
             stems = request.POST.getlist('stems')
             valid_stems = {'Vocals', 'Drums', 'Bass', 'Guitar', 'Keys', 'Other'}
             selected = [s for s in stems if s in valid_stems] or list(valid_stems)
+            spotify_track_uri = request.POST.get('spotify_track_uri', '').strip()
+            wiz.spotify_track_uri = spotify_track_uri
+            wiz.save(update_fields=['spotify_track_uri'])
 
             songs_dir = Path(settings.SONGS_DIR)
             dir_name = f'{wiz.artist} - {wiz.title}'.replace('/', '-').replace('\\', '-')
@@ -434,6 +437,8 @@ def step_stem_separation(request, wiz):
                     lyrics_content=wiz.lyrics_content,
                     lyric_offset_secs=wiz.lyric_offset_secs,
                     band_details=wiz.band_details or {},
+                    youtube_selection=wiz.youtube_selection or {},
+                    spotify_track_uri=wiz.spotify_track_uri or '',
                 )
                 wiz.current_step = 'complete'
                 wiz.staging_dir = ''
@@ -465,6 +470,8 @@ def step_stem_separation(request, wiz):
                     lyrics_content=wiz.lyrics_content,
                     lyric_offset_secs=wiz.lyric_offset_secs,
                     band_details=wiz.band_details or {},
+                    youtube_selection=wiz.youtube_selection or {},
+                    spotify_track_uri=wiz.spotify_track_uri or '',
                     status='queued',
                 )
                 wiz.current_step = 'complete'

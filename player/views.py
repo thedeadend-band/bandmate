@@ -1,4 +1,5 @@
 import hashlib
+import base64
 import json
 import re
 import shutil
@@ -6,8 +7,13 @@ import subprocess
 import zipfile
 from functools import wraps
 from pathlib import Path
+from urllib.parse import quote, urlencode, urlparse
 
 import numpy as np
+from django.utils import timezone
+from datetime import timedelta
+from urllib import request as urlrequest
+from urllib import error as urlerror
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
@@ -16,9 +22,10 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.models import User
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
-from .models import Setlist, SetlistEntry, SiteSettings
+from .models import Setlist, SetlistEntry, SiteSettings, SpotifyConnection
 
 
 def _staff_required(view_func):
@@ -127,6 +134,11 @@ def _load_song_info(song_path: Path):
         return None
 
 
+def _save_song_info(song_path: Path, data: dict):
+    info_path = song_path / 'info.json'
+    info_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
+
+
 def _load_lyrics(song_path: Path):
     """Read lyrics.lrc and return list of {time, text} dicts, or None."""
     lrc_path = song_path / 'lyrics.lrc'
@@ -146,6 +158,161 @@ def _load_lyrics(song_path: Path):
                 'text': m.group(2),
             })
     return result if result else None
+
+
+SPOTIFY_SCOPES = (
+    'playlist-read-private '
+    'playlist-read-collaborative '
+    'playlist-modify-private '
+    'playlist-modify-public '
+    'user-read-private'
+)
+SPOTIFY_BREAK_TRACK_URI = 'spotify:track:5kiJ9x6eX37H5J9lyyXkua'
+
+
+def _spotify_config():
+    site = SiteSettings.load()
+    client_id = (site.spotify_client_id or '').strip()
+    client_secret = (site.spotify_client_secret or '').strip()
+    return client_id, client_secret
+
+
+def _spotify_redirect_uri(request):
+    return request.build_absolute_uri('/spotify/callback/')
+
+
+def _spotify_call(method, url, access_token, payload=None):
+    data = None
+    headers = {'Authorization': f'Bearer {access_token}'}
+    if payload is not None:
+        data = json.dumps(payload).encode('utf-8')
+        headers['Content-Type'] = 'application/json'
+    req = urlrequest.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urlrequest.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode('utf-8') if resp.readable() else ''
+            if not raw:
+                return {}
+            return json.loads(raw)
+    except urlerror.HTTPError as e:
+        detail = e.read().decode('utf-8', errors='replace') if hasattr(e, 'read') else str(e)
+        raise RuntimeError(f'Spotify API error ({e.code}): {detail[:300]}')
+
+
+def _spotify_refresh(connection):
+    client_id, client_secret = _spotify_config()
+    if not client_id or not client_secret:
+        raise RuntimeError('Spotify client ID/secret are not configured in admin settings.')
+    if not connection.refresh_token:
+        raise RuntimeError('Missing Spotify refresh token. Reconnect your account.')
+
+    token_url = 'https://accounts.spotify.com/api/token'
+    creds = base64.b64encode(f'{client_id}:{client_secret}'.encode('utf-8')).decode('utf-8')
+    body = urlencode({
+        'grant_type': 'refresh_token',
+        'refresh_token': connection.refresh_token,
+    }).encode('utf-8')
+    req = urlrequest.Request(
+        token_url,
+        data=body,
+        method='POST',
+        headers={
+            'Authorization': f'Basic {creds}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+    )
+    with urlrequest.urlopen(req, timeout=30) as resp:
+        token_data = json.loads(resp.read().decode('utf-8'))
+
+    connection.access_token = token_data.get('access_token', '')
+    expires_in = int(token_data.get('expires_in', 3600))
+    connection.token_expires_at = timezone.now() + timedelta(seconds=max(60, expires_in - 60))
+    new_refresh = token_data.get('refresh_token')
+    if new_refresh:
+        connection.refresh_token = new_refresh
+    connection.save(update_fields=['access_token', 'refresh_token', 'token_expires_at', 'updated_at'])
+
+
+def _spotify_access_token(request):
+    conn = getattr(request.user, 'spotify_connection', None)
+    if not conn:
+        raise RuntimeError('Spotify is not connected for this user.')
+    if conn.token_expired():
+        _spotify_refresh(conn)
+        conn.refresh_from_db()
+    return conn.access_token
+
+
+def _spotify_playlist_id(value):
+    raw = (value or '').strip()
+    if not raw:
+        return ''
+    if raw.startswith('spotify:playlist:'):
+        return raw.split(':')[-1]
+    if '/playlist/' in raw:
+        p = urlparse(raw)
+        try:
+            return p.path.split('/playlist/')[1].split('/')[0]
+        except Exception:
+            return ''
+    return raw
+
+
+def _spotify_track_uri(value):
+    raw = (value or '').strip()
+    if not raw:
+        return ''
+    if raw.startswith('spotify:track:'):
+        return raw
+    if '/track/' in raw:
+        p = urlparse(raw)
+        try:
+            tid = p.path.split('/track/')[1].split('/')[0]
+            return f'spotify:track:{tid}'
+        except Exception:
+            return ''
+    if re.fullmatch(r'[A-Za-z0-9]{22}', raw):
+        return f'spotify:track:{raw}'
+    return raw if raw.startswith('spotify:') else ''
+
+
+def _youtube_video_id(value):
+    raw = (value or '').strip()
+    if not raw:
+        return ''
+    if re.fullmatch(r'[A-Za-z0-9_-]{11}', raw):
+        return raw
+    if 'youtu.be/' in raw:
+        try:
+            return raw.split('youtu.be/')[1].split('?')[0].split('&')[0]
+        except Exception:
+            return ''
+    if 'youtube.com' in raw and 'v=' in raw:
+        try:
+            return raw.split('v=')[1].split('&')[0]
+        except Exception:
+            return ''
+    return ''
+
+
+def _spotify_search_tracks(access_token, query, limit=5):
+    data = _spotify_call(
+        'GET',
+        f'https://api.spotify.com/v1/search?{urlencode({"q": query, "type": "track", "limit": limit})}',
+        access_token,
+    )
+    tracks = []
+    for t in (data.get('tracks', {}).get('items') or []):
+        artists = ', '.join([a.get('name', '') for a in (t.get('artists') or []) if a.get('name')])
+        title = t.get('name', '')
+        label = f'{artists} - {title}' if artists else title
+        tracks.append({
+            'uri': t.get('uri', ''),
+            'name': title,
+            'artist': artists,
+            'label': label.strip(' -'),
+        })
+    return tracks
 
 
 def _get_available_songs() -> list[dict]:
@@ -169,6 +336,10 @@ def _get_available_songs() -> list[dict]:
                             entry['artist'] = info['artist']
                         if info.get('title'):
                             entry['title'] = info['title']
+                        if info.get('spotify_track_uri'):
+                            entry['spotify_track_uri'] = info['spotify_track_uri']
+                        if info.get('youtube_video_id'):
+                            entry['youtube_video_id'] = info['youtube_video_id']
                     songs.append(entry)
     return songs
 
@@ -534,6 +705,8 @@ def admin_settings(request):
     if request.method == 'POST':
         site.google_calendar_url = request.POST.get('google_calendar_url', '').strip()
         site.song_api_key = request.POST.get('song_api_key', '').strip()
+        site.spotify_client_id = request.POST.get('spotify_client_id', '').strip()
+        site.spotify_client_secret = request.POST.get('spotify_client_secret', '').strip()
         site.save()
         success = 'Settings saved.'
     return render(request, 'player/admin_settings.html', {
@@ -572,8 +745,12 @@ BREAK_SENTINEL = '__BREAK__'
 @login_required
 def setlist_list(request):
     setlists = Setlist.objects.select_related('owner').prefetch_related('entries')
+    has_spotify = SpotifyConnection.objects.filter(user=request.user).exists()
+    spotify_configured = bool(_spotify_config()[0] and _spotify_config()[1])
     return render(request, 'player/setlist_list.html', {
         'setlists': setlists,
+        'has_spotify': has_spotify,
+        'spotify_configured': spotify_configured,
         'nav_active': 'setlists',
     })
 
@@ -657,6 +834,343 @@ def lyrics_song_player(request, song_name: str):
         'item': item,
         'nav_active': 'lyrics',
     })
+
+
+@login_required
+def spotify_connect(request):
+    client_id, _ = _spotify_config()
+    if not client_id:
+        return JsonResponse({'error': 'Spotify client ID is not configured by admin.'}, status=400)
+    state = hashlib.sha256(f'{request.user.pk}:{timezone.now().timestamp()}'.encode('utf-8')).hexdigest()
+    request.session['spotify_oauth_state'] = state
+    request.session['spotify_oauth_next'] = request.GET.get('next', '/setlists/')
+    params = urlencode({
+        'client_id': client_id,
+        'response_type': 'code',
+        'redirect_uri': _spotify_redirect_uri(request),
+        'scope': SPOTIFY_SCOPES,
+        'state': state,
+        'show_dialog': 'true',
+    })
+    return redirect(f'https://accounts.spotify.com/authorize?{params}')
+
+
+@login_required
+def spotify_callback(request):
+    state = request.GET.get('state', '')
+    expected = request.session.get('spotify_oauth_state', '')
+    if not state or state != expected:
+        return JsonResponse({'error': 'Invalid Spotify OAuth state.'}, status=400)
+    code = request.GET.get('code', '')
+    if not code:
+        return JsonResponse({'error': 'Missing Spotify authorization code.'}, status=400)
+
+    client_id, client_secret = _spotify_config()
+    if not client_id or not client_secret:
+        return JsonResponse({'error': 'Spotify client credentials are not configured.'}, status=400)
+
+    token_url = 'https://accounts.spotify.com/api/token'
+    creds = base64.b64encode(f'{client_id}:{client_secret}'.encode('utf-8')).decode('utf-8')
+    body = urlencode({
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': _spotify_redirect_uri(request),
+    }).encode('utf-8')
+    req = urlrequest.Request(
+        token_url,
+        data=body,
+        method='POST',
+        headers={
+            'Authorization': f'Basic {creds}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+    )
+    with urlrequest.urlopen(req, timeout=30) as resp:
+        token_data = json.loads(resp.read().decode('utf-8'))
+
+    access = token_data.get('access_token', '')
+    refresh = token_data.get('refresh_token', '')
+    expires_in = int(token_data.get('expires_in', 3600))
+    me = _spotify_call('GET', 'https://api.spotify.com/v1/me', access)
+
+    conn, _ = SpotifyConnection.objects.get_or_create(user=request.user)
+    conn.spotify_user_id = me.get('id', '')
+    conn.access_token = access
+    conn.refresh_token = refresh or conn.refresh_token
+    conn.token_expires_at = timezone.now() + timedelta(seconds=max(60, expires_in - 60))
+    conn.save()
+
+    next_url = request.session.pop('spotify_oauth_next', '/setlists/')
+    request.session.pop('spotify_oauth_state', None)
+    return redirect(next_url)
+
+
+@login_required
+@require_POST
+def spotify_disconnect(request):
+    SpotifyConnection.objects.filter(user=request.user).delete()
+    return redirect('setlist_list')
+
+
+@login_required
+def setlist_import_spotify(request):
+    error = None
+    review_rows = None
+    playlist_name = ''
+    playlist_ref = ''
+    available = _get_available_songs()
+    available_choices = sorted([s['name'] for s in available], key=lambda x: x.lower())
+    editable_setlists = Setlist.objects.filter(owner=request.user).order_by('-updated_at')
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'load')
+        if action == 'load':
+            playlist_id = _spotify_playlist_id(request.POST.get('playlist', ''))
+            if not playlist_id:
+                error = 'Enter a Spotify playlist URL, URI, or ID.'
+            else:
+                try:
+                    token = _spotify_access_token(request)
+                    playlist = _spotify_call(
+                        'GET',
+                        f'https://api.spotify.com/v1/playlists/{quote(playlist_id)}',
+                        token,
+                    )
+                    playlist_name = (playlist.get('name') or 'Spotify Playlist').strip()[:255]
+                    tracks = playlist.get('tracks', {}).get('items', [])
+                    rows = []
+
+                    by_norm = {}
+                    by_uri = {}
+                    for s in available:
+                        key = s.get('name', '').lower().strip()
+                        by_norm[key] = s['name']
+                        if s.get('artist') and s.get('title'):
+                            by_norm[f"{s['artist']} - {s['title']}".lower().strip()] = s['name']
+                        if s.get('spotify_track_uri'):
+                            by_uri[s['spotify_track_uri']] = s['name']
+
+                    for item in tracks:
+                        tr = (item or {}).get('track') or {}
+                        tname = (tr.get('name') or '').strip()
+                        artists = tr.get('artists') or []
+                        aname = (artists[0].get('name') if artists else '') or ''
+                        spotify_label = f'{aname} - {tname}'.strip(' -')
+                        spotify_uri = tr.get('uri', '')
+                        match = by_uri.get(spotify_uri, '')
+                        candidates = [spotify_label.lower().strip(), tname.lower().strip()]
+                        for c in candidates:
+                            if not match and c in by_norm:
+                                match = by_norm[c]
+                                break
+                        rows.append({
+                            'spotify_label': spotify_label,
+                            'spotify_uri': spotify_uri,
+                            'bandmate_match': match,
+                        })
+
+                    review_rows = rows
+                    playlist_ref = playlist_id
+                except RuntimeError as e:
+                    error = str(e)
+                except Exception:
+                    error = 'Failed to load Spotify playlist.'
+
+        elif action == 'apply':
+            playlist_ref = request.POST.get('playlist_ref', '').strip()
+            playlist_name = (request.POST.get('playlist_name', '').strip() or 'Spotify Import')[:255]
+            target = request.POST.get('target_setlist', '__new__').strip()
+            labels = request.POST.getlist('spotify_label')
+            uris = request.POST.getlist('spotify_uri')
+            matches = request.POST.getlist('bandmate_match')
+            review_rows = []
+            for i, label in enumerate(labels):
+                review_rows.append({
+                    'spotify_label': label,
+                    'spotify_uri': uris[i] if i < len(uris) else '',
+                    'bandmate_match': matches[i] if i < len(matches) else '',
+                })
+
+            selected = [m.strip() for m in matches if m.strip()]
+            if not selected:
+                error = 'Select at least one BandMate track (or load another playlist).'
+            else:
+                if target == '__new__':
+                    sl = Setlist.objects.create(name=playlist_name, owner=request.user)
+                else:
+                    sl = get_object_or_404(Setlist, pk=int(target), owner=request.user)
+                    sl.name = playlist_name or sl.name
+                    sl.save(update_fields=['name', 'updated_at'])
+                    sl.entries.all().delete()
+                for i, song_name in enumerate(selected):
+                    SetlistEntry.objects.create(
+                        setlist=sl, song_name=song_name, position=i, is_break=False
+                    )
+                # Persist imported Spotify links for future import/export matching.
+                for i, song_name in enumerate(matches):
+                    song_name = song_name.strip()
+                    if not song_name:
+                        continue
+                    spotify_uri = (uris[i] if i < len(uris) else '').strip()
+                    parsed_uri = _spotify_track_uri(spotify_uri)
+                    if not parsed_uri:
+                        continue
+                    try:
+                        spath = _safe_song_path(song_name)
+                        sinfo = _load_song_info(spath) or {}
+                        sinfo['spotify_track_uri'] = parsed_uri
+                        if not sinfo.get('title'):
+                            sinfo['title'] = song_name
+                        _save_song_info(spath, sinfo)
+                    except Http404:
+                        continue
+                return redirect('setlist_edit', setlist_id=sl.pk)
+
+    return render(request, 'player/setlist_import_spotify.html', {
+        'error': error,
+        'review_rows': review_rows,
+        'playlist_name': playlist_name,
+        'playlist_ref': playlist_ref,
+        'available_choices': available_choices,
+        'editable_setlists': editable_setlists,
+        'nav_active': 'setlists',
+    })
+
+
+@login_required
+def setlist_export_spotify(request, setlist_id: int):
+    sl = get_object_or_404(Setlist, pk=setlist_id)
+    if sl.owner != request.user and not request.user.is_staff:
+        raise Http404
+    error = None
+    rows = []
+    playlist_name = sl.name
+    target_playlist = ''
+    create_new = True
+
+    try:
+        token = _spotify_access_token(request)
+    except RuntimeError as e:
+        token = None
+        error = str(e)
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'search')
+        labels = request.POST.getlist('bandmate_label')
+        uris = request.POST.getlist('spotify_uri')
+        queries = request.POST.getlist('spotify_query')
+        for i, label in enumerate(labels):
+            rows.append({
+                'bandmate_label': label,
+                'spotify_uri': uris[i] if i < len(uris) else '',
+                'spotify_query': queries[i] if i < len(queries) else '',
+            })
+        playlist_name = request.POST.get('playlist_name', sl.name).strip() or sl.name
+        target_playlist = request.POST.get('target_playlist', '').strip()
+        create_new = request.POST.get('create_new') == '1'
+
+        if action == 'apply':
+            final_uris = [r['spotify_uri'].strip() for r in rows if r['spotify_uri'].strip()]
+            try:
+                if create_new or not target_playlist:
+                    me = _spotify_call('GET', 'https://api.spotify.com/v1/me', token)
+                    user_id = me.get('id')
+                    if not user_id:
+                        raise RuntimeError('Could not determine Spotify user.')
+                    playlist = _spotify_call(
+                        'POST',
+                        f'https://api.spotify.com/v1/users/{quote(user_id)}/playlists',
+                        token,
+                        payload={
+                            'name': playlist_name[:255],
+                            'description': f'Exported from BandMate setlist #{sl.pk}',
+                            'public': False,
+                        },
+                    )
+                    playlist_id = playlist.get('id')
+                    if not playlist_id:
+                        raise RuntimeError('Failed to create Spotify playlist.')
+                else:
+                    playlist_id = _spotify_playlist_id(target_playlist)
+                    if not playlist_id:
+                        raise RuntimeError('Invalid target Spotify playlist URL/ID.')
+
+                # Replace all tracks in target playlist.
+                _spotify_call(
+                    'PUT',
+                    f'https://api.spotify.com/v1/playlists/{quote(playlist_id)}/tracks',
+                    token,
+                    payload={'uris': final_uris},
+                )
+                return redirect('setlist_list')
+            except RuntimeError as e:
+                error = str(e)
+            except Exception:
+                error = 'Failed to export to Spotify.'
+
+    if not rows and token:
+        for entry in sl.entries.order_by('position'):
+            if entry.is_break:
+                rows.append({
+                    'bandmate_label': '— Break —',
+                    'spotify_uri': SPOTIFY_BREAK_TRACK_URI,
+                    'spotify_query': '',
+                    'is_break': True,
+                })
+                continue
+            try:
+                song_path = _safe_song_path(entry.song_name)
+                info = _load_song_info(song_path) or {}
+            except Http404:
+                info = {}
+            title = info.get('title') or entry.song_name
+            artist = info.get('artist') or ''
+            label = f'{artist} - {title}'.strip(' -')
+            q = f'track:{title}'
+            if artist:
+                q += f' artist:{artist}'
+            match_uri = ''
+            linked_uri = info.get('spotify_track_uri', '').strip()
+            if linked_uri:
+                match_uri = linked_uri
+            try:
+                if not match_uri:
+                    results = _spotify_search_tracks(token, q, limit=1)
+                else:
+                    results = []
+                if not match_uri and results:
+                    match_uri = results[0]['uri']
+            except Exception:
+                pass
+            rows.append({
+                'bandmate_label': label,
+                'spotify_uri': match_uri,
+                'spotify_query': f'{artist} {title}'.strip(),
+                'is_break': False,
+            })
+
+    return render(request, 'player/setlist_export_spotify_review.html', {
+        'setlist': sl,
+        'rows': rows,
+        'playlist_name': playlist_name,
+        'target_playlist': target_playlist,
+        'create_new': create_new,
+        'error': error,
+        'nav_active': 'setlists',
+    })
+
+
+@login_required
+def spotify_track_search_api(request):
+    q = request.GET.get('q', '').strip()
+    if not q:
+        return JsonResponse({'results': []})
+    try:
+        token = _spotify_access_token(request)
+        results = _spotify_search_tracks(token, q, limit=8)
+        return JsonResponse({'results': results})
+    except Exception:
+        return JsonResponse({'results': []})
 
 
 @login_required
@@ -889,6 +1403,40 @@ def song_info_api(request, song_name: str):
     info = _load_song_info(song_path)
     lyrics = _load_lyrics(song_path)
     return JsonResponse({'info': info, 'lyrics': lyrics})
+
+
+@login_required
+@require_POST
+def song_links_update(request, song_name: str):
+    song_path = _safe_song_path(song_name)
+    info = _load_song_info(song_path) or {}
+
+    spotify_uri = _spotify_track_uri(request.POST.get('spotify_track', ''))
+    youtube_id = _youtube_video_id(request.POST.get('youtube_video', ''))
+    youtube_title = request.POST.get('youtube_title', '').strip()
+
+    if spotify_uri:
+        info['spotify_track_uri'] = spotify_uri
+    else:
+        info.pop('spotify_track_uri', None)
+
+    if youtube_id:
+        info['youtube_video_id'] = youtube_id
+        if youtube_title:
+            info['youtube_title'] = youtube_title
+    else:
+        info.pop('youtube_video_id', None)
+        info.pop('youtube_title', None)
+
+    if not info.get('title'):
+        info['title'] = song_name
+    _save_song_info(song_path, info)
+    return JsonResponse({
+        'ok': True,
+        'spotify_track_uri': info.get('spotify_track_uri', ''),
+        'youtube_video_id': info.get('youtube_video_id', ''),
+        'youtube_title': info.get('youtube_title', ''),
+    })
 
 
 # ---------------------------------------------------------------------------

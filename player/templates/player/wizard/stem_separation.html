@@ -31,6 +31,13 @@
 
   <form method="post">
     {% csrf_token %}
+    <div class="form-group" style="max-width:760px;margin-bottom:14px">
+      <label for="spotify_track_uri">Optional Spotify Track Link</label>
+      <input type="text" id="spotify_track_uri" name="spotify_track_uri" class="form-input"
+             value="{{ wizard.spotify_track_uri }}"
+             placeholder="spotify:track:... or https://open.spotify.com/track/...">
+      <p class="form-hint">This can be changed later from the song page using “Link to Spotify”.</p>
+    </div>
     <div class="wiz-stems-grid">
       {% for name in stem_names %}
       <label class="wiz-stem-card{% if name in existing_stems %} wiz-stem-done{% endif %}">

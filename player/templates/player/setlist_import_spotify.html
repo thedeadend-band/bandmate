@@ -1,0 +1,74 @@
+{% extends "player/base.html" %}
+{% block title %}Import Spotify Playlist – BandMate{% endblock %}
+
+{% block content %}
+<a href="{% url 'setlist_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Setlists
+</a>
+
+<h1 class="page-title">Import Spotify Playlist</h1>
+
+{% if error %}
+<div class="error-message">{{ error }}</div>
+{% endif %}
+
+{% if not review_rows %}
+<form method="post" class="admin-form" style="max-width:720px">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="load">
+  <div class="form-group">
+    <label for="playlist">Spotify Playlist URL, URI, or ID</label>
+    <input id="playlist" name="playlist" type="text" class="form-input"
+           placeholder="https://open.spotify.com/playlist/... or spotify:playlist:...">
+  </div>
+  <button type="submit" class="btn btn-add">Load for Review</button>
+</form>
+{% else %}
+<form method="post" class="admin-form">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="apply">
+  <input type="hidden" name="playlist_ref" value="{{ playlist_ref }}">
+  <div class="form-group">
+    <label for="playlist_name">BandMate Playlist Name</label>
+    <input id="playlist_name" name="playlist_name" class="form-input" value="{{ playlist_name }}">
+  </div>
+  <div class="form-group">
+    <label for="target_setlist">Target BandMate Playlist</label>
+    <select id="target_setlist" name="target_setlist" class="form-input">
+      <option value="__new__">Create new playlist</option>
+      {% for sl in editable_setlists %}
+      <option value="{{ sl.pk }}">Replace existing: {{ sl.name }}</option>
+      {% endfor %}
+    </select>
+    <p class="form-hint">Selecting an existing playlist will replace all current songs.</p>
+  </div>
+  <div class="form-group">
+    <label>Track Mapping Review</label>
+    <div class="sl-selected-list">
+      {% for row in review_rows %}
+      <div class="sl-selected-row" style="display:block">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px">
+          <strong>{{ row.spotify_label }}</strong>
+        </div>
+        <input type="hidden" name="spotify_label" value="{{ row.spotify_label }}">
+        <input type="hidden" name="spotify_uri" value="{{ row.spotify_uri }}">
+        <div class="form-group" style="margin-bottom:0">
+          <label>BandMate Match</label>
+          <select name="bandmate_match" class="form-input">
+            <option value="">No match</option>
+            {% for choice in available_choices %}
+            <option value="{{ choice }}" {% if row.bandmate_match == choice %}selected{% endif %}>{{ choice }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <button type="submit" class="btn btn-add">Import (Replace Selected Playlist)</button>
+</form>
+{% endif %}
+{% endblock %}

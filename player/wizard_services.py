@@ -1186,6 +1186,13 @@ def _finalize_song(job) -> None:
         'time_signature': job.time_signature,
         'lyric_offset': job.lyric_offset_secs,
     }
+    yt = getattr(job, 'youtube_selection', None) or {}
+    if yt.get('video_id'):
+        info['youtube_video_id'] = yt.get('video_id')
+        if yt.get('title'):
+            info['youtube_title'] = yt.get('title')
+    if getattr(job, 'spotify_track_uri', ''):
+        info['spotify_track_uri'] = job.spotify_track_uri
     if job.band_details:
         bd = job.band_details
         guitars = {}

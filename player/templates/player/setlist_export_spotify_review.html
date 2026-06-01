@@ -1,0 +1,110 @@
+{% extends "player/base.html" %}
+{% block title %}Export to Spotify – {{ setlist.name }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'setlist_list' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Setlists
+</a>
+
+<h1 class="page-title">Export "{{ setlist.name }}" to Spotify</h1>
+{% if error %}<div class="error-message">{{ error }}</div>{% endif %}
+
+<form method="post" class="admin-form">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="apply">
+
+  <div class="form-group">
+    <label for="playlist_name">Spotify Playlist Name</label>
+    <input id="playlist_name" name="playlist_name" class="form-input" value="{{ playlist_name }}">
+  </div>
+
+  <div class="form-group">
+    <label>
+      <input type="checkbox" name="create_new" value="1" {% if create_new %}checked{% endif %}>
+      Create new Spotify playlist
+    </label>
+  </div>
+  <div class="form-group">
+    <label for="target_playlist">Or replace existing Spotify playlist (URL/URI/ID)</label>
+    <input id="target_playlist" name="target_playlist" class="form-input" value="{{ target_playlist }}"
+           placeholder="https://open.spotify.com/playlist/...">
+    <p class="form-hint">If “Create new” is unchecked, this target playlist will be fully replaced.</p>
+  </div>
+
+  <div class="form-group">
+    <label>Track Mapping Review</label>
+    <div class="sl-selected-list">
+      {% for row in rows %}
+      <div class="sl-selected-row" style="display:block">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px">
+          <strong>{{ row.bandmate_label }}</strong>
+          {% if row.is_break %}<span class="setlist-owner-chip setlist-owner-chip-readonly">Break track fixed</span>{% endif %}
+        </div>
+        <input type="hidden" name="bandmate_label" value="{{ row.bandmate_label }}">
+        <div class="form-group" style="margin-bottom:8px">
+          <label>Spotify URI</label>
+          <input class="form-input spotify-uri-input" name="spotify_uri" value="{{ row.spotify_uri }}" {% if row.is_break %}readonly{% endif %}>
+        </div>
+        {% if not row.is_break %}
+        <div class="form-group" style="margin-bottom:0">
+          <label>Search Spotify Track</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-input spotify-search-input" name="spotify_query" value="{{ row.spotify_query }}">
+            <button type="button" class="btn btn-secondary spotify-search-btn">Search</button>
+          </div>
+          <div class="spotify-search-results" style="margin-top:6px"></div>
+        </div>
+        {% else %}
+        <input type="hidden" name="spotify_query" value="">
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-add">Export (Replace All Tracks)</button>
+</form>
+
+<script>
+(function() {
+  document.querySelectorAll('.spotify-search-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = btn.closest('.sl-selected-row');
+      if (!row) return;
+      var queryInput = row.querySelector('.spotify-search-input');
+      var uriInput = row.querySelector('.spotify-uri-input');
+      var resultsEl = row.querySelector('.spotify-search-results');
+      if (!queryInput || !resultsEl || !uriInput) return;
+      var q = (queryInput.value || '').trim();
+      if (!q) return;
+      btn.disabled = true;
+      btn.textContent = 'Searching...';
+      fetch('/api/spotify/search-track/?q=' + encodeURIComponent(q))
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+          resultsEl.innerHTML = '';
+          (data.results || []).forEach(function(item){
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn btn-secondary';
+            b.style.margin = '2px 6px 2px 0';
+            b.textContent = item.label;
+            b.addEventListener('click', function() {
+              uriInput.value = item.uri;
+            });
+            resultsEl.appendChild(b);
+          });
+          if (!resultsEl.children.length) {
+            resultsEl.textContent = 'No results.';
+          }
+        })
+        .catch(function(){ resultsEl.textContent = 'Search failed.'; })
+        .finally(function(){ btn.disabled = false; btn.textContent = 'Search'; });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class Setlist(models.Model):
@@ -73,6 +74,7 @@ class SongWizard(models.Model):
 
     # YouTube selection: {"video_id": "...", "title": "...", "duration": "..."}
     youtube_selection = models.JSONField(default=dict, blank=True)
+    spotify_track_uri = models.CharField(max_length=255, blank=True, default='')
 
     detected_beats = models.JSONField(default=list, blank=True)
     adjusted_beats = models.JSONField(default=list, blank=True)
@@ -163,6 +165,8 @@ class StemSeparationJob(models.Model):
     lyrics_content = models.TextField(blank=True, default='')
     lyric_offset_secs = models.FloatField(default=0)
     band_details = models.JSONField(default=dict, blank=True)
+    youtube_selection = models.JSONField(default=dict, blank=True)
+    spotify_track_uri = models.CharField(max_length=255, blank=True, default='')
     gpu_used = models.BooleanField(null=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -173,3 +177,25 @@ class StemSeparationJob(models.Model):
 
     def __str__(self):
         return f'{self.artist} - {self.title} ({self.get_status_display()})'
+
+
+class SpotifyConnection(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='spotify_connection',
+    )
+    spotify_user_id = models.CharField(max_length=128, blank=True, default='')
+    access_token = models.TextField(blank=True, default='')
+    refresh_token = models.TextField(blank=True, default='')
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'SpotifyConnection({self.user_id})'
+
+    def token_expired(self):
+        if not self.token_expires_at:
+            return True
+        return timezone.now() >= self.token_expires_at
