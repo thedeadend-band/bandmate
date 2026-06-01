@@ -9,7 +9,7 @@
   <script>
     (function(){var t=localStorage.getItem('bm-theme')||'dark';document.documentElement.setAttribute('data-theme',t)})();
   </script>
-  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=4">
+  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=5">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -82,6 +82,12 @@
           <polyline points="3 6 4 7 6 5"/><polyline points="3 12 4 13 6 11"/><polyline points="3 18 4 19 6 17"/>
         </svg>
         Queue
+      </a>
+      <a href="{% url 'lyrics_home' %}" class="sidebar-nav-item{% if nav_active == 'lyrics' %} active{% endif %}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 5h16"/><path d="M4 12h10"/><path d="M4 19h16"/>
+        </svg>
+        Lyrics
       </a>
       <a href="{% url 'attributions' %}" class="sidebar-nav-item{% if nav_active == 'attributions' %} active{% endif %}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

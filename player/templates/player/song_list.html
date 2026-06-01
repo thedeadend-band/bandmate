@@ -4,7 +4,6 @@
 {% block content %}
 <div class="section-header">
   <h1 class="page-title">Multitrack</h1>
-  {% if user.is_staff %}
   <div class="section-header-actions">
     <a href="{% url 'wizard_start' %}" class="btn btn-add">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -18,7 +17,6 @@
     </button>
   </div>
   <input type="file" id="upload-input" accept=".zip" style="display:none">
-  {% endif %}
 </div>
 
 {% if songs %}
@@ -72,7 +70,6 @@
 </div>
 {% endif %}
 
-{% if user.is_staff %}
 <script>
 (function() {
   const btn = document.getElementById('upload-btn');
@@ -123,5 +120,4 @@
   }
 })();
 </script>
-{% endif %}
 {% endblock %}

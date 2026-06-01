@@ -24,6 +24,11 @@
           {{ sl.entries.count }} item{{ sl.entries.count|pluralize }} · {{ sl.owner.username }}
           {% if sl.date %} · {{ sl.date|date:"M j, Y" }}{% endif %}
         </span>
+        {% if request.user.is_staff or sl.owner == request.user %}
+        <span class="setlist-owner-chip setlist-owner-chip-editable">Owned by you · Editable</span>
+        {% else %}
+        <span class="setlist-owner-chip setlist-owner-chip-readonly">Read-only · Owner: {{ sl.owner.username }}</span>
+        {% endif %}
       </div>
       <svg class="song-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="9 6 15 12 9 18"/>

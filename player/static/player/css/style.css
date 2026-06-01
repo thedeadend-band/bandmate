@@ -417,6 +417,130 @@ body {
   font-size: 0.8rem;
 }
 
+.setlist-owner-chip {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  width: fit-content;
+}
+
+.setlist-owner-chip-editable {
+  color: #7ef0ac;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.setlist-owner-chip-readonly {
+  color: var(--text-secondary);
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.lyrics-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.lyrics-player-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 140px);
+}
+
+.lyrics-player-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lyrics-now-next {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.lyrics-label {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lyrics-current-title,
+.lyrics-next-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.lyrics-current-detail {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.lyrics-main {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  margin: 8px 0 14px;
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#ly-lyrics-scroller {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 42vh 16px;
+  transition: transform 0.18s ease-out;
+}
+
+.lyrics-transport {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+}
+
+.lyrics-progress-wrap {
+  margin-top: 6px;
+  padding: 0 6px 8px;
+}
+
+.lyrics-progress {
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  outline: none;
+}
+
+.lyrics-progress::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+
+.lyrics-progress::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+
 .empty-state {
   text-align: center;
   padding: 60px 20px;
@@ -1397,6 +1521,7 @@ body {
   opacity: 0;
   transition: opacity 0.3s, font-size 0.3s, color 0.3s;
   line-height: 1.5;
+  cursor: pointer;
 }
 
 .lyrics-line.active {

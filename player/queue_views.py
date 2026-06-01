@@ -2,8 +2,6 @@
 Views for the Stem Separation Queue.
 """
 
-from functools import wraps
-
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,45 +16,44 @@ def _song_url(job):
     return reverse('song_player', kwargs={'song_name': dir_name})
 
 
-def _staff_required(view_func):
-    @wraps(view_func)
-    @login_required
-    def wrapper(request, *args, **kwargs):
-        if not request.user.is_staff:
-            raise Http404
-        return view_func(request, *args, **kwargs)
-    return wrapper
+def _can_manage_job(user, job):
+    return user.is_staff or job.created_by_id == user.id
 
 
-@_staff_required
+@login_required
 def queue_list(request):
-    jobs = StemSeparationJob.objects.all()
+    jobs = StemSeparationJob.objects.select_related('created_by')
     for job in jobs:
         if job.status == 'done':
             job.song_page_url = _song_url(job)
+        job.can_manage = _can_manage_job(request.user, job)
     return render(request, 'player/queue.html', {
         'nav_active': 'queue',
         'jobs': jobs,
     })
 
 
-@_staff_required
+@login_required
 @require_POST
 def queue_delete(request, job_id):
     import shutil
     from pathlib import Path
 
     job = get_object_or_404(StemSeparationJob, pk=job_id)
+    if not _can_manage_job(request.user, job):
+        raise Http404
     if job.staging_dir and Path(job.staging_dir).exists():
         shutil.rmtree(job.staging_dir, ignore_errors=True)
     job.delete()
     return redirect('queue_list')
 
 
-@_staff_required
+@login_required
 @require_POST
 def queue_pause(request, job_id):
     job = get_object_or_404(StemSeparationJob, pk=job_id)
+    if not _can_manage_job(request.user, job):
+        raise Http404
     if job.status == 'processing':
         job.status = 'paused'
         job.message = 'Pausing…'
@@ -64,11 +61,13 @@ def queue_pause(request, job_id):
     return redirect('queue_list')
 
 
-@_staff_required
+@login_required
 @require_POST
 def queue_resume(request, job_id):
     from .wizard_services import start_queue_worker
     job = get_object_or_404(StemSeparationJob, pk=job_id)
+    if not _can_manage_job(request.user, job):
+        raise Http404
     if job.status in ('paused', 'failed'):
         job.status = 'queued'
         job.message = 'Resuming…'
@@ -77,7 +76,7 @@ def queue_resume(request, job_id):
     return redirect('queue_list')
 
 
-@_staff_required
+@login_required
 def queue_job_status(request, job_id):
     job = get_object_or_404(StemSeparationJob, pk=job_id)
     return JsonResponse({
@@ -88,7 +87,7 @@ def queue_job_status(request, job_id):
     })
 
 
-@_staff_required
+@login_required
 def queue_notifications(request):
     jobs = list(StemSeparationJob.objects.filter(
         status__in=('done', 'failed'),

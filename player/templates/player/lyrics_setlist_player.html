@@ -1,0 +1,64 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}Lyrics – {{ setlist.name }}{% endblock %}
+
+{% block container_class %}lyrics-page{% endblock %}
+{% block content %}
+<a href="{% url 'lyrics_home' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Lyrics
+</a>
+
+{% if items %}
+<div class="lyrics-player-shell">
+  <div class="lyrics-player-top">
+    <h1 class="song-title">{{ setlist.name }}</h1>
+    <div class="lyrics-now-next">
+      <div class="lyrics-now-block">
+        <div class="lyrics-label">Current</div>
+        <div class="lyrics-current-title" id="ly-current-title">Select a song</div>
+        <div class="lyrics-current-detail" id="ly-current-detail"></div>
+      </div>
+      <div class="lyrics-next-block">
+        <div class="lyrics-label">Next</div>
+        <div class="lyrics-next-title" id="ly-next-title">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lyrics-main" id="ly-main">
+    <div class="lyrics-scroller" id="ly-lyrics-scroller"></div>
+  </div>
+
+  <div class="transport lyrics-transport" id="ly-transport">
+    <button id="ly-prev" class="transport-btn" title="Previous">
+      <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16"/></svg>
+    </button>
+    <button id="ly-play" class="transport-btn" title="Play / Pause">
+      <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
+    </button>
+    <button id="ly-next" class="transport-btn" title="Next">
+      <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><rect x="17" y="4" width="2" height="16"/></svg>
+    </button>
+    <span id="ly-time">0:00 / 0:00</span>
+  </div>
+  <div class="lyrics-progress-wrap">
+    <input id="ly-progress" class="lyrics-progress" type="range" min="0" max="1000" value="0" step="1" aria-label="Playback position">
+  </div>
+</div>
+
+{{ items|json_script:"ly-items-data" }}
+<script>
+  window.LYRICS_PLAYER_MODE = 'setlist';
+</script>
+<script src="{% static 'player/js/lyrics_player.js' %}"></script>
+{% else %}
+<div class="empty-state">
+  <h3>No playable songs</h3>
+  <p>This playlist has no songs with a Master track.</p>
+</div>
+{% endif %}
+{% endblock %}

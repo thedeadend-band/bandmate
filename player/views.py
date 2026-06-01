@@ -579,6 +579,87 @@ def setlist_list(request):
 
 
 @login_required
+def lyrics_home(request):
+    setlists = Setlist.objects.select_related('owner').prefetch_related('entries')
+    songs = _get_available_songs()
+    return render(request, 'player/lyrics_list.html', {
+        'setlists': setlists,
+        'songs': songs,
+        'nav_active': 'lyrics',
+    })
+
+
+@login_required
+def lyrics_setlist_player(request, setlist_id: int):
+    sl = get_object_or_404(Setlist, pk=setlist_id)
+    entries = list(sl.entries.order_by('position'))
+
+    items = []
+    for entry in entries:
+        if entry.is_break:
+            continue
+        try:
+            song_path = _safe_song_path(entry.song_name)
+        except Http404:
+            continue
+        master = _find_master_track(song_path)
+        if not master:
+            continue
+        info = _load_song_info(song_path) or {}
+        artist = info.get('artist') or ''
+        title = info.get('title') or entry.song_name
+        detail_bits = []
+        if info.get('tempo'):
+            detail_bits.append(f"{info['tempo']} BPM")
+        if info.get('key'):
+            detail_bits.append(str(info['key']))
+        if info.get('time_signature'):
+            detail_bits.append(str(info['time_signature']))
+        items.append({
+            'song_name': entry.song_name,
+            'artist': artist,
+            'title': title,
+            'detail': ' · '.join(detail_bits),
+            'display': f'{artist} – {title}' if artist else title,
+        })
+
+    return render(request, 'player/lyrics_setlist_player.html', {
+        'setlist': sl,
+        'items': items,
+        'nav_active': 'lyrics',
+    })
+
+
+@login_required
+def lyrics_song_player(request, song_name: str):
+    song_path = _safe_song_path(song_name)
+    master = _find_master_track(song_path)
+    if not master:
+        raise Http404
+    info = _load_song_info(song_path) or {}
+    artist = info.get('artist') or ''
+    title = info.get('title') or song_name
+    detail_bits = []
+    if info.get('tempo'):
+        detail_bits.append(f"{info['tempo']} BPM")
+    if info.get('key'):
+        detail_bits.append(str(info['key']))
+    if info.get('time_signature'):
+        detail_bits.append(str(info['time_signature']))
+    item = {
+        'song_name': song_name,
+        'artist': artist,
+        'title': title,
+        'detail': ' · '.join(detail_bits),
+        'display': f'{artist} – {title}' if artist else title,
+    }
+    return render(request, 'player/lyrics_song_player.html', {
+        'item': item,
+        'nav_active': 'lyrics',
+    })
+
+
+@login_required
 def setlist_create(request):
     songs = _get_available_songs()
     error = None
@@ -814,7 +895,7 @@ def song_info_api(request, song_name: str):
 # Song upload
 # ---------------------------------------------------------------------------
 
-@_staff_required
+@login_required
 def song_upload(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)

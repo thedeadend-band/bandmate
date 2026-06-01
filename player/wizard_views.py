@@ -1,8 +1,8 @@
 """
 Views for the New Song Wizard.
 
-All views are staff-only.  The wizard persists state in SongWizard and uses a
-staging directory for intermediate audio files.
+Authenticated users can create songs via the wizard. The wizard persists state
+in SongWizard and uses a staging directory for intermediate audio files.
 """
 
 import json
@@ -30,8 +30,6 @@ def _staff_required(view_func):
     @wraps(view_func)
     @login_required
     def wrapper(request, *args, **kwargs):
-        if not request.user.is_staff:
-            raise Http404
         return view_func(request, *args, **kwargs)
     return wrapper
 

@@ -43,13 +43,14 @@
           {{ job.get_status_display }}{% if job.message %} &mdash; {{ job.message }}{% endif %}
           {% if job.gpu_used == True %}<span class="badge badge-gpu">GPU</span>{% elif job.gpu_used == False %}<span class="badge badge-cpu">CPU</span>{% endif %}
         </span>
+        <span class="queue-time">Queued by {{ job.created_by.username }}</span>
         <span class="queue-time">{{ job.created_at|timesince }} ago</span>
       </div>
       <div class="queue-card-actions">
         {% if job.status == 'done' %}
         <a href="{{ job.song_page_url }}" class="btn btn-sm">View</a>
         {% endif %}
-        {% if job.status == 'processing' %}
+        {% if job.can_manage and job.status == 'processing' %}
         <form method="post" action="{% url 'queue_pause' job.pk %}" style="display:inline">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm" title="Pause">
@@ -59,6 +60,7 @@
           </button>
         </form>
         {% endif %}
+        {% if job.can_manage %}
         {% if job.status == 'paused' or job.status == 'failed' %}
         <form method="post" action="{% url 'queue_resume' job.pk %}" style="display:inline">
           {% csrf_token %}
@@ -69,6 +71,8 @@
           </button>
         </form>
         {% endif %}
+        {% endif %}
+        {% if job.can_manage %}
         <form method="post" action="{% url 'queue_delete' job.pk %}" style="display:inline">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm btn-danger" title="Remove"
@@ -78,6 +82,7 @@
             </svg>
           </button>
         </form>
+        {% endif %}
       </div>
     </div>
   </div>

@@ -1,0 +1,53 @@
+{% extends "player/base.html" %}
+{% load static %}
+{% block title %}Lyrics – {{ item.display }}{% endblock %}
+
+{% block container_class %}lyrics-page{% endblock %}
+{% block content %}
+<a href="{% url 'lyrics_home' %}" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+  Back to Lyrics
+</a>
+
+<div class="lyrics-player-shell">
+  <div class="lyrics-player-top">
+    <h1 class="song-title">{{ item.display }}</h1>
+    <div class="lyrics-now-next">
+      <div class="lyrics-now-block">
+        <div class="lyrics-label">Current</div>
+        <div class="lyrics-current-title" id="ly-current-title">{{ item.display }}</div>
+        <div class="lyrics-current-detail" id="ly-current-detail">{{ item.detail }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lyrics-main" id="ly-main">
+    <div class="lyrics-scroller" id="ly-lyrics-scroller"></div>
+  </div>
+
+  <div class="transport lyrics-transport" id="ly-transport">
+    <button id="ly-prev" class="transport-btn" title="Restart">
+      <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16"/></svg>
+    </button>
+    <button id="ly-play" class="transport-btn" title="Play / Pause">
+      <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
+    </button>
+    <button id="ly-next" class="transport-btn" title="Stop">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+    </button>
+    <span id="ly-time">0:00 / 0:00</span>
+  </div>
+  <div class="lyrics-progress-wrap">
+    <input id="ly-progress" class="lyrics-progress" type="range" min="0" max="1000" value="0" step="1" aria-label="Playback position">
+  </div>
+</div>
+
+{{ item|json_script:"ly-single-item" }}
+<script>
+  window.LYRICS_PLAYER_MODE = 'single';
+</script>
+<script src="{% static 'player/js/lyrics_player.js' %}"></script>
+{% endblock %}
