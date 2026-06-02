@@ -114,6 +114,7 @@ class LyricsPlayer {
     scroller.innerHTML = this.lyrics.map(l =>
       `<div class="lyrics-line" data-time="${l.time}">${l.text || '&nbsp;'}</div>`
     ).join('');
+    this._updateLyrics();
   }
 
   async play() {
@@ -225,6 +226,7 @@ class LyricsPlayer {
       if (ct >= this.lyrics[i].time + this.lyricOffset) idx = i;
       else break;
     }
+    if (idx < 0) idx = 0;
     if (idx === this.currentLyricIndex) return;
     this.currentLyricIndex = idx;
     const lines = document.querySelectorAll('#ly-lyrics-scroller .lyrics-line');

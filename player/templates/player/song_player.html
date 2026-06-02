@@ -11,16 +11,28 @@
     </svg>
     Back to Songs
   </a>
-  <a href="{% url 'song_download_zip' song_name %}" class="download-zip-btn" title="Download all tracks as ZIP">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-      <polyline points="7 10 12 15 17 10"/>
-      <line x1="12" y1="15" x2="12" y2="3"/>
-    </svg>
-    Download ZIP
-  </a>
-  <button type="button" class="download-zip-btn" id="link-spotify-btn">Link to Spotify</button>
-  <button type="button" class="download-zip-btn" id="link-youtube-btn">Link to YouTube</button>
+  <div class="song-top-actions">
+    <a href="{% url 'song_download_zip' song_name %}" class="download-zip-btn" title="Download all tracks as ZIP">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Download ZIP
+    </a>
+    <button type="button" class="download-zip-btn" id="link-spotify-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M7 10c3-1 7-1 10 1"/><path d="M8 13c2-.8 5-.8 8 .4"/><path d="M9 16c1.5-.4 3.2-.4 5 .2"/>
+      </svg>
+      Link to Spotify
+    </button>
+    <button type="button" class="download-zip-btn" id="link-youtube-btn">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M21.6 7.2a2.9 2.9 0 00-2-2C17.8 4.7 12 4.7 12 4.7s-5.8 0-7.6.5a2.9 2.9 0 00-2 2A30 30 0 002 12a30 30 0 00.4 4.8 2.9 2.9 0 002 2c1.8.5 7.6.5 7.6.5s5.8 0 7.6-.5a2.9 2.9 0 002-2A30 30 0 0022 12a30 30 0 00-.4-4.8zM10 15.5v-7l6 3.5-6 3.5z"/>
+      </svg>
+      Link to YouTube
+    </button>
+  </div>
 </div>
 
 {% if song_info.artist and song_info.title %}
@@ -38,10 +50,12 @@
   <div class="song-link-controls">
     <input type="text" id="song-link-query" class="form-input" placeholder="">
     <button type="button" class="btn btn-secondary" id="song-link-search">Search</button>
-    <button type="button" class="btn btn-primary" id="song-link-save">Save Link</button>
-    <button type="button" class="btn btn-danger" id="song-link-clear">Clear Link</button>
   </div>
   <div id="song-link-results" class="song-link-results"></div>
+  <div class="song-link-actions">
+    <button type="button" class="btn btn-primary song-link-action-btn" id="song-link-save">Save Link</button>
+    <button type="button" class="btn btn-danger song-link-action-btn" id="song-link-clear">Clear Link</button>
+  </div>
 </div>
 
 {% if song_info %}
@@ -230,7 +244,7 @@
 <script>
   const SONG_NAME = "{{ song_name|escapejs }}";
 </script>
-<script src="{% static 'player/js/player.js' %}"></script>
+<script src="{% static 'player/js/player.js' %}?v=20260602"></script>
 <script>
 (function() {
   const panel = document.getElementById('song-link-panel');
@@ -257,6 +271,8 @@
   }
 
   function renderCurrent() {
+    const hasLink = mode === 'spotify' ? !!songInfo.spotify_track_uri : !!songInfo.youtube_video_id;
+    clearBtn.disabled = !hasLink;
     if (mode === 'spotify') {
       currentEl.textContent = songInfo.spotify_track_uri ? `Current: ${songInfo.spotify_track_uri}` : 'Current: none';
       queryEl.placeholder = 'Spotify URI/URL or search query';
@@ -347,6 +363,12 @@
   openYoutubeBtn?.addEventListener('click', () => openPanel('youtube'));
   closeBtn?.addEventListener('click', () => { panel.hidden = true; });
   searchBtn?.addEventListener('click', search);
+  queryEl?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      search();
+    }
+  });
   saveBtn?.addEventListener('click', () => save(false));
   clearBtn?.addEventListener('click', () => save(true));
 })();

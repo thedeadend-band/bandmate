@@ -129,6 +129,15 @@ def _load_song_info(song_path: Path):
                 data['lyric_offset_secs'] = _parse_lrc_time(str(offset))
         else:
             data['lyric_offset_secs'] = 0
+        # Normalize optional nested keys to avoid template lookup noise.
+        guitars = data.get('guitars')
+        if isinstance(guitars, dict):
+            for role in ('lead_guitar', 'rhythm_guitar', 'bass_guitar'):
+                g = guitars.get(role)
+                if isinstance(g, dict):
+                    g.setdefault('type', '')
+                    g.setdefault('capo', '')
+                    g.setdefault('tuning', '')
         return data
     except (json.JSONDecodeError, OSError):
         return None
@@ -330,6 +339,8 @@ def _get_available_songs() -> list[dict]:
                         'name': d.name,
                         'track_count': len(tracks),
                         'has_master': has_master,
+                        'artist': '',
+                        'title': d.name,
                     }
                     if info:
                         if info.get('artist'):
@@ -338,8 +349,16 @@ def _get_available_songs() -> list[dict]:
                             entry['title'] = info['title']
                         if info.get('spotify_track_uri'):
                             entry['spotify_track_uri'] = info['spotify_track_uri']
+                            if info['spotify_track_uri'].startswith('spotify:track:'):
+                                entry['spotify_track_url'] = (
+                                    'https://open.spotify.com/track/'
+                                    + info['spotify_track_uri'].split(':')[-1]
+                                )
                         if info.get('youtube_video_id'):
                             entry['youtube_video_id'] = info['youtube_video_id']
+                            entry['youtube_video_url'] = (
+                                f'https://www.youtube.com/watch?v={info["youtube_video_id"]}'
+                            )
                     songs.append(entry)
     return songs
 
@@ -411,6 +430,7 @@ def song_player(request, song_name: str):
         'tracks': tracks,
         'song_info': song_info,
         'lyrics': lyrics,
+        'nav_active': 'multitrack',
     })
 
 
