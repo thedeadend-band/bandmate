@@ -342,7 +342,8 @@
       body.append('youtube_video', raw);
       body.append('youtube_title', selected?.title || '');
     }
-    const resp = await fetch(`{% url 'song_links_update' song_name %}`, {
+    const linkApiUrl = `/api/songs/${encodeURIComponent(SONG_NAME)}/links/`;
+    const resp = await fetch(linkApiUrl, {
       method: 'POST',
       headers: { 'X-CSRFToken': csrfToken(), 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString()
