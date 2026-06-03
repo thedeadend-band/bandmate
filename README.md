@@ -10,9 +10,12 @@ and a scrub-able playhead.
 
 - **User authentication** – Django-based login; built-in admin console for user management.
 - **Song browser** – Automatically discovers song folders in a configurable directory. Upload songs as ZIP archives or individual files.
+- **Role-aware permissions** – Logged-in users can create songs/setlists; owners or admins can edit/delete setlists and manage their own queue jobs.
 - **Multi-track player** – Web Audio API plays all tracks in perfect sync with volume and pan.
 - **Download ZIP** – Download all tracks for a song as a single ZIP archive from the player page.
 - **Setlists** – Build setlists with break markers, play master tracks in sequence, and export to PDF or MIDI.
+- **Spotify setlist integration** – Per-user Spotify OAuth; import/export playlists with review/override mapping.
+- **Song-level provider links** – Persist Spotify track URIs and YouTube video IDs per song; editable in the song player page and reused by Spotify import/export matching.
 - **Waveform display** – Server-side peak generation (cached to disk) rendered on `<canvas>`.
 - **Mute / Solo** – Standard DAW-style mute and solo per track.
 - **Scrub / Seek** – Click or drag on any waveform to scrub. Keyboard shortcuts included.
@@ -72,6 +75,12 @@ python manage.py runserver 0.0.0.0:8000
 
 Open `http://<your-server>:8000` and sign in.
 
+## Codex Handoff
+
+If you're transferring active development to Codex, read:
+
+- `docs/CODEX_HANDOFF.md` - architecture map, key files, current feature contracts, and known pitfalls
+
 ## Configuration
 
 All settings can be overridden with environment variables:
@@ -117,7 +126,7 @@ The directories follow the same `[Artist] - [Title]` naming convention used by `
 
 ## New Song Wizard
 
-The New Song Wizard (staff-only, accessible from the sidebar or `/songs/new/`) walks through creating a fully prepared song directory with stems, click track, lyrics, and metadata.
+The New Song Wizard (login-required, accessible from the sidebar or `/songs/new/`) walks through creating a fully prepared song directory with stems, click track, lyrics, and metadata.
 
 ### How it works
 
@@ -153,6 +162,21 @@ brew install rubberband ffmpeg
 # Ubuntu/Debian
 sudo apt install rubberband-cli ffmpeg
 ```
+
+## Spotify Setup (Admin + User)
+
+Spotify support is split into two layers:
+
+1. **Admin app credentials** (set once):
+   - In **Admin Console > Settings**, configure Spotify client ID and client secret.
+2. **Per-user account connection**:
+   - Each user connects/disconnects their own Spotify account from the Setlists page.
+
+With both configured, users can:
+
+- Import Spotify playlists into BandMate setlists with review/override
+- Export BandMate setlists to Spotify playlists with review/override
+- Persist per-song Spotify links from the song page for more accurate mapping
 
 ## Download Tracks
 

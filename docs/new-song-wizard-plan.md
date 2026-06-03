@@ -1,10 +1,13 @@
 # New Song Wizard
 
+> Historical design plan. Most items below are now implemented; where this file
+> differs from current behavior, trust `README.md` and `docs/CODEX_HANDOFF.md`.
+
 > Build a multi-step web UI wizard in the Django app that automates adding new songs. The user either uploads pre-made stems or points the wizard at a YouTube audio source -- the backend then downloads, detects beats, quantizes to a fixed tempo with a click intro, and runs Demucs AI separation to produce stems (guitar, vocals, drums, bass, other, master). The wizard also fetches song info, tempo/key, lyrics, and band details, with a final review step before publishing.
 
 ## Architecture Overview
 
-A new multi-step wizard accessible from the sidebar (staff only), backed by a Django model that persists wizard state across steps. Long-running operations (downloads, beat detection, quantization, Demucs) run in background threads with AJAX polling for progress. All processing happens in a staging directory; final files are moved to `SONGS_DIR` on completion.
+A multi-step wizard accessible from the sidebar (login required), backed by a Django model that persists wizard state across steps. Long-running operations (downloads, beat detection, quantization, stem separation queueing) run in background threads with AJAX polling for progress. All processing happens in a staging directory; final files are moved to `SONGS_DIR` on completion.
 
 ```mermaid
 flowchart LR
@@ -211,7 +214,7 @@ Two paths, chosen by the user:
 
 ## URL Structure
 
-All under `/songs/new/` prefix, staff-only:
+All under `/songs/new/` prefix, login-required:
 
 - `/songs/new/` -- start wizard (or resume in-progress)
 - `/songs/new/<wizard_id>/step/<step_name>/` -- each step page
@@ -227,7 +230,7 @@ All under `/songs/new/` prefix, staff-only:
 
 ## UI / Navigation
 
-- New "Add Song" button on the song list page (staff only), like the existing ZIP upload but routes to the wizard
+- New "Add Song" button on the song list page for logged-in users, like the existing ZIP upload but routes to the wizard
 - New sidebar item or sub-item under existing navigation
 - Wizard uses a stepped progress indicator at the top (step 1 of 10, with step names)
 - Each step has Back / Next navigation

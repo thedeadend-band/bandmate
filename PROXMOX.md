@@ -113,7 +113,7 @@ pct exec 200 -- journalctl -u bandmate -f
 
 ## Uploading Songs
 
-Upload songs via the BandMate web UI (admin only), or SCP them directly into the container:
+Upload songs via the BandMate web UI (any logged-in user), or SCP them directly into the container:
 
 ```bash
 # Copy a single song folder
