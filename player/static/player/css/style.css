@@ -443,8 +443,13 @@ body {
 .lyrics-page {
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - var(--navbar-h, 46px) - 20px);
+  height: calc(100dvh - var(--navbar-h, 46px));
+  min-height: 0;
   overflow: hidden;
+}
+
+.lyrics-page .back-link {
+  flex-shrink: 0;
 }
 
 .lyrics-player-shell {
@@ -452,13 +457,14 @@ body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  max-height: calc(100dvh - var(--navbar-h, 46px) - 28px);
+  overflow: hidden;
 }
 
 .lyrics-player-top {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .lyrics-now-next {
@@ -487,12 +493,12 @@ body {
 }
 
 .lyrics-main {
-  flex: 1;
-  min-height: 180px;
+  flex: 1 1 0;
+  min-height: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-card);
-  margin: 8px 0 14px;
+  margin: 8px 0 10px;
   position: relative;
   overflow: hidden;
   touch-action: none;
@@ -501,21 +507,29 @@ body {
 #ly-lyrics-scroller {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   align-items: center;
-  padding: min(20vh, 180px) 16px;
+  padding: min(18dvh, 150px) 16px;
   transition: transform 0.18s ease-out;
 }
 
-.lyrics-transport {
-  position: sticky;
-  bottom: 0;
+.transport.lyrics-transport {
+  order: 3;
+  position: relative;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  width: 100%;
   z-index: 4;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
 }
 
 .lyrics-progress-wrap {
-  margin-top: 6px;
-  padding: 0 6px 8px;
+  order: 2;
+  flex-shrink: 0;
+  padding: 0 6px 10px;
 }
 
 .lyrics-progress {
@@ -826,7 +840,26 @@ body {
 }
 
 .lyrics-main .lyrics-line {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  max-width: 100%;
+  min-height: 2.3em;
+  padding: 8px 0;
+  overflow-wrap: anywhere;
+  transform: translateZ(0);
   opacity: 0.35;
+  transition: opacity 0.18s, color 0.18s, transform 0.18s;
+}
+
+.lyrics-main .lyrics-line.active {
+  z-index: 2;
+  min-height: 2.45em;
+  transform: translateZ(0) scale(1.02);
+}
+
+.lyrics-main .lyrics-line.near {
+  z-index: 1;
 }
 
 .lyrics-main .lyrics-line.future {
@@ -2849,4 +2882,3 @@ body {
   cursor: pointer;
 }
 .btn-danger:hover { background: #c0392b; }
-
