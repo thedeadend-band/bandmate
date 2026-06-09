@@ -1,12 +1,12 @@
 class LyricsPlayer {
-  constructor(items, mode) {
+  constructor(items, mode, options = {}) {
     this.items = items || [];
     this.mode = mode || 'setlist';
+    this.audioEnabled = options.audioEnabled !== false;
     this.currentIndex = 0;
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    this.audioContext = null;
     this.source = null;
-    this.gainNode = this.audioContext.createGain();
-    this.gainNode.connect(this.audioContext.destination);
+    this.gainNode = null;
     this.buffer = null;
     this.isPlaying = false;
     this.playStartTime = 0;
@@ -89,11 +89,12 @@ class LyricsPlayer {
       this.lyricOffset = infoData?.info?.lyric_offset_secs || 0;
       this._renderLyrics();
 
-      const audioResp = await fetch(`/api/songs/${encodeURIComponent(item.song_name)}/master/audio/`);
-      if (!audioResp.ok) throw new Error('Audio failed');
-      const arr = await audioResp.arrayBuffer();
-      this.buffer = await this.audioContext.decodeAudioData(arr);
-      this.duration = this.buffer.duration || 0;
+      if (this.audioEnabled) {
+        await this._loadAudio(item.song_name);
+      } else {
+        this.buffer = null;
+        this.duration = this._lyricsDuration();
+      }
       this._updateTime();
 
       if (autoPlay || wasPlaying) await this.play();
@@ -102,6 +103,28 @@ class LyricsPlayer {
       document.getElementById('ly-lyrics-scroller').innerHTML =
         '<div class="lyrics-line active">Failed to load song.</div>';
     }
+  }
+
+  async _loadAudio(songName) {
+    this._ensureAudioContext();
+    const audioResp = await fetch(`/api/songs/${encodeURIComponent(songName)}/master/audio/`);
+    if (!audioResp.ok) throw new Error('Audio failed');
+    const arr = await audioResp.arrayBuffer();
+    this.buffer = await this.audioContext.decodeAudioData(arr);
+    this.duration = this.buffer.duration || 0;
+  }
+
+  _ensureAudioContext() {
+    if (this.audioContext) return;
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    this.gainNode = this.audioContext.createGain();
+    this.gainNode.connect(this.audioContext.destination);
+  }
+
+  _lyricsDuration() {
+    if (!this.lyrics.length) return 0;
+    const last = this.lyrics[this.lyrics.length - 1];
+    return Math.max(0, (last.time || 0) + (this.lyricOffset || 0) + 5);
   }
 
   _renderLyrics() {
@@ -118,7 +141,17 @@ class LyricsPlayer {
   }
 
   async play() {
-    if (!this.buffer || this.isPlaying) return;
+    if (this.isPlaying) return;
+    if (!this.audioEnabled) {
+      if (!this.duration) return;
+      this.isPlaying = true;
+      this.playStartTime = performance.now() / 1000;
+      this._showPause(true);
+      this._startAnimation();
+      return;
+    }
+    if (!this.buffer) return;
+    this._ensureAudioContext();
     await this.audioContext.resume();
     this.isPlaying = true;
     const startAt = this.audioContext.currentTime + 0.03;
@@ -171,7 +204,10 @@ class LyricsPlayer {
 
   currentTime() {
     if (!this.isPlaying) return this.playOffset;
-    const elapsed = this.audioContext.currentTime - this.playStartTime;
+    const now = this.audioEnabled && this.audioContext
+      ? this.audioContext.currentTime
+      : performance.now() / 1000;
+    const elapsed = now - this.playStartTime;
     return Math.min(this.playOffset + elapsed, this.duration || 0);
   }
 
@@ -180,6 +216,14 @@ class LyricsPlayer {
       if (!this.isPlaying) return;
       this._updateTime();
       this._updateLyrics();
+      if (!this.audioEnabled && this.duration > 0 && this.currentTime() >= this.duration) {
+        if (this.mode === 'setlist' && this.currentIndex < this.items.length - 1) {
+          this.loadIndex(this.currentIndex + 1, true);
+        } else {
+          this.stop();
+        }
+        return;
+      }
       this.animationId = requestAnimationFrame(tick);
     };
     tick();
@@ -336,6 +380,14 @@ class LyricsPlayer {
 
 document.addEventListener('DOMContentLoaded', () => {
   const mode = window.LYRICS_PLAYER_MODE || 'setlist';
+  const audioPreferenceKey = 'bm-lyrics-audio-enabled';
+  const params = new URLSearchParams(window.location.search);
+  const audioParam = params.get('audio');
+  const storedAudio = localStorage.getItem(audioPreferenceKey);
+  const audioEnabled = audioParam === null
+    ? storedAudio !== '0'
+    : audioParam !== '0';
+  localStorage.setItem(audioPreferenceKey, audioEnabled ? '1' : '0');
   let items = [];
   if (mode === 'single') {
     const el = document.getElementById('ly-single-item');
@@ -345,5 +397,5 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) items = JSON.parse(el.textContent);
   }
   if (!items.length) return;
-  window.lyricsPlayer = new LyricsPlayer(items, mode);
+  window.lyricsPlayer = new LyricsPlayer(items, mode, { audioEnabled });
 });

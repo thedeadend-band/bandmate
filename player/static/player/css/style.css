@@ -1290,6 +1290,18 @@ body {
 /* hide the hidden input */
 .checkbox-label input[type="hidden"] { display: none; }
 
+.lyrics-audio-toggle {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-height: 36px;
+}
+
+.lyrics-audio-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
 /* ---- Playlists (song list page) --------------------------------------- */
 
 .section-header {
