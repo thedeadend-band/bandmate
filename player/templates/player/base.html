@@ -9,7 +9,10 @@
   <script>
     (function(){var t=localStorage.getItem('bm-theme')||'dark';document.documentElement.setAttribute('data-theme',t)})();
   </script>
-  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=7">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=9">
   {% block extra_head %}{% endblock %}
 </head>
 <body>

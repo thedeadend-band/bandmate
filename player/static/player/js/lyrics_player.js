@@ -27,33 +27,44 @@ class LyricsPlayer {
 
   _bindEvents() {
     document.getElementById('ly-play')?.addEventListener('click', () => {
-      if (this.isPlaying) this.pause();
-      else this.play();
+      this.togglePlay();
     });
-    document.getElementById('ly-prev')?.addEventListener('click', () => {
-      if (this.mode === 'single') {
-        this.seekTo(0);
-        return;
-      }
-      if (this.currentTime() > 3) {
-        this.seekTo(0);
-      } else {
-        this.loadIndex(Math.max(0, this.currentIndex - 1), this.isPlaying);
-      }
-    });
-    document.getElementById('ly-next')?.addEventListener('click', () => {
-      if (this.mode === 'single') {
-        this.stop();
-        return;
-      }
-      this.loadIndex(Math.min(this.items.length - 1, this.currentIndex + 1), this.isPlaying);
-    });
+    document.getElementById('ly-prev')?.addEventListener('click', () => this.prev());
+    document.getElementById('ly-next')?.addEventListener('click', () => this.next());
+    document.getElementById('ly-skip-back')?.addEventListener('click', () => this.skipBy(-5));
+    document.getElementById('ly-skip-forward')?.addEventListener('click', () => this.skipBy(5));
     document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      if (e.code === 'Space') {
-        e.preventDefault();
-        if (this.isPlaying) this.pause();
-        else this.play();
+      if (this._isTypingTarget(e.target)) return;
+      switch (e.code || e.key) {
+        case 'Space':
+        case 'Enter':
+        case 'KeyK':
+        case 'MediaPlayPause':
+          e.preventDefault();
+          this.togglePlay();
+          break;
+        case 'KeyJ':
+        case 'ArrowLeft':
+          e.preventDefault();
+          this.skipBy(-5);
+          break;
+        case 'KeyL':
+        case 'ArrowRight':
+          e.preventDefault();
+          this.skipBy(5);
+          break;
+        case 'KeyP':
+        case 'PageUp':
+        case 'MediaTrackPrevious':
+          e.preventDefault();
+          this.prev();
+          break;
+        case 'KeyN':
+        case 'PageDown':
+        case 'MediaTrackNext':
+          e.preventDefault();
+          this.next();
+          break;
       }
     });
 
@@ -202,6 +213,34 @@ class LyricsPlayer {
     this.playOffset = 0;
     this._updateTime();
     this._updateLyrics();
+  }
+
+  togglePlay() {
+    this.isPlaying ? this.pause() : this.play();
+  }
+
+  skipBy(seconds) {
+    this.seekTo(this.currentTime() + seconds);
+  }
+
+  prev() {
+    if (this.mode === 'single') {
+      this.seekTo(0);
+      return;
+    }
+    if (this.currentTime() > 3) {
+      this.seekTo(0);
+    } else {
+      this.loadIndex(Math.max(0, this.currentIndex - 1), this.isPlaying);
+    }
+  }
+
+  next() {
+    if (this.mode === 'single') {
+      this.stop();
+      return;
+    }
+    this.loadIndex(Math.min(this.items.length - 1, this.currentIndex + 1), this.isPlaying);
   }
 
   async seekTo(seconds) {
@@ -406,6 +445,15 @@ class LyricsPlayer {
     };
     main.addEventListener('pointerup', endDrag);
     main.addEventListener('pointercancel', endDrag);
+  }
+
+  _isTypingTarget(target) {
+    if (!target) return false;
+    const tag = target.tagName;
+    return target.isContentEditable ||
+      tag === 'INPUT' ||
+      tag === 'TEXTAREA' ||
+      tag === 'SELECT';
   }
 }
 

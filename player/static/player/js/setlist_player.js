@@ -448,6 +448,15 @@ class SetlistPlayer {
     this._updateTime();
   }
 
+  togglePlay() {
+    if (document.getElementById('pp-play').classList.contains('disabled')) return;
+    this.isPlaying ? this.pause() : this.play();
+  }
+
+  skipBy(seconds) {
+    this.seekTo(this.currentTime() + seconds);
+  }
+
   async next() {
     if (this.currentIndex < this.songs.length - 1) {
       const wasPlaying = this.isPlaying;
@@ -638,12 +647,13 @@ class SetlistPlayer {
 
   _bindEvents() {
     document.getElementById('pp-play').addEventListener('click', () => {
-      if (document.getElementById('pp-play').classList.contains('disabled')) return;
-      this.isPlaying ? this.pause() : this.play();
+      this.togglePlay();
     });
     document.getElementById('pp-stop').addEventListener('click', () => this.stop());
     document.getElementById('pp-next').addEventListener('click', () => this.next());
     document.getElementById('pp-prev').addEventListener('click', () => this.prev());
+    document.getElementById('pp-skip-back')?.addEventListener('click', () => this.skipBy(-5));
+    document.getElementById('pp-skip-forward')?.addEventListener('click', () => this.skipBy(5));
 
     const fsBtn = document.getElementById('lyrics-fullscreen-btn');
     if (fsBtn) {
@@ -686,24 +696,35 @@ class SetlistPlayer {
     container.addEventListener('pointercancel', () => { dragging = false; });
 
     document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      switch (e.code) {
+      if (this._isTypingTarget(e.target)) return;
+      switch (e.code || e.key) {
         case 'Space':
+        case 'Enter':
+        case 'KeyK':
+        case 'MediaPlayPause':
           e.preventDefault();
-          this.isPlaying ? this.pause() : this.play();
+          this.togglePlay();
           break;
+        case 'KeyJ':
         case 'ArrowLeft':
           e.preventDefault();
-          this.seekTo(this.currentTime() - 5);
+          this.skipBy(-5);
           break;
+        case 'KeyL':
         case 'ArrowRight':
           e.preventDefault();
-          this.seekTo(this.currentTime() + 5);
+          this.skipBy(5);
           break;
         case 'KeyN':
+        case 'PageDown':
+        case 'MediaTrackNext':
+          e.preventDefault();
           this.next();
           break;
         case 'KeyP':
+        case 'PageUp':
+        case 'MediaTrackPrevious':
+          e.preventDefault();
           this.prev();
           break;
       }
@@ -723,6 +744,15 @@ class SetlistPlayer {
 
     const themeBtn = document.getElementById('theme-toggle');
     if (themeBtn) themeBtn.addEventListener('click', () => requestAnimationFrame(redraw));
+  }
+
+  _isTypingTarget(target) {
+    if (!target) return false;
+    const tag = target.tagName;
+    return target.isContentEditable ||
+      tag === 'INPUT' ||
+      tag === 'TEXTAREA' ||
+      tag === 'SELECT';
   }
 }
 

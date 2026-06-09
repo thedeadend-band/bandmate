@@ -530,6 +530,15 @@ class MultiTrackPlayer {
     this._updateTimeDisplay();
   }
 
+  togglePlay() {
+    if (document.getElementById('play-btn').classList.contains('disabled')) return;
+    this.isPlaying ? this.pause() : this.play();
+  }
+
+  skipBy(seconds) {
+    this.seekTo(this.currentTime() + seconds);
+  }
+
   async seekTo(seconds) {
     const wasPlaying = this.isPlaying;
     if (wasPlaying) this.pause();
@@ -648,9 +657,11 @@ class MultiTrackPlayer {
   _bindEvents() {
     // Play / Pause toggle
     document.getElementById('play-btn').addEventListener('click', () => {
-      if (document.getElementById('play-btn').classList.contains('disabled')) return;
-      this.isPlaying ? this.pause() : this.play();
+      this.togglePlay();
     });
+
+    document.getElementById('skip-back-btn')?.addEventListener('click', () => this.skipBy(-5));
+    document.getElementById('skip-forward-btn')?.addEventListener('click', () => this.skipBy(5));
 
     // Stop
     document.getElementById('stop-btn').addEventListener('click', () => this.stop());
@@ -728,26 +739,36 @@ class MultiTrackPlayer {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      switch (e.code) {
+      if (this._isTypingTarget(e.target)) return;
+      switch (e.code || e.key) {
         case 'Space':
+        case 'Enter':
+        case 'KeyK':
+        case 'MediaPlayPause':
           e.preventDefault();
-          if (document.getElementById('play-btn').classList.contains('disabled')) return;
-          this.isPlaying ? this.pause() : this.play();
+          this.togglePlay();
           break;
+        case 'KeyJ':
         case 'ArrowLeft':
           e.preventDefault();
-          this.seekTo(this.currentTime() - 5);
+          this.skipBy(-5);
           break;
+        case 'KeyL':
         case 'ArrowRight':
           e.preventDefault();
-          this.seekTo(this.currentTime() + 5);
+          this.skipBy(5);
           break;
         case 'Home':
+        case 'KeyP':
+        case 'PageUp':
+        case 'MediaTrackPrevious':
           e.preventDefault();
           this.seekTo(0);
           break;
         case 'End':
+        case 'KeyN':
+        case 'PageDown':
+        case 'MediaTrackNext':
           e.preventDefault();
           this.seekTo(this.duration);
           break;
@@ -772,6 +793,15 @@ class MultiTrackPlayer {
     // Theme toggle → redraw canvases with new colours
     const themeBtn = document.getElementById('theme-toggle');
     if (themeBtn) themeBtn.addEventListener('click', () => requestAnimationFrame(redrawAll));
+  }
+
+  _isTypingTarget(target) {
+    if (!target) return false;
+    const tag = target.tagName;
+    return target.isContentEditable ||
+      tag === 'INPUT' ||
+      tag === 'TEXTAREA' ||
+      tag === 'SELECT';
   }
 }
 
