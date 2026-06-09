@@ -18,6 +18,7 @@ class LyricsPlayer {
     this.currentLyricIndex = -1;
     this.isScrubbingLyrics = false;
     this._lyricsScrollEndTimer = null;
+    this.wakeLock = null;
     this._bindEvents();
     if (this.items.length) {
       this.loadIndex(0);
@@ -63,6 +64,14 @@ class LyricsPlayer {
         this.seekTo((this.duration || 0) * pct);
       });
     }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        this._releaseWakeLock();
+      } else if (this.isPlaying) {
+        this._requestWakeLock();
+      }
+    });
 
     this._bindLyricsSeeking();
   }
@@ -146,6 +155,7 @@ class LyricsPlayer {
       if (!this.duration) return;
       this.isPlaying = true;
       this.playStartTime = performance.now() / 1000;
+      await this._requestWakeLock();
       this._showPause(true);
       this._startAnimation();
       return;
@@ -169,6 +179,7 @@ class LyricsPlayer {
       }
     };
     this.source = src;
+    await this._requestWakeLock();
     this._showPause(true);
     this._startAnimation();
   }
@@ -181,6 +192,7 @@ class LyricsPlayer {
       try { this.source.stop(); } catch (_) {}
       this.source = null;
     }
+    this._releaseWakeLock();
     this._showPause(false);
     this._stopAnimation();
   }
@@ -234,6 +246,25 @@ class LyricsPlayer {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
+  }
+
+  async _requestWakeLock() {
+    if (!('wakeLock' in navigator) || this.wakeLock) return;
+    try {
+      this.wakeLock = await navigator.wakeLock.request('screen');
+      this.wakeLock.addEventListener('release', () => {
+        this.wakeLock = null;
+      });
+    } catch (e) {
+      console.info('Screen wake lock unavailable', e);
+    }
+  }
+
+  _releaseWakeLock() {
+    if (!this.wakeLock) return;
+    const lock = this.wakeLock;
+    this.wakeLock = null;
+    lock.release().catch(() => {});
   }
 
   _showPause(show) {
