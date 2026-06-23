@@ -727,6 +727,48 @@ for _cfg in _MODEL_CONFIGS:
 _PROGRESS_RE = _re.compile(r'(\d+)%')
 
 
+def _separator_output_files(output_dir: str) -> list[str]:
+    output_path = Path(output_dir)
+    return [
+        str(f) for f in sorted(output_path.rglob('*'))
+        if f.is_file() and f.suffix.lower() in ('.wav', '.flac')
+    ]
+
+
+def _separator_failure_message(label: str, output: str) -> str:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    error_lines = [
+        line for line in lines
+        if ' - ERROR - ' in line or 'traceback' in line.lower()
+    ]
+    if error_lines:
+        message = error_lines[-1]
+        if ' - ERROR - ' in message:
+            message = message.split(' - ERROR - ', 1)[1]
+            if ' - ' in message:
+                message = message.split(' - ', 1)[1]
+        return f'audio-separator failed for {label}: {message[-500:]}'
+
+    tail = ' '.join(lines[-3:])[-500:] if lines else 'no command output'
+    return (
+        f'audio-separator produced no audio files for {label}. '
+        f'Last output: {tail}')
+
+
+def _separator_command(args: list[str], disable_cudnn: bool) -> list[str]:
+    if not disable_cudnn:
+        return args
+
+    script = (
+        'import runpy, sys\n'
+        'import torch\n'
+        'torch.backends.cudnn.enabled = False\n'
+        f'sys.argv = {args!r}\n'
+        'runpy.run_path(sys.argv[0], run_name="__main__")\n'
+    )
+    return [_sys.executable, '-c', script]
+
+
 def _run_separator_pass(
     master_path: str,
     model_filename: str,
@@ -736,6 +778,7 @@ def _run_separator_pass(
     progress_hi: int,
     label: str,
     single_stem: str | None = None,
+    disable_cudnn: bool = False,
 ) -> list[str]:
     """Run audio-separator and return output file paths.
 
@@ -743,7 +786,7 @@ def _run_separator_pass(
     """
     separator_bin = str(Path(_sys.executable).parent / 'audio-separator')
 
-    cmd = [
+    args = [
         separator_bin,
         master_path,
         '--model_filename', model_filename,
@@ -751,8 +794,11 @@ def _run_separator_pass(
         '--output_format', 'FLAC',
     ]
     if single_stem:
-        cmd.extend(['--single_stem', single_stem])
-    logger.info('Running audio-separator: %s', ' '.join(cmd))
+        args.extend(['--single_stem', single_stem])
+
+    cmd = _separator_command(args, disable_cudnn)
+    cudnn_note = ' with cuDNN disabled' if disable_cudnn else ''
+    logger.info('Running audio-separator%s: %s', cudnn_note, ' '.join(args))
 
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=False,
@@ -827,8 +873,8 @@ def _run_separator_pass(
             # Check if output files exist (process may be hung on cleanup)
             if idle_since and (_time.monotonic() - idle_since) > 10:
                 out_files = [
-                    f for f in Path(output_dir).iterdir()
-                    if f.suffix.lower() in ('.wav', '.flac') and f.stat().st_size > 1000
+                    Path(f) for f in _separator_output_files(output_dir)
+                    if Path(f).stat().st_size > 1000
                 ]
                 if out_files:
                     sizes = [f.stat().st_size for f in out_files]
@@ -878,17 +924,47 @@ def _run_separator_pass(
         proc.kill()
         proc.wait()
 
-    if proc.returncode not in (0, -9, None):
-        raise RuntimeError(
-            f'audio-separator failed for {label} (rc={proc.returncode}): '
-            f'{all_output[-300:]}')
-
     if gpu_detected is not None and hasattr(wizard_model, '_gpu_detected'):
         wizard_model._gpu_detected = gpu_detected
 
-    output_path = Path(output_dir)
-    return [str(f) for f in output_path.iterdir()
-            if f.suffix.lower() in ('.wav', '.flac')]
+    output_files = _separator_output_files(output_dir)
+
+    failure = None
+    if proc.returncode not in (0, -9, None):
+        failure = (
+            f'{_separator_failure_message(label, all_output)} '
+            f'(rc={proc.returncode})')
+    elif not output_files:
+        failure = _separator_failure_message(label, all_output)
+
+    if failure:
+        if (not disable_cudnn
+                and 'cudnn_status_not_initialized' in all_output.lower()):
+            logger.warning(
+                'audio-separator cuDNN failed for %s; retrying without cuDNN',
+                label)
+            wizard_model.bg_task_message = (
+                f'[{label}] cuDNN failed; retrying without cuDNN…')
+            try:
+                wizard_model.save(update_fields=['bg_task_message'])
+            except Exception:
+                pass
+            shutil.rmtree(str(output_dir), ignore_errors=True)
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            return _run_separator_pass(
+                master_path=master_path,
+                model_filename=model_filename,
+                output_dir=output_dir,
+                wizard_model=wizard_model,
+                progress_lo=progress_lo,
+                progress_hi=progress_hi,
+                label=label,
+                single_stem=single_stem,
+                disable_cudnn=True,
+            )
+        raise RuntimeError(failure)
+
+    return output_files
 
 
 def run_stem_separation(wizard_model) -> None:

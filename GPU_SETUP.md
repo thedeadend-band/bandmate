@@ -259,6 +259,13 @@ This means the PyTorch CUDA build requires a newer driver than what you have.
 - Driver 535.x → use `cu118` index URL
 - Driver 550+ → use `cu121` or `cu124` index URL
 
+Confirm from inside the LXC:
+
+```bash
+source /srv/bandmate/.venv/bin/activate
+python3 -c "import torch; print(torch.__version__); print(torch.version.cuda); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'no gpu')"
+```
+
 ### update-service.sh overwrites GPU packages
 
 The update script runs `pip install -r requirements.txt` which may pull in
@@ -270,6 +277,55 @@ source /srv/bandmate/.venv/bin/activate
 pip install -r requirements-gpu.txt
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
+
+### torch.cuda.is_available() is false but nvidia-smi works
+
+If `/dev/nvidia-uvm` or `/dev/nvidia-uvm-tools` appear as zero-byte regular
+files (`----------`) inside the LXC, CUDA cannot initialize even though
+`nvidia-smi` can see the card. Load UVM on the Proxmox host and restart the
+container:
+
+```bash
+# On the Proxmox host
+modprobe nvidia_uvm
+nvidia-smi
+ls -la /dev/nvidia*
+
+# Then restart the LXC
+pct restart <container-id>
+```
+
+After restart, the LXC should show real character devices, for example:
+
+```text
+crw-rw-rw- 1 root root 236, 0 /dev/nvidia-uvm
+crw-rw-rw- 1 root root 236, 1 /dev/nvidia-uvm-tools
+```
+
+### cuDNN error: CUDNN_STATUS_NOT_INITIALIZED
+
+If PyTorch reports CUDA is available but Demucs/audio-separator fails with
+`CUDNN_STATUS_NOT_INITIALIZED`, test whether regular CUDA kernels work without
+cuDNN:
+
+```bash
+source /srv/bandmate/.venv/bin/activate
+python3 - <<'PY'
+import torch
+torch.backends.cudnn.enabled = False
+print(torch.__version__, torch.version.cuda, torch.cuda.is_available())
+x = torch.randn(1, 2, 44100, device="cuda")
+conv = torch.nn.Conv1d(2, 16, 15, padding=7).cuda()
+y = conv(x)
+torch.cuda.synchronize()
+print("cuda conv without cudnn ok", y.shape)
+PY
+```
+
+BandMate automatically retries a failed separator pass with cuDNN disabled when
+audio-separator reports this error. If this smoke test fails too, reinstall a
+compatible PyTorch/CUDA wheel or move the service to a Python version that can
+use an older PyTorch build.
 
 ### Host reboot loses /dev/nvidia-uvm devices
 
