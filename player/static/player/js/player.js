@@ -662,6 +662,7 @@ class MultiTrackPlayer {
 
     document.getElementById('skip-back-btn')?.addEventListener('click', () => this.skipBy(-5));
     document.getElementById('skip-forward-btn')?.addEventListener('click', () => this.skipBy(5));
+    document.getElementById('restart-btn')?.addEventListener('click', () => this.seekTo(0));
 
     // Stop
     document.getElementById('stop-btn').addEventListener('click', () => this.stop());

@@ -316,8 +316,9 @@ class LyricsPlayer {
 
   _updateTime() {
     const el = document.getElementById('ly-time');
-    if (!el) return;
-    el.textContent = `${this._fmt(this.currentTime())} / ${this._fmt(this.duration)}`;
+    if (el) {
+      el.textContent = `${this._fmt(this.currentTime())} / ${this._fmt(this.duration)}`;
+    }
     const progress = document.getElementById('ly-progress');
     if (progress && this.duration > 0) {
       progress.value = String(Math.round((this.currentTime() / this.duration) * 1000));

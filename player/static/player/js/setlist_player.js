@@ -535,8 +535,9 @@ class SetlistPlayer {
   }
 
   _updateTime() {
-    document.getElementById('pp-time').textContent =
-      `${this._fmt(this.currentTime())} / ${this._fmt(this.duration)}`;
+    const el = document.getElementById('pp-time');
+    if (!el) return;
+    el.textContent = `${this._fmt(this.currentTime())} / ${this._fmt(this.duration)}`;
   }
 
   _showPause(show) {
@@ -649,7 +650,7 @@ class SetlistPlayer {
     document.getElementById('pp-play').addEventListener('click', () => {
       this.togglePlay();
     });
-    document.getElementById('pp-stop').addEventListener('click', () => this.stop());
+    document.getElementById('pp-stop')?.addEventListener('click', () => this.stop());
     document.getElementById('pp-next').addEventListener('click', () => this.next());
     document.getElementById('pp-prev').addEventListener('click', () => this.prev());
     document.getElementById('pp-skip-back')?.addEventListener('click', () => this.skipBy(-5));

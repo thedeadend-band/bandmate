@@ -31,22 +31,21 @@
     <button id="ly-prev" class="transport-btn" title="Restart (P / Page Up)">
       <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16"/></svg>
     </button>
+    <button id="ly-next" class="transport-btn" title="Stop (N / Page Down)">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+    </button>
     <button id="ly-skip-back" class="transport-btn transport-skip-btn" title="Skip back 5 seconds (J / Left Arrow)">
       <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="11,6 3,12 11,18"/><polygon points="21,6 13,12 21,18"/></svg>
       <span class="transport-skip-label">5</span>
-    </button>
-    <button id="ly-play" class="transport-btn" title="Play / Pause (Space / Enter / K)">
-      <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
-      <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
     </button>
     <button id="ly-skip-forward" class="transport-btn transport-skip-btn" title="Skip ahead 5 seconds (L / Right Arrow)">
       <span class="transport-skip-label">5</span>
       <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="3,6 11,12 3,18"/><polygon points="13,6 21,12 13,18"/></svg>
     </button>
-    <button id="ly-next" class="transport-btn" title="Stop (N / Page Down)">
-      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+    <button id="ly-play" class="transport-btn" title="Play / Pause (Space / Enter / K)">
+      <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
     </button>
-    <span id="ly-time">0:00 / 0:00</span>
   </div>
   <div class="lyrics-progress-wrap">
     <input id="ly-progress" class="lyrics-progress" type="range" min="0" max="1000" value="0" step="1" aria-label="Playback position">
@@ -57,5 +56,5 @@
 <script>
   window.LYRICS_PLAYER_MODE = 'single';
 </script>
-<script src="{% static 'player/js/lyrics_player.js' %}?v=20260608-shortcuts"></script>
+<script src="{% static 'player/js/lyrics_player.js' %}?v=20260703-controls"></script>
 {% endblock %}
