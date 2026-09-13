@@ -141,7 +141,7 @@ def search_lyrics(track_name: str, artist_name: str) -> tuple[dict | None, str |
 # YouTube search via yt-dlp
 # ---------------------------------------------------------------------------
 
-YOUTUBE_EXTRACTOR_ARGS = {
+YOUTUBE_DEFAULT_EXTRACTOR_ARGS = {
     'youtube': {
         # Avoid YouTube clients/formats that are prone to producing download
         # URLs rejected with HTTP 403 by googlevideo.
@@ -149,8 +149,37 @@ YOUTUBE_EXTRACTOR_ARGS = {
     },
 }
 
+YOUTUBE_DOWNLOAD_ATTEMPTS = [
+    {
+        'name': 'default clients',
+        'extractor_args': YOUTUBE_DEFAULT_EXTRACTOR_ARGS,
+        'format': 'bestaudio/best',
+    },
+    {
+        'name': 'TV/Safari clients',
+        'extractor_args': {
+            'youtube': {'player_client': ['tv', 'web_safari']},
+        },
+        'format': 'bestaudio/best',
+    },
+    {
+        'name': 'HLS audio fallback',
+        'extractor_args': {
+            'youtube': {'player_client': ['tv', 'web_safari']},
+        },
+        'format': (
+            'bestaudio[protocol=m3u8_native]/'
+            'best[protocol=m3u8_native]/'
+            'bestaudio/best'
+        ),
+    },
+]
 
-def _youtube_ydl_opts(extra: dict | None = None) -> dict:
+
+def _youtube_ydl_opts(
+    extra: dict | None = None,
+    extractor_args: dict | None = None,
+) -> dict:
     opts = {
         'quiet': True,
         'no_warnings': True,
@@ -159,19 +188,29 @@ def _youtube_ydl_opts(extra: dict | None = None) -> dict:
         'fragment_retries': 3,
         'extractor_retries': 3,
         'socket_timeout': 30,
-        'extractor_args': YOUTUBE_EXTRACTOR_ARGS,
+        'extractor_args': extractor_args or YOUTUBE_DEFAULT_EXTRACTOR_ARGS,
     }
     if extra:
         opts.update(extra)
     return opts
 
 
+def _cleanup_youtube_outputs(out_path: Path, final_path: Path) -> None:
+    candidates = [out_path, *out_path.parent.glob(f'{out_path.name}.*')]
+    for candidate in candidates:
+        if candidate == final_path:
+            continue
+        if candidate.is_file():
+            candidate.unlink(missing_ok=True)
+
+
 def _youtube_error_message(exc: Exception) -> str:
     msg = str(exc)
     if '403' in msg or 'Forbidden' in msg:
         return (
-            f'{msg}. YouTube rejected the extracted media URL; update yt-dlp '
-            'on the server if this persists.')
+            f'{msg}. YouTube rejected the extracted media URL after trying '
+            'alternate yt-dlp clients and an HLS fallback; update yt-dlp on '
+            'the server if this persists.')
     return msg
 
 
@@ -259,20 +298,47 @@ def download_youtube_audio(video_id: str, output_dir: str, wizard_model=None) ->
             wizard_model.bg_task_message = 'Converting to WAV...'
             wizard_model.save(update_fields=['bg_task_progress', 'bg_task_message'])
 
-    ydl_opts = _youtube_ydl_opts({
-        'format': 'bestaudio/best',
-        'outtmpl': str(out_path),
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'wav',
-        }],
-        'progress_hooks': [_progress_hook],
-    })
-
     try:
         url = f'https://www.youtube.com/watch?v={video_id}'
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        last_error = None
+
+        for index, attempt in enumerate(YOUTUBE_DOWNLOAD_ATTEMPTS, start=1):
+            if wizard_model:
+                wizard_model.bg_task_message = (
+                    f'Downloading... trying {attempt["name"]} '
+                    f'({index}/{len(YOUTUBE_DOWNLOAD_ATTEMPTS)})')
+                wizard_model.save(update_fields=['bg_task_message'])
+
+            ydl_opts = _youtube_ydl_opts(
+                {
+                    'format': attempt['format'],
+                    'outtmpl': str(out_path),
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'wav',
+                    }],
+                    'progress_hooks': [_progress_hook],
+                },
+                extractor_args=attempt['extractor_args'],
+            )
+
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+                if final_path.exists():
+                    break
+                last_error = FileNotFoundError(
+                    f'Expected output not found: {final_path}')
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    'YouTube download attempt %s failed for %s: %s',
+                    attempt['name'], video_id, e)
+            finally:
+                if not final_path.exists():
+                    _cleanup_youtube_outputs(out_path, final_path)
+        else:
+            raise last_error or RuntimeError('YouTube download failed')
 
         if final_path.exists():
             if wizard_model:
@@ -321,18 +387,37 @@ def download_youtube_as_flac(video_id: str, output_dir: str) -> str:
     out_path = Path(output_dir) / video_id
     final_path = Path(output_dir) / f'{video_id}.flac'
 
-    ydl_opts = _youtube_ydl_opts({
-        'format': 'bestaudio/best',
-        'outtmpl': str(out_path),
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'flac',
-        }],
-    })
-
     url = f'https://www.youtube.com/watch?v={video_id}'
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    last_error = None
+    for attempt in YOUTUBE_DOWNLOAD_ATTEMPTS:
+        ydl_opts = _youtube_ydl_opts(
+            {
+                'format': attempt['format'],
+                'outtmpl': str(out_path),
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'flac',
+                }],
+            },
+            extractor_args=attempt['extractor_args'],
+        )
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            if final_path.exists():
+                break
+            last_error = FileNotFoundError(
+                f'Expected output not found: {final_path}')
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                'YouTube FLAC download attempt %s failed for %s: %s',
+                attempt['name'], video_id, e)
+        finally:
+            if not final_path.exists():
+                _cleanup_youtube_outputs(out_path, final_path)
+    else:
+        raise last_error or RuntimeError('YouTube download failed')
 
     if not final_path.exists():
         raise FileNotFoundError(f'Expected output not found: {final_path}')
