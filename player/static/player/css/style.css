@@ -2350,6 +2350,10 @@ textarea {
   margin-bottom: 24px;
 }
 
+.wiz-content.wiz-source-content {
+  max-width: 960px;
+}
+
 .wiz-source-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -2794,9 +2798,10 @@ textarea {
   .wiz-step-label { display: inline; }
   .wiz-step { padding: 8px 14px; }
   .wiz-content { max-width: 640px; margin-left: auto; margin-right: auto; }
+  .wiz-content.wiz-source-content { max-width: 960px; }
   .wiz-form { max-width: 480px; }
   .wiz-start-page { max-width: 560px; margin-left: auto; margin-right: auto; }
-  .wiz-source-options { grid-template-columns: 1fr 1fr; }
+  .wiz-source-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .wiz-yt-card { gap: 16px; }
   .wiz-form-row { grid-template-columns: 1fr 1fr 1fr; }
   .wiz-review-grid { grid-template-columns: 1fr 1fr 1fr; }

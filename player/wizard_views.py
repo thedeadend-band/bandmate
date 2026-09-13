@@ -7,6 +7,7 @@ in SongWizard and uses a staging directory for intermediate audio files.
 
 import json
 import os
+import subprocess
 from functools import wraps
 from pathlib import Path
 
@@ -217,6 +218,51 @@ def step_tempo_key(request, wiz):
 
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.aiff', '.aif'}
 
+
+def _write_uploaded_file(uploaded_file, dest: Path) -> None:
+    with open(dest, 'wb') as out:
+        for chunk in uploaded_file.chunks():
+            out.write(chunk)
+
+
+def _save_master_upload(uploaded_file, staging: Path) -> str | None:
+    ext = Path(uploaded_file.name).suffix.lower()
+    if ext not in AUDIO_EXTENSIONS:
+        return f'Unsupported format: {uploaded_file.name}'
+
+    master = staging / 'Master.wav'
+    if ext == '.wav':
+        _write_uploaded_file(uploaded_file, master)
+        return None
+
+    temp = staging / f'_uploaded_master{ext}'
+    _write_uploaded_file(uploaded_file, temp)
+    try:
+        try:
+            result = subprocess.run(
+                [
+                    'ffmpeg', '-y', '-i', str(temp),
+                    '-vn', '-ac', '2', '-ar', '44100', str(master),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+        except FileNotFoundError:
+            return 'ffmpeg is required to convert uploaded master audio.'
+        except subprocess.TimeoutExpired:
+            return 'Converting the uploaded master audio timed out.'
+
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or '').strip().splitlines()
+            tail = detail[-1] if detail else 'ffmpeg conversion failed'
+            return f'Could not convert master audio: {tail}'
+    finally:
+        temp.unlink(missing_ok=True)
+
+    return None
+
+
 @_register_step('track_source')
 def step_track_source(request, wiz):
     errors = {}
@@ -235,6 +281,22 @@ def step_track_source(request, wiz):
             wiz.save(update_fields=['track_source', 'current_step'])
             return redirect('wizard_step', wizard_id=wiz.pk, step_name='download_upload')
 
+        elif action == 'upload_master':
+            uploaded = request.FILES.get('master_audio')
+            if not uploaded:
+                errors['files'] = 'Please select a master audio file.'
+            else:
+                staging = Path(wiz.staging_dir)
+                staging.mkdir(parents=True, exist_ok=True)
+                error = _save_master_upload(uploaded, staging)
+                if error:
+                    errors['files'] = error
+                else:
+                    wiz.track_source = 'upload_master'
+                    wiz.current_step = 'download_upload'
+                    wiz.save(update_fields=['track_source', 'current_step'])
+                    return redirect('wizard_step', wizard_id=wiz.pk, step_name='download_upload')
+
         elif action == 'upload':
             files = request.FILES.getlist('audio_files')
             if not files:
@@ -248,12 +310,16 @@ def step_track_source(request, wiz):
                     if ext not in AUDIO_EXTENSIONS:
                         errors['files'] = f'Unsupported format: {f.name}'
                         break
-                    dest = staging / f.name
-                    with open(dest, 'wb') as out:
-                        for chunk in f.chunks():
-                            out.write(chunk)
                     if f.name.lower().startswith('master'):
+                        error = _save_master_upload(f, staging)
+                        if error:
+                            errors['files'] = error
+                            break
                         has_master = True
+                        continue
+
+                    dest = staging / f.name
+                    _write_uploaded_file(f, dest)
 
                 if not errors and not has_master:
                     errors['files'] = 'A Master track is required. Name it Master.wav (or Master.mp3, etc.).'
@@ -748,10 +814,15 @@ def wizard_upload_files(request, wizard_id):
         ext = Path(f.name).suffix.lower()
         if ext not in AUDIO_EXTENSIONS:
             return JsonResponse({'error': f'Unsupported format: {f.name}'}, status=400)
+        if f.name.lower().startswith('master'):
+            error = _save_master_upload(f, staging)
+            if error:
+                return JsonResponse({'error': error}, status=400)
+            saved.append('Master.wav')
+            continue
+
         dest = staging / f.name
-        with open(dest, 'wb') as out:
-            for chunk in f.chunks():
-                out.write(chunk)
+        _write_uploaded_file(f, dest)
         saved.append(f.name)
 
     return JsonResponse({'ok': True, 'files': saved})

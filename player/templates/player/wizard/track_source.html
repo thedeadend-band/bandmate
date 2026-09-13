@@ -12,7 +12,7 @@
 
 {% include "player/wizard/_step_indicator.html" %}
 
-<div class="wiz-content">
+<div class="wiz-content wiz-source-content">
   <h1 class="page-title">Track Source</h1>
   <p class="wiz-step-desc">Choose how to provide audio for <strong>{{ wizard.artist }} – {{ wizard.title }}</strong>.</p>
 
@@ -40,6 +40,32 @@
     <div class="wiz-source-card">
       <div class="wiz-source-icon">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13"/>
+          <circle cx="6" cy="18" r="3"/>
+          <circle cx="18" cy="16" r="3"/>
+        </svg>
+      </div>
+      <h3>Upload Master</h3>
+      <p>Upload one finished mix and BandMate will create the Master track, then generate stems automatically with AI separation.</p>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload_master">
+        <label class="wiz-file-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span id="master-file-text">Choose master...</span>
+          <input type="file" name="master_audio" accept=".wav,.mp3,.flac,.ogg,.aiff,.aif" id="master-file-input" style="display:none">
+        </label>
+        <button type="submit" class="btn btn-primary wiz-source-btn" id="master-upload-submit" disabled>Upload Master</button>
+      </form>
+    </div>
+
+    <div class="wiz-source-card">
+      <div class="wiz-source-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
           <polyline points="17 8 12 3 7 8"/>
           <line x1="12" y1="3" x2="12" y2="15"/>
@@ -50,16 +76,16 @@
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         <input type="hidden" name="action" value="upload">
-        <label class="wiz-file-label" id="file-label">
+        <label class="wiz-file-label">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          <span id="file-text">Choose files...</span>
-          <input type="file" name="audio_files" multiple accept=".wav,.mp3,.flac,.ogg,.aiff,.aif" id="file-input" style="display:none">
+          <span id="stem-file-text">Choose files...</span>
+          <input type="file" name="audio_files" multiple accept=".wav,.mp3,.flac,.ogg,.aiff,.aif" id="stem-file-input" style="display:none">
         </label>
-        <button type="submit" class="btn btn-primary wiz-source-btn" id="upload-submit" disabled>Upload &amp; Continue</button>
+        <button type="submit" class="btn btn-primary wiz-source-btn" id="stem-upload-submit" disabled>Upload &amp; Continue</button>
       </form>
     </div>
   </div>
@@ -88,15 +114,20 @@
 
 <script>
 (function() {
-  var input = document.getElementById('file-input');
-  var label = document.getElementById('file-text');
-  var submitBtn = document.getElementById('upload-submit');
-  if (!input) return;
-  input.addEventListener('change', function() {
-    var n = input.files.length;
-    label.textContent = n ? n + ' file' + (n > 1 ? 's' : '') + ' selected' : 'Choose files...';
-    submitBtn.disabled = !n;
-  });
+  function bindFilePicker(inputId, textId, buttonId, emptyText) {
+    var input = document.getElementById(inputId);
+    var label = document.getElementById(textId);
+    var submitBtn = document.getElementById(buttonId);
+    if (!input || !label || !submitBtn) return;
+    input.addEventListener('change', function() {
+      var n = input.files.length;
+      label.textContent = n ? n + ' file' + (n > 1 ? 's' : '') + ' selected' : emptyText;
+      submitBtn.disabled = !n;
+    });
+  }
+
+  bindFilePicker('master-file-input', 'master-file-text', 'master-upload-submit', 'Choose master...');
+  bindFilePicker('stem-file-input', 'stem-file-text', 'stem-upload-submit', 'Choose files...');
 })();
 </script>
 {% endblock %}

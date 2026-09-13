@@ -141,6 +141,40 @@ def search_lyrics(track_name: str, artist_name: str) -> tuple[dict | None, str |
 # YouTube search via yt-dlp
 # ---------------------------------------------------------------------------
 
+YOUTUBE_EXTRACTOR_ARGS = {
+    'youtube': {
+        # Avoid YouTube clients/formats that are prone to producing download
+        # URLs rejected with HTTP 403 by googlevideo.
+        'player_client': ['default', '-android_sdkless'],
+    },
+}
+
+
+def _youtube_ydl_opts(extra: dict | None = None) -> dict:
+    opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'cachedir': False,
+        'retries': 3,
+        'fragment_retries': 3,
+        'extractor_retries': 3,
+        'socket_timeout': 30,
+        'extractor_args': YOUTUBE_EXTRACTOR_ARGS,
+    }
+    if extra:
+        opts.update(extra)
+    return opts
+
+
+def _youtube_error_message(exc: Exception) -> str:
+    msg = str(exc)
+    if '403' in msg or 'Forbidden' in msg:
+        return (
+            f'{msg}. YouTube rejected the extracted media URL; update yt-dlp '
+            'on the server if this persists.')
+    return msg
+
+
 def youtube_search(query: str, max_results: int = 8) -> list[dict]:
     """
     Search YouTube for videos matching *query*.
@@ -154,13 +188,11 @@ def youtube_search(query: str, max_results: int = 8) -> list[dict]:
         logger.error('yt-dlp is not installed')
         return []
 
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
+    ydl_opts = _youtube_ydl_opts({
         'skip_download': True,
         'extract_flat': 'in_playlist',
         'default_search': f'ytsearch{max_results}',
-    }
+    })
 
     results = []
     try:
@@ -227,7 +259,7 @@ def download_youtube_audio(video_id: str, output_dir: str, wizard_model=None) ->
             wizard_model.bg_task_message = 'Converting to WAV...'
             wizard_model.save(update_fields=['bg_task_progress', 'bg_task_message'])
 
-    ydl_opts = {
+    ydl_opts = _youtube_ydl_opts({
         'format': 'bestaudio/best',
         'outtmpl': str(out_path),
         'postprocessors': [{
@@ -235,9 +267,7 @@ def download_youtube_audio(video_id: str, output_dir: str, wizard_model=None) ->
             'preferredcodec': 'wav',
         }],
         'progress_hooks': [_progress_hook],
-        'quiet': True,
-        'no_warnings': True,
-    }
+    })
 
     try:
         url = f'https://www.youtube.com/watch?v={video_id}'
@@ -258,7 +288,8 @@ def download_youtube_audio(video_id: str, output_dir: str, wizard_model=None) ->
         logger.exception('YouTube download failed')
         if wizard_model:
             wizard_model.bg_task_status = 'error'
-            wizard_model.bg_task_message = f'Download failed: {e}'
+            wizard_model.bg_task_message = (
+                f'Download failed: {_youtube_error_message(e)}')
             wizard_model.save(update_fields=['bg_task_status', 'bg_task_message'])
         return None
 
@@ -290,16 +321,14 @@ def download_youtube_as_flac(video_id: str, output_dir: str) -> str:
     out_path = Path(output_dir) / video_id
     final_path = Path(output_dir) / f'{video_id}.flac'
 
-    ydl_opts = {
+    ydl_opts = _youtube_ydl_opts({
         'format': 'bestaudio/best',
         'outtmpl': str(out_path),
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'flac',
         }],
-        'quiet': True,
-        'no_warnings': True,
-    }
+    })
 
     url = f'https://www.youtube.com/watch?v={video_id}'
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -321,12 +350,10 @@ def get_youtube_audio_stream_url(video_id: str) -> str | None:
     except ImportError:
         return None
 
-    ydl_opts = {
+    ydl_opts = _youtube_ydl_opts({
         'format': 'bestaudio/best',
-        'quiet': True,
-        'no_warnings': True,
         'skip_download': True,
-    }
+    })
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

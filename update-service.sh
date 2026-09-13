@@ -45,6 +45,14 @@ else
     FAILED=1
 fi
 
+if pip install --upgrade yt-dlp --no-cache-dir -q 2>&1 | tee -a /tmp/bandmate-pip.log; then
+    green "  ✓ yt-dlp updated"
+else
+    red "  ✗ yt-dlp update failed (exit code $?)"
+    red "    YouTube downloads may fail until yt-dlp is updated."
+    FAILED=1
+fi
+
 # ---------- Step 3: Run migrations -------------------------------------------
 bold "[3/5] Running migrations..."
 echo "  Pending migrations:"
