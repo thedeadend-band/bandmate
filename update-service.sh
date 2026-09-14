@@ -85,6 +85,40 @@ else
     FAILED=1
 fi
 
+bold "[4/5] Installing calendar sync timer..."
+cat > /etc/systemd/system/bandmate-calendar-sync.service << 'SVCEOF'
+[Unit]
+Description=BandMate Calendar Sync
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/bandmate
+EnvironmentFile=/srv/bandmate/.env
+ExecStart=/srv/bandmate/.venv/bin/python manage.py sync_calendars
+SVCEOF
+
+cat > /etc/systemd/system/bandmate-calendar-sync.timer << 'TIMEREOF'
+[Unit]
+Description=Run BandMate calendar sync regularly
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMEREOF
+
+if systemctl daemon-reload \
+    && systemctl enable --now bandmate-calendar-sync.timer > /dev/null 2>&1; then
+    green "  ✓ Calendar sync timer installed"
+else
+    red "  ✗ Calendar sync timer failed to install"
+    FAILED=1
+fi
+
 # ---------- Step 5: Restart service ------------------------------------------
 bold "[5/5] Restarting service..."
 systemctl restart bandmate

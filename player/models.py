@@ -138,6 +138,48 @@ class SiteSettings(models.Model):
         return obj
 
 
+class CalendarSource(models.Model):
+    name = models.CharField(max_length=120)
+    ics_url = models.URLField(max_length=2000)
+    color = models.CharField(max_length=20, default='#4a9eff')
+    is_enabled = models.BooleanField(default=True)
+    sync_interval_minutes = models.PositiveIntegerField(default=60)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class CalendarEvent(models.Model):
+    source = models.ForeignKey(
+        CalendarSource,
+        on_delete=models.CASCADE,
+        related_name='events',
+    )
+    uid = models.CharField(max_length=500)
+    title = models.CharField(max_length=500, blank=True, default='')
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    is_all_day = models.BooleanField(default=False)
+    location = models.CharField(max_length=500, blank=True, default='')
+    description = models.TextField(blank=True, default='')
+    event_url = models.URLField(max_length=2000, blank=True, default='')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['starts_at', 'title']
+        unique_together = [('source', 'uid', 'starts_at')]
+
+    def __str__(self):
+        return f'{self.source.name}: {self.title}'
+
+
 class StemSeparationJob(models.Model):
     STATUS_CHOICES = [
         ('queued', 'Queued'),

@@ -25,7 +25,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
-from .models import Setlist, SetlistEntry, SiteSettings, SpotifyConnection
+from .models import (
+    CalendarEvent, CalendarSource, Setlist, SetlistEntry,
+    SiteSettings, SpotifyConnection,
+)
 
 
 def _staff_required(view_func):
@@ -723,14 +726,46 @@ def admin_settings(request):
     site = SiteSettings.load()
     success = None
     if request.method == 'POST':
-        site.google_calendar_url = request.POST.get('google_calendar_url', '').strip()
+        calendar_ids = request.POST.getlist('calendar_id')
+        calendar_names = request.POST.getlist('calendar_name')
+        calendar_urls = request.POST.getlist('calendar_url')
+        calendar_colors = request.POST.getlist('calendar_color')
+        saved_ids = []
+        for idx, url in enumerate(calendar_urls):
+            url = url.strip()
+            if not url:
+                continue
+            name = calendar_names[idx].strip() if idx < len(calendar_names) else ''
+            color = calendar_colors[idx].strip() if idx < len(calendar_colors) else ''
+            source_id = calendar_ids[idx].strip() if idx < len(calendar_ids) else ''
+            source = None
+            if source_id.isdigit():
+                source = CalendarSource.objects.filter(pk=int(source_id)).first()
+            if not source:
+                source = CalendarSource()
+            source.name = name or f'Calendar {len(saved_ids) + 1}'
+            source.ics_url = url
+            source.color = color or '#4a9eff'
+            source.is_enabled = True
+            source.save()
+            saved_ids.append(source.pk)
+
+        CalendarSource.objects.exclude(pk__in=saved_ids).delete()
+        first_source = CalendarSource.objects.order_by('name').first()
+        site.google_calendar_url = first_source.ics_url if first_source else ''
         site.song_api_key = request.POST.get('song_api_key', '').strip()
         site.spotify_client_id = request.POST.get('spotify_client_id', '').strip()
         site.spotify_client_secret = request.POST.get('spotify_client_secret', '').strip()
         site.save()
+        try:
+            from .calendar_sync import sync_due_calendar_sources
+            sync_due_calendar_sources(force=True)
+        except Exception:
+            pass
         success = 'Settings saved.'
     return render(request, 'player/admin_settings.html', {
         'site': site,
+        'calendar_entries': CalendarSource.objects.order_by('name'),
         'success': success,
         'nav_active': 'settings',
     })
@@ -742,9 +777,56 @@ def admin_settings(request):
 
 @login_required
 def calendar_view(request):
-    site = SiteSettings.load()
+    sources = list(CalendarSource.objects.filter(is_enabled=True).order_by('name'))
+    if sources:
+        try:
+            from .calendar_sync import sync_due_calendar_sources
+            sync_due_calendar_sources()
+        except Exception:
+            pass
+    now = timezone.localtime()
+    range_start = now - timedelta(days=90)
+    range_end = now + timedelta(days=540)
+    events = list(
+        CalendarEvent.objects
+        .filter(source__in=sources, ends_at__gte=range_start,
+                starts_at__lte=range_end)
+        .select_related('source')
+        .order_by('starts_at', 'title')
+    )
+
+    source_data = [
+        {
+            'id': source.pk,
+            'name': source.name,
+            'color': source.color,
+            'last_synced_at': (
+                timezone.localtime(source.last_synced_at).isoformat()
+                if source.last_synced_at else ''
+            ),
+            'last_error': source.last_error,
+        }
+        for source in sources
+    ]
+    event_data = [
+        {
+            'id': event.pk,
+            'source_id': event.source_id,
+            'source_name': event.source.name,
+            'color': event.source.color,
+            'title': event.title,
+            'start': timezone.localtime(event.starts_at).isoformat(),
+            'end': timezone.localtime(event.ends_at).isoformat(),
+            'all_day': event.is_all_day,
+            'location': event.location,
+            'description': event.description,
+            'url': event.event_url,
+        }
+        for event in events
+    ]
     return render(request, 'player/calendar.html', {
-        'calendar_url': site.google_calendar_url,
+        'calendar_sources': source_data,
+        'calendar_events': event_data,
         'nav_active': 'calendar',
     })
 

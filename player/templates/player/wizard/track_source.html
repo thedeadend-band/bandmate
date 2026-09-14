@@ -46,7 +46,7 @@
         </svg>
       </div>
       <h3>Upload Master</h3>
-      <p>Upload one finished mix and BandMate will create the Master track, then generate stems automatically with AI separation.</p>
+      <p>Upload one finished mix and BandMate will queue AI stem separation immediately using the standard stem set.</p>
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         <input type="hidden" name="action" value="upload_master">
@@ -59,7 +59,7 @@
           <span id="master-file-text">Choose master...</span>
           <input type="file" name="master_audio" accept=".wav,.mp3,.flac,.ogg,.aiff,.aif" id="master-file-input" style="display:none">
         </label>
-        <button type="submit" class="btn btn-primary wiz-source-btn" id="master-upload-submit" disabled>Upload Master</button>
+        <button type="submit" class="btn btn-primary wiz-source-btn" id="master-upload-submit" disabled>Upload &amp; Generate</button>
       </form>
     </div>
 

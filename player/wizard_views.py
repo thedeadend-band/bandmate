@@ -292,10 +292,44 @@ def step_track_source(request, wiz):
                 if error:
                     errors['files'] = error
                 else:
-                    wiz.track_source = 'upload_master'
-                    wiz.current_step = 'download_upload'
-                    wiz.save(update_fields=['track_source', 'current_step'])
-                    return redirect('wizard_step', wizard_id=wiz.pk, step_name='download_upload')
+                    songs_dir = Path(settings.SONGS_DIR)
+                    dir_name = f'{wiz.artist} - {wiz.title}'.replace('/', '-').replace('\\', '-')
+                    song_dir = songs_dir / dir_name
+
+                    if song_dir.exists():
+                        errors['files'] = (
+                            f'A song named "{dir_name}" already exists. '
+                            f'Delete it first or change the artist/title.')
+                    elif not is_demucs_available():
+                        errors['files'] = 'audio-separator is not installed.'
+                    else:
+                        StemSeparationJob.objects.create(
+                            title=wiz.title,
+                            artist=wiz.artist,
+                            created_by=request.user,
+                            selected_stems=[
+                                'Vocals', 'Drums', 'Bass',
+                                'Guitar', 'Keys', 'Other',
+                            ],
+                            staging_dir=wiz.staging_dir,
+                            song_dir=str(song_dir),
+                            tempo=wiz.tempo,
+                            key=wiz.key,
+                            time_signature=wiz.time_signature,
+                            lyrics_content=wiz.lyrics_content,
+                            lyric_offset_secs=wiz.lyric_offset_secs,
+                            band_details=wiz.band_details or {},
+                            youtube_selection={},
+                            spotify_track_uri=wiz.spotify_track_uri or '',
+                        )
+                        wiz.track_source = 'upload_master'
+                        wiz.current_step = 'complete'
+                        wiz.staging_dir = ''
+                        wiz.save(update_fields=[
+                            'track_source', 'current_step', 'staging_dir',
+                        ])
+                        start_queue_worker()
+                        return redirect('queue_list')
 
         elif action == 'upload':
             files = request.FILES.getlist('audio_files')

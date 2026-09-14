@@ -192,6 +192,34 @@ systemctl daemon-reload
 systemctl enable bandmate
 systemctl start bandmate
 
+cat > /etc/systemd/system/bandmate-calendar-sync.service << SVCEOF
+[Unit]
+Description=BandMate Calendar Sync
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/bandmate
+EnvironmentFile=/srv/bandmate/.env
+ExecStart=/srv/bandmate/.venv/bin/python manage.py sync_calendars
+SVCEOF
+
+cat > /etc/systemd/system/bandmate-calendar-sync.timer << TIMEREOF
+[Unit]
+Description=Run BandMate calendar sync regularly
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMEREOF
+
+systemctl daemon-reload
+systemctl enable --now bandmate-calendar-sync.timer
+
 # ---------- install Cloudflare Tunnel if enabled ----------------------------
 if [[ "${ENABLE_TUNNEL,,}" == "y" ]]; then
     bold "[6/${TOTAL_STEPS}] Installing cloudflared and configuring tunnel..."

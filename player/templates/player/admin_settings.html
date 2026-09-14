@@ -20,13 +20,29 @@
 <form method="post" class="admin-form">
   {% csrf_token %}
   <div class="form-group">
-    <label for="google_calendar_url">Google Calendar Embed URL</label>
-    <input type="url" id="google_calendar_url" name="google_calendar_url"
-           value="{{ site.google_calendar_url }}"
-           placeholder="https://calendar.google.com/calendar/embed?src=..."
-           class="form-input">
+    <label>Calendar Sources</label>
+    <div class="admin-calendar-list" id="calendar-list">
+      {% for cal in calendar_entries %}
+      <div class="admin-calendar-row">
+        <input type="hidden" name="calendar_id" value="{{ cal.pk }}">
+        <input type="color" name="calendar_color" value="{{ cal.color }}" class="admin-calendar-color" title="Calendar color">
+        <input type="text" name="calendar_name" value="{{ cal.name }}" placeholder="Public, Private, Rehearsals..." class="form-input">
+        <input type="url" name="calendar_url" value="{{ cal.ics_url }}" placeholder="https://.../calendar.ics or webcal://..." class="form-input">
+        <button type="button" class="admin-calendar-remove" title="Remove calendar">×</button>
+      </div>
+      {% empty %}
+      <div class="admin-calendar-row">
+        <input type="hidden" name="calendar_id" value="">
+        <input type="color" name="calendar_color" value="#4a9eff" class="admin-calendar-color" title="Calendar color">
+        <input type="text" name="calendar_name" value="" placeholder="Public, Private, Rehearsals..." class="form-input">
+        <input type="url" name="calendar_url" value="" placeholder="https://.../calendar.ics or webcal://..." class="form-input">
+        <button type="button" class="admin-calendar-remove" title="Remove calendar">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="btn btn-secondary admin-calendar-add" id="calendar-add-btn">Add Calendar</button>
     <p class="form-hint">
-      In Google Calendar: Settings &gt; your calendar &gt; Integrate calendar &gt; copy the "Embed code" URL from the iframe <code>src</code> attribute.
+      Add each calendar's secret/public iCal URL, not the embed URL. In Google Calendar: Settings &gt; your calendar &gt; Integrate calendar &gt; copy the Secret address in iCal format or Public address in iCal format.
     </p>
   </div>
 
@@ -60,4 +76,38 @@
 
   <button type="submit" class="btn btn-add">Save</button>
 </form>
+<script>
+(function() {
+  var list = document.getElementById('calendar-list');
+  var addBtn = document.getElementById('calendar-add-btn');
+  if (!list || !addBtn) return;
+
+  function makeRow() {
+    var row = document.createElement('div');
+    row.className = 'admin-calendar-row';
+    row.innerHTML =
+      '<input type="hidden" name="calendar_id" value="">' +
+      '<input type="color" name="calendar_color" value="#4a9eff" class="admin-calendar-color" title="Calendar color">' +
+      '<input type="text" name="calendar_name" value="" placeholder="Public, Private, Rehearsals..." class="form-input">' +
+      '<input type="url" name="calendar_url" value="" placeholder="https://.../calendar.ics or webcal://..." class="form-input">' +
+      '<button type="button" class="admin-calendar-remove" title="Remove calendar">×</button>';
+    return row;
+  }
+
+  addBtn.addEventListener('click', function() {
+    list.appendChild(makeRow());
+  });
+
+  list.addEventListener('click', function(e) {
+    var btn = e.target.closest('.admin-calendar-remove');
+    if (!btn) return;
+    var rows = list.querySelectorAll('.admin-calendar-row');
+    if (rows.length <= 1) {
+      rows[0].querySelectorAll('input').forEach(function(input) { input.value = ''; });
+    } else {
+      btn.closest('.admin-calendar-row').remove();
+    }
+  });
+})();
+</script>
 {% endblock %}

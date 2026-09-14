@@ -6,14 +6,234 @@
   <h1 class="page-title">Calendar</h1>
 </div>
 
-{% if calendar_url %}
-<div class="calendar-container">
-  <iframe src="{{ calendar_url }}" class="calendar-iframe" frameborder="0" width="100%" height="100%" style="width:100%;height:100%;"></iframe>
+{% if calendar_sources %}
+<div class="calendar-app">
+  <aside class="calendar-source-panel">
+    <h2>Calendars</h2>
+    <div id="calendar-source-list" class="calendar-source-list"></div>
+  </aside>
+
+  <section class="calendar-board">
+    <div class="calendar-toolbar">
+      <button type="button" class="btn btn-secondary" id="calendar-today">Today</button>
+      <div class="calendar-nav">
+        <button type="button" class="calendar-icon-btn" id="calendar-prev" title="Previous">‹</button>
+        <h2 id="calendar-title"></h2>
+        <button type="button" class="calendar-icon-btn" id="calendar-next" title="Next">›</button>
+      </div>
+      <div class="calendar-view-toggle">
+        <button type="button" class="calendar-view-btn active" data-view="month">Month</button>
+        <button type="button" class="calendar-view-btn" data-view="agenda">Agenda</button>
+      </div>
+    </div>
+
+    <div class="calendar-weekdays">
+      <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+    </div>
+    <div class="calendar-month-grid" id="calendar-month-grid"></div>
+    <div class="calendar-agenda" id="calendar-agenda" hidden></div>
+  </section>
 </div>
+
+{{ calendar_sources|json_script:"calendar-source-data" }}
+{{ calendar_events|json_script:"calendar-event-data" }}
+
+<script>
+(function() {
+  var sources = JSON.parse(document.getElementById('calendar-source-data').textContent || '[]');
+  var events = JSON.parse(document.getElementById('calendar-event-data').textContent || '[]').map(function(event) {
+    event.startDate = new Date(event.start);
+    event.endDate = new Date(event.end);
+    return event;
+  });
+
+  var activeSources = new Set(sources.map(function(source) { return source.id; }));
+  var cursor = new Date();
+  cursor.setDate(1);
+  var view = 'month';
+
+  var sourceList = document.getElementById('calendar-source-list');
+  var title = document.getElementById('calendar-title');
+  var grid = document.getElementById('calendar-month-grid');
+  var agenda = document.getElementById('calendar-agenda');
+  var weekdays = document.querySelector('.calendar-weekdays');
+
+  function escapeHtml(value) {
+    var div = document.createElement('div');
+    div.textContent = value || '';
+    return div.innerHTML;
+  }
+
+  function sameDay(a, b) {
+    return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate();
+  }
+
+  function dayBounds(day) {
+    var start = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    var end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return { start: start, end: end };
+  }
+
+  function eventOverlapsDay(event, day) {
+    var bounds = dayBounds(day);
+    return event.startDate < bounds.end && event.endDate > bounds.start;
+  }
+
+  function eventTime(event) {
+    if (event.all_day) return 'All day';
+    return event.startDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function sourceById(id) {
+    return sources.find(function(source) { return source.id === id; });
+  }
+
+  function renderSources() {
+    sourceList.innerHTML = sources.map(function(source) {
+      var synced = source.last_synced_at
+        ? new Date(source.last_synced_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : 'Not synced yet';
+      var error = source.last_error ? '<div class="calendar-source-error">' + escapeHtml(source.last_error) + '</div>' : '';
+      return '<label class="calendar-source-item">' +
+        '<input type="checkbox" checked data-source="' + source.id + '">' +
+        '<span class="calendar-source-color" style="background:' + escapeHtml(source.color) + '"></span>' +
+        '<span class="calendar-source-copy">' +
+          '<strong>' + escapeHtml(source.name) + '</strong>' +
+          '<small>' + escapeHtml(synced) + '</small>' +
+          error +
+        '</span>' +
+      '</label>';
+    }).join('');
+
+    sourceList.querySelectorAll('input[type="checkbox"]').forEach(function(input) {
+      input.addEventListener('change', function() {
+        var id = Number(input.dataset.source);
+        if (input.checked) activeSources.add(id);
+        else activeSources.delete(id);
+        render();
+      });
+    });
+  }
+
+  function visibleEvents() {
+    return events
+      .filter(function(event) { return activeSources.has(event.source_id); })
+      .sort(function(a, b) { return a.startDate - b.startDate || a.title.localeCompare(b.title); });
+  }
+
+  function renderMonth() {
+    title.textContent = cursor.toLocaleDateString([], { month: 'long', year: 'numeric' });
+    var today = new Date();
+    var first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    var start = new Date(first);
+    start.setDate(start.getDate() - start.getDay());
+    var monthEvents = visibleEvents();
+    var cells = [];
+
+    for (var i = 0; i < 42; i++) {
+      var day = new Date(start);
+      day.setDate(start.getDate() + i);
+      var dayEvents = monthEvents.filter(function(event) { return eventOverlapsDay(event, day); });
+      var more = dayEvents.length > 3 ? '<div class="calendar-more">+' + (dayEvents.length - 3) + ' more</div>' : '';
+      var eventHtml = dayEvents.slice(0, 3).map(function(event) {
+        return '<a class="calendar-event-pill" style="--event-color:' + escapeHtml(event.color) + '" ' +
+          (event.url ? 'href="' + escapeHtml(event.url) + '" target="_blank" rel="noopener"' : 'href="#"') + '>' +
+          '<span>' + escapeHtml(eventTime(event)) + '</span>' +
+          escapeHtml(event.title) +
+        '</a>';
+      }).join('');
+
+      cells.push('<div class="calendar-day' +
+        (day.getMonth() === cursor.getMonth() ? '' : ' muted') +
+        (sameDay(day, today) ? ' today' : '') +
+        '">' +
+        '<div class="calendar-day-number">' + day.getDate() + '</div>' +
+        '<div class="calendar-day-events">' + eventHtml + more + '</div>' +
+      '</div>');
+    }
+    grid.innerHTML = cells.join('');
+  }
+
+  function renderAgenda() {
+    title.textContent = 'Agenda';
+    var today = new Date();
+    var end = new Date();
+    end.setDate(end.getDate() + 90);
+    var upcoming = visibleEvents().filter(function(event) {
+      return event.endDate >= dayBounds(today).start && event.startDate <= end;
+    });
+
+    if (!upcoming.length) {
+      agenda.innerHTML = '<div class="calendar-agenda-empty">No upcoming events.</div>';
+      return;
+    }
+
+    var lastKey = '';
+    var html = '';
+    upcoming.forEach(function(event) {
+      var key = event.startDate.toDateString();
+      if (key !== lastKey) {
+        html += '<h3 class="calendar-agenda-date">' +
+          escapeHtml(event.startDate.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })) +
+        '</h3>';
+        lastKey = key;
+      }
+      var source = sourceById(event.source_id);
+      html += '<div class="calendar-agenda-item" style="--event-color:' + escapeHtml(event.color) + '">' +
+        '<div class="calendar-agenda-time">' + escapeHtml(eventTime(event)) + '</div>' +
+        '<div class="calendar-agenda-main">' +
+          '<strong>' + escapeHtml(event.title) + '</strong>' +
+          '<span>' + escapeHtml(source ? source.name : event.source_name) + '</span>' +
+          (event.location ? '<small>' + escapeHtml(event.location) + '</small>' : '') +
+        '</div>' +
+      '</div>';
+    });
+    agenda.innerHTML = html;
+  }
+
+  function render() {
+    var isAgenda = view === 'agenda';
+    grid.hidden = isAgenda;
+    weekdays.hidden = isAgenda;
+    agenda.hidden = !isAgenda;
+    document.querySelectorAll('.calendar-view-btn').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.view === view);
+    });
+    if (isAgenda) renderAgenda();
+    else renderMonth();
+  }
+
+  document.getElementById('calendar-prev').addEventListener('click', function() {
+    cursor.setMonth(cursor.getMonth() - 1);
+    render();
+  });
+  document.getElementById('calendar-next').addEventListener('click', function() {
+    cursor.setMonth(cursor.getMonth() + 1);
+    render();
+  });
+  document.getElementById('calendar-today').addEventListener('click', function() {
+    cursor = new Date();
+    cursor.setDate(1);
+    render();
+  });
+  document.querySelectorAll('.calendar-view-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      view = btn.dataset.view;
+      render();
+    });
+  });
+
+  renderSources();
+  render();
+})();
+</script>
 {% else %}
 <div class="empty-state">
   <h3>No calendar configured</h3>
-  <p>An admin can set the Google Calendar URL in Settings.</p>
+  <p>An admin can add named iCal calendar sources in Settings.</p>
 </div>
 {% endif %}
 {% endblock %}

@@ -7,12 +7,24 @@
   <title>{% block title %}BandMate{% endblock %}</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a9eff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/></svg>">
   <script>
-    (function(){var t=localStorage.getItem('bm-theme')||'dark';document.documentElement.setAttribute('data-theme',t)})();
+    (function() {
+      var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+      function systemTheme() { return mq && mq.matches ? 'dark' : 'light'; }
+      var override = localStorage.getItem('bm-theme-override');
+      var legacy = localStorage.getItem('bm-theme');
+      if (!override && (legacy === 'dark' || legacy === 'light')) {
+        override = legacy;
+        localStorage.setItem('bm-theme-override', legacy);
+      }
+      localStorage.removeItem('bm-theme');
+      document.documentElement.setAttribute('data-theme', override || systemTheme());
+      document.documentElement.setAttribute('data-theme-source', override ? 'override' : 'system');
+    })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=9">
+  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=10">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -128,12 +140,33 @@
   {% endif %}
 
   <script>
-    document.getElementById('theme-toggle')?.addEventListener('click', function() {
-      var current = document.documentElement.getAttribute('data-theme');
-      var next = current === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('bm-theme', next);
-    });
+    (function() {
+      var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+      function systemTheme() { return mq && mq.matches ? 'dark' : 'light'; }
+      function applyTheme(theme, source) {
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-theme-source', source);
+        window.dispatchEvent(new CustomEvent('bm-theme-change', {
+          detail: { theme: theme, source: source }
+        }));
+      }
+      document.getElementById('theme-toggle')?.addEventListener('click', function() {
+        var current = document.documentElement.getAttribute('data-theme') || systemTheme();
+        var next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('bm-theme-override', next);
+        localStorage.removeItem('bm-theme');
+        applyTheme(next, 'override');
+      });
+      if (mq) {
+        var onSystemTheme = function() {
+          if (!localStorage.getItem('bm-theme-override')) {
+            applyTheme(systemTheme(), 'system');
+          }
+        };
+        if (mq.addEventListener) mq.addEventListener('change', onSystemTheme);
+        else if (mq.addListener) mq.addListener(onSystemTheme);
+      }
+    })();
     (function() {
       var toggle = document.getElementById('sidebar-toggle');
       var close = document.getElementById('sidebar-close');
