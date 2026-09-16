@@ -1405,6 +1405,8 @@ def setlist_player(request, setlist_id: int):
     return render(request, 'player/setlist_player.html', {
         'setlist': sl,
         'setlist_items': setlist_items,
+        'can_edit_setlist': sl.owner == request.user or request.user.is_staff,
+        'spotify_configured': bool(_spotify_config()[0] and _spotify_config()[1]),
     })
 
 

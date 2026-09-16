@@ -1704,6 +1704,14 @@ textarea {
 
 .setlist-icon { color: var(--accent-blue); }
 
+.setlist-export-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .song-row > .song-card {
   flex: 1;
   min-width: 0;
@@ -1721,6 +1729,18 @@ textarea {
 }
 
 .empty-state-sm { padding: 30px 20px; }
+
+@media (max-width: 700px) {
+  .setlist-player-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .setlist-export-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
 
 /* ---- Setlist form ----------------------------------------------------- */
 
