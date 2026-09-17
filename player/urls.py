@@ -14,6 +14,7 @@ urlpatterns = [
     path('songs/new/<int:wizard_id>/step/<str:step_name>/', wizard_views.wizard_step, name='wizard_step'),
     path('songs/new/<int:wizard_id>/cancel/', wizard_views.wizard_cancel, name='wizard_cancel'),
     path('songs/<str:song_name>/delete/', views.song_delete, name='song_delete'),
+    path('songs/<str:song_name>/edit/', views.song_edit, name='song_edit'),
     path('songs/<str:song_name>/download/', views.song_download_zip, name='song_download_zip'),
     path('songs/<str:song_name>/pitch/', views.song_pitch_update, name='song_pitch_update'),
     path('api/songs/<str:song_name>/pitch/status/', views.song_pitch_status, name='song_pitch_status'),

@@ -78,6 +78,14 @@
         </svg>
         Multitrack
       </a>
+      {% if user.is_staff %}
+      <a href="{% url 'wizard_start' %}" class="sidebar-nav-item{% if nav_active == 'song_wizard' %} active{% endif %}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+        Song Wizard
+      </a>
+      {% endif %}
       <a href="{% url 'setlist_list' %}" class="sidebar-nav-item{% if nav_active == 'setlists' %} active{% endif %}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>

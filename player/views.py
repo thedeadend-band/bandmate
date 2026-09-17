@@ -521,6 +521,99 @@ def song_player(request, song_name: str):
     })
 
 
+@_staff_required
+def song_edit(request, song_name: str):
+    song_path = _safe_song_path(song_name)
+    info_path = song_path / 'info.json'
+    try:
+        info = json.loads(info_path.read_text(encoding='utf-8')) if info_path.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        info = {}
+
+    if request.method == 'POST':
+        for field in ('title', 'artist', 'key', 'time_signature'):
+            value = request.POST.get(field, '').strip()
+            if value:
+                info[field] = value
+            else:
+                info.pop(field, None)
+
+        tempo = request.POST.get('tempo', '').strip()
+        if tempo:
+            try:
+                info['tempo'] = int(tempo)
+            except ValueError:
+                return render(request, 'player/song_edit.html', {
+                    'song_name': song_name,
+                    'info': info,
+                    'details': _song_band_details(info),
+                    'error': 'Tempo must be a whole number.',
+                    'nav_active': 'multitrack',
+                })
+        else:
+            info.pop('tempo', None)
+
+        guitars = {}
+        for role in ('lead_guitar', 'rhythm_guitar', 'bass_guitar'):
+            setup = {}
+            for field in ('type', 'tuning', 'capo'):
+                value = request.POST.get(f'{role}_{field}', '').strip()
+                if value:
+                    setup[field] = value
+            if setup:
+                guitars[role] = setup
+        if guitars:
+            info['guitars'] = guitars
+        else:
+            info.pop('guitars', None)
+
+        vocals = {}
+        for form_field, info_field in (
+            ('lead_vocal', 'lead'), ('backing_vocal', 'backing'),
+        ):
+            names = [
+                name.strip() for name in request.POST.get(form_field, '').split(',')
+                if name.strip()
+            ]
+            if names:
+                vocals[info_field] = names
+        if vocals:
+            info['vocals'] = vocals
+        else:
+            info.pop('vocals', None)
+
+        for field in ('starts', 'starts_with'):
+            value = request.POST.get(field, '').strip()
+            if value:
+                info[field] = value
+            else:
+                info.pop(field, None)
+
+        _save_song_info(song_path, info)
+        return redirect('song_player', song_name=song_name)
+
+    return render(request, 'player/song_edit.html', {
+        'song_name': song_name,
+        'info': info,
+        'details': _song_band_details(info),
+        'nav_active': 'multitrack',
+    })
+
+
+def _song_band_details(info: dict) -> dict:
+    guitars = info.get('guitars') if isinstance(info.get('guitars'), dict) else {}
+    vocals = info.get('vocals') if isinstance(info.get('vocals'), dict) else {}
+    return {
+        'lead_guitar': guitars.get('lead_guitar', {}),
+        'rhythm_guitar': guitars.get('rhythm_guitar', {}),
+        'bass_guitar': guitars.get('bass_guitar', {}),
+        'lead_vocal': ', '.join(vocals.get('lead', [])),
+        'backing_vocal': ', '.join(vocals.get('backing', [])),
+        'starts': info.get('starts', ''),
+        'starts_with': info.get('starts_with', ''),
+    }
+
+
 @login_required
 def song_download_zip(request, song_name: str):
     """Stream all audio tracks for a song as a ZIP archive."""

@@ -66,7 +66,7 @@ def wizard_start(request):
         return redirect('wizard_step', wizard_id=wiz.pk, step_name='song_info')
 
     return render(request, 'player/wizard/start.html', {
-        'nav_active': 'multitrack',
+        'nav_active': 'song_wizard',
     })
 
 
@@ -107,7 +107,7 @@ def _wizard_context(wiz, step_name, extra=None):
         'wizard': wiz,
         'steps': wiz.get_navigable_steps(),
         'current_step': step_name,
-        'nav_active': 'multitrack',
+        'nav_active': 'song_wizard',
         'wizard_cancel_url': f'/songs/new/{wiz.pk}/cancel/',
     }
     if extra:
