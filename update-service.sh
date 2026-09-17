@@ -43,6 +43,12 @@ if ! command -v rubberband > /dev/null 2>&1; then
         FAILED=1
     fi
 fi
+if ! rubberband --version > /dev/null 2>&1; then
+    red "  ✗ Rubber Band is installed but failed its startup check"
+    FAILED=1
+else
+    green "  ✓ Rubber Band verified"
+fi
 if pip install -r requirements.txt --no-cache-dir -q 2>&1 | tee /tmp/bandmate-pip.log; then
     green "  ✓ Dependencies installed"
 else
@@ -157,3 +163,7 @@ echo ""
 echo "  Check status:  systemctl status bandmate"
 echo "  View logs:     journalctl -u bandmate -f"
 echo ""
+
+if [[ $FAILED -ne 0 ]]; then
+    exit 1
+fi

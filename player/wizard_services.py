@@ -557,6 +557,7 @@ def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
     import librosa
     import numpy as np
     import soundfile as sf
+    from .audio_tools import require_rubberband
 
     if wizard_model:
         wizard_model.bg_task_status = 'running'
@@ -565,6 +566,7 @@ def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
         wizard_model.save(update_fields=['bg_task_status', 'bg_task_progress', 'bg_task_message'])
 
     try:
+        require_rubberband()
         y, sr = librosa.load(audio_path, sr=None, mono=False)
         if y.ndim == 1:
             y = y[np.newaxis, :]
@@ -595,16 +597,13 @@ def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
             if actual_dur > 0 and target_interval > 0:
                 stretch_ratio = actual_dur / target_interval
                 if abs(stretch_ratio - 1.0) > 0.005:
-                    try:
-                        import pyrubberband as pyrb
-                        stretched_channels = []
-                        for ch in range(channels):
-                            stretched = pyrb.time_stretch(segment[ch], sr, stretch_ratio)
-                            stretched_channels.append(stretched)
-                        min_len = min(s.shape[0] for s in stretched_channels)
-                        segment = np.array([s[:min_len] for s in stretched_channels])
-                    except Exception:
-                        pass
+                    import pyrubberband as pyrb
+                    stretched_channels = []
+                    for ch in range(channels):
+                        stretched = pyrb.time_stretch(segment[ch], sr, stretch_ratio)
+                        stretched_channels.append(stretched)
+                    min_len = min(s.shape[0] for s in stretched_channels)
+                    segment = np.array([s[:min_len] for s in stretched_channels])
 
             segments.append(segment)
 
@@ -646,7 +645,7 @@ def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
             wizard_model.bg_task_status = 'error'
             wizard_model.bg_task_message = f'Quantization failed: {e}'
             wizard_model.save(update_fields=['bg_task_status', 'bg_task_message'])
-        return ''
+        raise RuntimeError(f'Quantization failed for {Path(audio_path).name}: {e}') from e
 
 
 def generate_click_track(output_dir: str, target_bpm: int, total_duration: float,
@@ -732,32 +731,33 @@ bpm = {bpm}
 time_sig_num = {time_sig_num}
 
 quantized_path = quantize_audio(str(master), beats, bpm, time_sig_num=time_sig_num, wizard_model=wiz)
-if not quantized_path:
-    sys.exit(1)
-
-backup = staging / "Master_original.wav"
-shutil.move(str(master), str(backup))
-shutil.move(quantized_path, str(master))
-
 import soundfile as _sf
-_master_info = _sf.info(str(master))
+_master_info = _sf.info(quantized_path)
 duration = _master_info.duration
 master_sr = _master_info.samplerate
 pre_beat_offset = beats[0] if beats and beats[0] > 0 else 0.0
-generate_click_track(str(staging), bpm, duration, time_sig_num=time_sig_num, sr=master_sr, start_offset=pre_beat_offset)
 
 all_stems = [f for f in staging.iterdir()
              if f.is_file() and f.suffix.lower() == ".wav"
              and f.name not in ("Master.wav", "Master_original.wav")
-             and not f.name.endswith("_quantized.wav")]
+             and not f.name.endswith("_quantized.wav")
+             and f.name != "Click.wav"]
+quantized_stems = []
 for stem in all_stems:
     wiz.bg_task_message = f"Quantizing {{stem.stem}}..."
     wiz.save(update_fields=["bg_task_message"])
     q_path = quantize_audio(str(stem), beats, bpm, time_sig_num=time_sig_num)
-    if q_path:
-        stem_backup = staging / (stem.stem + "_original" + stem.suffix)
-        shutil.move(str(stem), str(stem_backup))
-        shutil.move(q_path, str(stem))
+    quantized_stems.append((stem, Path(q_path)))
+
+# Do not replace any source until every Rubber Band operation has succeeded.
+generate_click_track(str(staging), bpm, duration, time_sig_num=time_sig_num, sr=master_sr, start_offset=pre_beat_offset)
+backup = staging / "Master_original.wav"
+shutil.move(str(master), str(backup))
+shutil.move(quantized_path, str(master))
+for stem, q_path in quantized_stems:
+    stem_backup = staging / (stem.stem + "_original" + stem.suffix)
+    shutil.move(str(stem), str(stem_backup))
+    shutil.move(str(q_path), str(stem))
 
 wiz.bg_task_status = "done"
 wiz.bg_task_progress = 100
@@ -775,7 +775,7 @@ os._exit(0)
             err_tail = (result.stderr or '')[-500:]
             logger.error('Quantize subprocess failed (rc=%d): %s', result.returncode, err_tail)
             wizard_model.refresh_from_db()
-            if wizard_model.bg_task_status != 'done':
+            if wizard_model.bg_task_status not in ('done', 'error'):
                 wizard_model.bg_task_status = 'error'
                 wizard_model.bg_task_message = f'Quantization crashed: {err_tail[-200:]}'
                 wizard_model.save(update_fields=['bg_task_status', 'bg_task_message'])

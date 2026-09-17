@@ -118,8 +118,9 @@ def _update_job(job, **values) -> None:
 
 
 def _process_job(job) -> None:
-    from .models import PitchShiftJob
+    from .audio_tools import require_rubberband
 
+    require_rubberband()
     song_dir = _safe_song_dir(job.song_name)
     sources = _audio_files(song_dir)
     original_master = next((p for p in sources if p.stem.lower() == 'master'), None)
