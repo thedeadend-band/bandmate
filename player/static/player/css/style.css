@@ -906,13 +906,29 @@ textarea {
   display: none;
 }
 
-.admin-calendar-color {
+.admin-calendar-row .admin-calendar-color {
   width: 38px;
   height: 38px;
   padding: 3px;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-card);
+  cursor: pointer;
+}
+
+.admin-calendar-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.admin-calendar-color::-webkit-color-swatch {
+  border: 0;
+  border-radius: 3px;
+}
+
+.admin-calendar-color::-moz-color-swatch {
+  border: 0;
+  border-radius: 3px;
 }
 
 .admin-calendar-remove {
