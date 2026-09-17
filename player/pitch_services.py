@@ -221,12 +221,8 @@ def _worker_loop() -> None:
 
 
 def start_pitch_worker() -> None:
-    global _worker_active
-    with _worker_lock:
-        if _worker_active:
-            return
-        _worker_active = True
-    threading.Thread(target=_worker_loop, daemon=True).start()
+    from .job_queue import start_audio_queue_worker
+    start_audio_queue_worker()
 
 
 def reset_pitch_variant(song_name: str) -> None:

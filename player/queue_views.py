@@ -27,10 +27,7 @@ def queue_list(request):
         if job.status == 'done':
             job.song_page_url = _song_url(job)
         job.can_manage = _can_manage_job(request.user, job)
-    pitch_jobs = list(
-        PitchShiftJob.objects.select_related('created_by')
-        .exclude(status='done')
-    )
+    pitch_jobs = list(PitchShiftJob.objects.select_related('created_by'))
     for job in pitch_jobs:
         job.song_page_url = reverse(
             'song_player', kwargs={'song_name': job.song_name})

@@ -1526,16 +1526,6 @@ def _process_queue_job(job) -> None:
 
 
 def start_queue_worker() -> None:
-    """Start the queue worker thread if not already running in this process.
-
-    The DB-level check in _queue_worker_loop ensures only one job runs
-    at a time even across multiple gunicorn workers.
-    """
-    global _queue_thread_active
-    with _queue_lock:
-        if _queue_thread_active:
-            return
-        _queue_thread_active = True
-
-    t = threading.Thread(target=_queue_worker_loop, daemon=True)
-    t.start()
+    """Wake the shared audio queue worker."""
+    from .job_queue import start_audio_queue_worker
+    start_audio_queue_worker()
