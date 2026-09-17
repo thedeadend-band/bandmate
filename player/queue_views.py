@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from .models import StemSeparationJob
+from .models import PitchShiftJob, StemSeparationJob
 
 
 def _song_url(job):
@@ -27,9 +27,19 @@ def queue_list(request):
         if job.status == 'done':
             job.song_page_url = _song_url(job)
         job.can_manage = _can_manage_job(request.user, job)
+    pitch_jobs = list(
+        PitchShiftJob.objects.select_related('created_by')
+        .exclude(status='done')
+    )
+    for job in pitch_jobs:
+        job.song_page_url = reverse(
+            'song_player', kwargs={'song_name': job.song_name})
+        job.status_url = reverse(
+            'song_pitch_status', kwargs={'song_name': job.song_name})
     return render(request, 'player/queue.html', {
         'nav_active': 'queue',
         'jobs': jobs,
+        'pitch_jobs': pitch_jobs,
     })
 
 

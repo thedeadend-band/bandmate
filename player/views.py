@@ -464,6 +464,19 @@ def logout_view(request):
 @ensure_csrf_cookie
 def song_list(request):
     songs = _get_available_songs()
+    active_pitch_jobs = {
+        job.song_name: job
+        for job in PitchShiftJob.objects.filter(status__in=('queued', 'processing'))
+    }
+    for song in songs:
+        pitch_job = active_pitch_jobs.get(song['name'])
+        song['pitch_active'] = pitch_job is not None
+        if pitch_job:
+            song['pitch_status'] = pitch_job.status
+            song['pitch_progress'] = pitch_job.progress
+            song['pitch_semitones'] = pitch_job.semitones
+            song['pitch_status_url'] = reverse(
+                'song_pitch_status', kwargs={'song_name': song['name']})
 
     if request.user.is_staff:
         used_songs = set(
@@ -483,6 +496,10 @@ def song_list(request):
 @login_required
 def song_player(request, song_name: str):
     song_path = _safe_song_path(song_name)
+    if PitchShiftJob.objects.filter(
+        song_name=song_name, status__in=('queued', 'processing'),
+    ).exists():
+        return redirect('song_list')
     tracks = _get_tracks(song_path)
     if not tracks:
         raise Http404
@@ -1592,7 +1609,7 @@ def song_pitch_update(request, song_name: str):
         song_name=song_name, status__in=('queued', 'processing'),
     ).first()
     if active:
-        return redirect('song_player', song_name=song_name)
+        return redirect('song_list')
 
     if semitones == 0:
         from .pitch_services import reset_pitch_variant
@@ -1614,7 +1631,7 @@ def song_pitch_update(request, song_name: str):
     )
     from .pitch_services import start_pitch_worker
     start_pitch_worker()
-    return redirect('song_player', song_name=song_name)
+    return redirect('song_list')
 
 
 @login_required

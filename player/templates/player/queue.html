@@ -88,10 +88,50 @@
   </div>
   {% endfor %}
 </div>
-{% else %}
+{% endif %}
+
+{% if pitch_jobs %}
+<h2 class="queue-subtitle">Pitch Changes</h2>
+<div class="songs-grid">
+  {% for job in pitch_jobs %}
+  <div class="song-row"{% if job.status == 'queued' or job.status == 'processing' %} data-pitch-status-url="{{ job.status_url }}"{% endif %}>
+    <div class="song-card queue-card queue-card-{{ job.status }}">
+      <div class="song-icon">
+        {% if job.status == 'processing' %}
+        <span class="wiz-spinner"></span>
+        {% elif job.status == 'failed' %}
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+        </svg>
+        {% else %}
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        {% endif %}
+      </div>
+      <div class="song-info">
+        <h3>{{ job.song_name }}</h3>
+        <span class="queue-detail">
+          {{ job.get_status_display }} &mdash; {{ job.semitones|stringformat:"+d" }} semitones{% if job.message %} &mdash; {{ job.message }}{% endif %}
+        </span>
+        <span class="queue-time">Queued by {{ job.created_by.username }}</span>
+        <span class="queue-time">{{ job.created_at|timesince }} ago</span>
+      </div>
+      {% if job.status == 'failed' %}
+      <div class="queue-card-actions">
+        <a href="{{ job.song_page_url }}" class="btn btn-sm">View</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if not jobs and not pitch_jobs %}
 <div class="empty-state">
   <h3>Queue is empty</h3>
-  <p>Songs submitted for stem separation will appear here.</p>
+  <p>Stem separation and pitch change jobs will appear here.</p>
 </div>
 {% endif %}
 
@@ -103,9 +143,7 @@
     var card = el.querySelector('.queue-card-processing, .queue-card-queued');
     if (card) activeIds.push(el.dataset.jobId);
   });
-  if (!activeIds.length) return;
-
-  function poll() {
+  function pollStemJobs() {
     activeIds.forEach(function(jobId) {
       fetch('/queue/' + jobId + '/status/')
         .then(function(r) { return r.json(); })
@@ -128,7 +166,30 @@
     });
   }
 
-  setInterval(poll, 3000);
+  if (activeIds.length) setInterval(pollStemJobs, 3000);
+
+  var pitchItems = document.querySelectorAll('[data-pitch-status-url]');
+  function pollPitchJobs() {
+    pitchItems.forEach(function(el) {
+      fetch(el.dataset.pitchStatusUrl)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.status === 'done' || data.status === 'failed') {
+            window.location.reload();
+            return;
+          }
+          var detail = el.querySelector('.queue-detail');
+          if (!detail) return;
+          var shift = data.semitones > 0 ? '+' + data.semitones : String(data.semitones);
+          var status = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+          detail.textContent = status + ' \u2014 ' + shift + ' semitones' +
+            (data.message ? ' \u2014 ' + data.message : '') +
+            (data.status === 'processing' ? ' (' + data.progress + '%)' : '');
+        })
+        .catch(function() {});
+    });
+  }
+  if (pitchItems.length) setInterval(pollPitchJobs, 3000);
 })();
 </script>
 {% endblock %}

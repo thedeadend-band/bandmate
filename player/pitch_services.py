@@ -231,6 +231,10 @@ def start_pitch_worker() -> None:
 
 def reset_pitch_variant(song_name: str) -> None:
     song_dir = _safe_song_dir(song_name)
+    variants_dir = song_dir / PITCH_VARIANTS_DIR
+    if variants_dir.exists():
+        shutil.rmtree(variants_dir)
+
     info_path = song_dir / 'info.json'
     try:
         info = json.loads(info_path.read_text(encoding='utf-8')) if info_path.exists() else {}

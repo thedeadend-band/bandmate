@@ -46,7 +46,9 @@
     <strong id="pitch-control-title">Playback pitch</strong>
     <span>Tempo remains unchanged. Drums and click tracks stay at their original pitch.</span>
   </div>
-  <form method="post" action="{% url 'song_pitch_update' song_name %}" class="pitch-control-form">
+  <form method="post" action="{% url 'song_pitch_update' song_name %}" class="pitch-control-form"
+        data-current-pitch="{{ current_pitch }}"
+        onsubmit="return confirmPitchChange(this);">
     {% csrf_token %}
     <select name="semitones" class="pitch-select" aria-label="Pitch adjustment in semitones"
             {% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}disabled{% endif %}>
@@ -74,6 +76,18 @@
     {% endif %}
   </div>
 </section>
+
+<script>
+function confirmPitchChange(form) {
+  var semitones = Number(form.elements.semitones.value);
+  if (semitones === 0) {
+    if (Number(form.dataset.currentPitch) === 0) return true;
+    return confirm('Return this song to its original pitch? The generated pitch-shifted tracks will be deleted.');
+  }
+  var direction = semitones > 0 ? '+' + semitones : String(semitones);
+  return confirm('Add a ' + direction + ' semitone pitch change to the job queue? The song will be unavailable until processing finishes.');
+}
+</script>
 
 <div id="song-link-panel" class="song-link-panel" hidden>
   <div class="song-link-header">

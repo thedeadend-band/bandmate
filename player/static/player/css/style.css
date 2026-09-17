@@ -1804,6 +1804,12 @@ textarea {
   min-width: 0;
 }
 
+.song-card-disabled {
+  cursor: wait;
+  opacity: 0.58;
+  user-select: none;
+}
+
 .song-row-actions,
 .setlist-row-actions {
   display: flex;
