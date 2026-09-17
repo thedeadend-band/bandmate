@@ -6,11 +6,10 @@
   <h1 class="page-title">Queue</h1>
 </div>
 
-{% if jobs %}
-<h2 class="queue-subtitle">Songs</h2>
+{% if queue_jobs %}
 <div class="songs-grid">
-  {% for job in jobs %}
-  <div class="song-row" data-job-id="{{ job.pk }}">
+  {% for job in queue_jobs %}
+  <div class="song-row"{% if job.queue_kind == 'stem' %} data-job-id="{{ job.pk }}"{% elif job.status == 'queued' or job.status == 'processing' %} data-pitch-status-url="{{ job.status_url }}"{% endif %}>
     <div class="song-card queue-card queue-card-{{ job.status }}">
       <div class="song-icon">
         {% if job.status == 'processing' %}
@@ -34,6 +33,7 @@
         {% endif %}
       </div>
       <div class="song-info">
+        {% if job.queue_kind == 'stem' %}
         {% if job.status == 'done' %}
         <a href="{{ job.song_page_url }}"><h3>{{ job.artist }} – {{ job.title }}</h3></a>
         {% else %}
@@ -43,10 +43,17 @@
           {{ job.get_status_display }}{% if job.message %} &mdash; {{ job.message }}{% endif %}
           {% if job.gpu_used == True %}<span class="badge badge-gpu">GPU</span>{% elif job.gpu_used == False %}<span class="badge badge-cpu">CPU</span>{% endif %}
         </span>
-        <span class="queue-time">Queued by {{ job.created_by.username }}</span>
+        {% else %}
+        <h3>{{ job.song_name }}</h3>
+        <span class="queue-detail">
+          {{ job.get_status_display }} &mdash; {{ job.semitones|stringformat:"+d" }} semitones{% if job.message %} &mdash; {{ job.message }}{% endif %}
+        </span>
+        {% endif %}
+        <span class="queue-time">{{ job.queue_type }} | Queued by {{ job.created_by.username }}</span>
         <span class="queue-time">{{ job.created_at|timesince }} ago</span>
       </div>
       <div class="queue-card-actions">
+        {% if job.queue_kind == 'stem' %}
         {% if job.status == 'done' %}
         <a href="{{ job.song_page_url }}" class="btn btn-sm">View</a>
         {% endif %}
@@ -83,56 +90,17 @@
           </button>
         </form>
         {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-{% if pitch_jobs %}
-<h2 class="queue-subtitle">Pitch Changes</h2>
-<div class="songs-grid">
-  {% for job in pitch_jobs %}
-  <div class="song-row"{% if job.status == 'queued' or job.status == 'processing' %} data-pitch-status-url="{{ job.status_url }}"{% endif %}>
-    <div class="song-card queue-card queue-card-{{ job.status }}">
-      <div class="song-icon">
-        {% if job.status == 'processing' %}
-        <span class="wiz-spinner"></span>
-        {% elif job.status == 'done' %}
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-        {% elif job.status == 'failed' %}
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-        </svg>
         {% else %}
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
+        {% if job.status == 'failed' or job.status == 'done' %}
+        <a href="{{ job.song_page_url }}" class="btn btn-sm">View</a>
+        {% endif %}
         {% endif %}
       </div>
-      <div class="song-info">
-        <h3>{{ job.song_name }}</h3>
-        <span class="queue-detail">
-          {{ job.get_status_display }} &mdash; {{ job.semitones|stringformat:"+d" }} semitones{% if job.message %} &mdash; {{ job.message }}{% endif %}
-        </span>
-        <span class="queue-time">Queued by {{ job.created_by.username }}</span>
-        <span class="queue-time">{{ job.created_at|timesince }} ago</span>
-      </div>
-      {% if job.status == 'failed' or job.status == 'done' %}
-      <div class="queue-card-actions">
-        <a href="{{ job.song_page_url }}" class="btn btn-sm">View</a>
-      </div>
-      {% endif %}
     </div>
   </div>
   {% endfor %}
 </div>
-{% endif %}
-
-{% if not jobs and not pitch_jobs %}
+{% else %}
 <div class="empty-state">
   <h3>Queue is empty</h3>
   <p>Stem separation and pitch change jobs will appear here.</p>

@@ -22,21 +22,29 @@ def _can_manage_job(user, job):
 
 @login_required
 def queue_list(request):
-    jobs = StemSeparationJob.objects.select_related('created_by')
-    for job in jobs:
+    stem_jobs = list(StemSeparationJob.objects.select_related('created_by'))
+    for job in stem_jobs:
+        job.queue_kind = 'stem'
+        job.queue_type = 'Song Wizard'
         if job.status == 'done':
             job.song_page_url = _song_url(job)
         job.can_manage = _can_manage_job(request.user, job)
     pitch_jobs = list(PitchShiftJob.objects.select_related('created_by'))
     for job in pitch_jobs:
+        job.queue_kind = 'pitch'
+        job.queue_type = 'Pitch Change'
         job.song_page_url = reverse(
             'song_player', kwargs={'song_name': job.song_name})
         job.status_url = reverse(
             'song_pitch_status', kwargs={'song_name': job.song_name})
+    queue_jobs = sorted(
+        stem_jobs + pitch_jobs,
+        key=lambda job: job.created_at,
+        reverse=True,
+    )
     return render(request, 'player/queue.html', {
         'nav_active': 'queue',
-        'jobs': jobs,
-        'pitch_jobs': pitch_jobs,
+        'queue_jobs': queue_jobs,
     })
 
 
