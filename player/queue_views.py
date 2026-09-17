@@ -2,6 +2,9 @@
 Views for the Stem Separation Queue.
 """
 
+import shutil
+from pathlib import Path
+
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -42,24 +45,36 @@ def queue_list(request):
         key=lambda job: job.created_at,
         reverse=True,
     )
+    clearable_stems = StemSeparationJob.objects.filter(
+        status__in=('done', 'failed'))
+    clearable_pitch = PitchShiftJob.objects.filter(
+        status__in=('done', 'failed'))
     return render(request, 'player/queue.html', {
         'nav_active': 'queue',
         'queue_jobs': queue_jobs,
+        'can_clear_queue': request.user.is_staff and (
+            clearable_stems.exists() or clearable_pitch.exists()
+        ),
     })
 
 
 @login_required
 @require_POST
-def queue_delete(request, job_id):
-    import shutil
-    from pathlib import Path
-
-    job = get_object_or_404(StemSeparationJob, pk=job_id)
-    if not _can_manage_job(request.user, job):
+def queue_clear(request):
+    if not request.user.is_staff:
         raise Http404
-    if job.staging_dir and Path(job.staging_dir).exists():
-        shutil.rmtree(job.staging_dir, ignore_errors=True)
-    job.delete()
+
+    stem_jobs = StemSeparationJob.objects.filter(status__in=('done', 'failed'))
+    pitch_jobs = PitchShiftJob.objects.filter(status__in=('done', 'failed'))
+
+    for staging_dir in stem_jobs.exclude(staging_dir='').values_list(
+        'staging_dir', flat=True,
+    ):
+        path = Path(staging_dir)
+        if path.exists():
+            shutil.rmtree(path, ignore_errors=True)
+    stem_jobs.delete()
+    pitch_jobs.delete()
     return redirect('queue_list')
 
 

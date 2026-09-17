@@ -60,7 +60,7 @@ urlpatterns = [
     path('api/download-tracks/flac/<str:video_id>/', views.download_tracks_flac, name='download_tracks_flac'),
     # Queue
     path('queue/', queue_views.queue_list, name='queue_list'),
-    path('queue/<int:job_id>/delete/', queue_views.queue_delete, name='queue_delete'),
+    path('queue/clear/', queue_views.queue_clear, name='queue_clear'),
     path('queue/<int:job_id>/pause/', queue_views.queue_pause, name='queue_pause'),
     path('queue/<int:job_id>/resume/', queue_views.queue_resume, name='queue_resume'),
     path('queue/<int:job_id>/status/', queue_views.queue_job_status, name='queue_job_status'),
