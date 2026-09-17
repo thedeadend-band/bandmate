@@ -221,6 +221,34 @@ class StemSeparationJob(models.Model):
         return f'{self.artist} - {self.title} ({self.get_status_display()})'
 
 
+class PitchShiftJob(models.Model):
+    STATUS_CHOICES = [
+        ('queued', 'Queued'),
+        ('processing', 'Processing'),
+        ('done', 'Done'),
+        ('failed', 'Failed'),
+    ]
+    song_name = models.CharField(max_length=500, unique=True)
+    semitones = models.SmallIntegerField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='pitch_shift_jobs',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='queued')
+    progress = models.IntegerField(default=0)
+    message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.song_name}: {self.semitones:+d} ({self.get_status_display()})'
+
+
 class SpotifyConnection(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,

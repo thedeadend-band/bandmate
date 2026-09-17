@@ -101,9 +101,9 @@ if [[ "${CONFIRM,,}" == "n" ]]; then
 fi
 
 # ---------- install system packages -----------------------------------------
-bold "[1/${TOTAL_STEPS}] Installing system packages (python3, ffmpeg, git, openssh)..."
+bold "[1/${TOTAL_STEPS}] Installing system packages (python3, ffmpeg, rubberband, git, openssh)..."
 apt-get update -qq
-apt-get install -y -qq python3 python3-venv python3-pip ffmpeg git openssh-server > /dev/null 2>&1
+apt-get install -y -qq python3 python3-venv python3-pip ffmpeg rubberband-cli git openssh-server > /dev/null 2>&1
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 systemctl enable ssh > /dev/null 2>&1
 systemctl restart ssh

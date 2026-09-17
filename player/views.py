@@ -27,7 +27,7 @@ from django_ratelimit.decorators import ratelimit
 
 from .models import (
     CalendarEvent, CalendarSource, Setlist, SetlistEntry,
-    SiteSettings, SpotifyConnection,
+    PitchShiftJob, SiteSettings, SpotifyConnection,
 )
 
 
@@ -96,7 +96,39 @@ def _get_tracks(song_path: Path) -> list[dict]:
     return tracks
 
 
-def _find_master_track(song_path: Path):
+def _active_pitch_manifest(song_path: Path) -> tuple[Path, dict] | None:
+    info = _load_song_info(song_path) or {}
+    semitones = info.get('pitch_shift_semitones')
+    if not isinstance(semitones, int) or semitones == 0:
+        return None
+    variant_dir = song_path / 'pitch-variants' / f'{semitones:+d}'
+    manifest_path = variant_dir / 'manifest.json'
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if manifest.get('semitones') != semitones or not isinstance(manifest.get('tracks'), dict):
+        return None
+    return variant_dir, manifest
+
+
+def _playback_track(song_path: Path, original_track: Path) -> Path:
+    active = _active_pitch_manifest(song_path)
+    if not active:
+        return original_track
+    variant_dir, manifest = active
+    filename = manifest['tracks'].get(original_track.name)
+    if not filename:
+        return original_track
+    candidate = (variant_dir / filename).resolve()
+    try:
+        candidate.relative_to(variant_dir.resolve())
+    except ValueError:
+        return original_track
+    return candidate if candidate.is_file() else original_track
+
+
+def _find_original_master_track(song_path: Path):
     """Return the first file whose stem is 'master' (case-insensitive)."""
     for f in song_path.iterdir():
         if (
@@ -108,6 +140,11 @@ def _find_master_track(song_path: Path):
     return None
 
 
+def _find_master_track(song_path: Path):
+    original = _find_original_master_track(song_path)
+    return _playback_track(song_path, original) if original else None
+
+
 def _parse_lrc_time(time_str):
     """Convert 'mm:ss.ms' to float seconds."""
     m = re.match(r'(\d+):(\d+)\.(\d+)', time_str.strip())
@@ -115,6 +152,25 @@ def _parse_lrc_time(time_str):
         return 0.0
     mins, secs, frac = m.groups()
     return int(mins) * 60 + int(secs) + int(frac) / (10 ** len(frac))
+
+
+def _transpose_key_label(key: str, semitones: int) -> str:
+    match = re.match(r'^([A-Ga-g])([#b]?)(.*)$', key.strip())
+    if not match or not semitones:
+        return key
+    note, accidental, suffix = match.groups()
+    pitch_classes = {
+        'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
+        'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8,
+        'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11,
+    }
+    source = note.upper() + accidental
+    if source not in pitch_classes:
+        return key
+    sharp_names = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
+    flat_names = ('C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B')
+    names = flat_names if accidental == 'b' or semitones < 0 else sharp_names
+    return f'{names[(pitch_classes[source] + semitones) % 12]}{suffix}'
 
 
 def _load_song_info(song_path: Path):
@@ -132,6 +188,10 @@ def _load_song_info(song_path: Path):
                 data['lyric_offset_secs'] = _parse_lrc_time(str(offset))
         else:
             data['lyric_offset_secs'] = 0
+        semitones = data.get('pitch_shift_semitones', 0)
+        if isinstance(semitones, int) and semitones and data.get('key'):
+            data['original_key'] = data['key']
+            data['key'] = _transpose_key_label(str(data['key']), semitones)
         # Normalize optional nested keys to avoid template lookup noise.
         guitars = data.get('guitars')
         if isinstance(guitars, dict):
@@ -428,11 +488,17 @@ def song_player(request, song_name: str):
         raise Http404
     song_info = _load_song_info(song_path)
     lyrics = _load_lyrics(song_path)
+    current_pitch = (song_info or {}).get('pitch_shift_semitones', 0)
+    if not isinstance(current_pitch, int):
+        current_pitch = 0
     return render(request, 'player/song_player.html', {
         'song_name': song_name,
         'tracks': tracks,
         'song_info': song_info,
         'lyrics': lyrics,
+        'pitch_job': PitchShiftJob.objects.filter(song_name=song_name).first(),
+        'pitch_options': range(-6, 7),
+        'current_pitch': current_pitch,
         'nav_active': 'multitrack',
     })
 
@@ -505,7 +571,8 @@ def _get_compressed_audio(track_path: Path) -> tuple:
 @login_required
 def track_audio(request, song_name: str, track_filename: str):
     song_path = _safe_song_path(song_name)
-    track_path = _safe_track_path(song_path, track_filename)
+    original_path = _safe_track_path(song_path, track_filename)
+    track_path = _playback_track(song_path, original_path)
     serve_path, content_type = _get_compressed_audio(track_path)
     response = FileResponse(open(serve_path, 'rb'), content_type=content_type)
     response['Accept-Ranges'] = 'bytes'
@@ -534,7 +601,8 @@ def _compute_channel_peaks(samples, num_peaks):
 @login_required
 def track_waveform(request, song_name: str, track_filename: str):
     song_path = _safe_song_path(song_name)
-    track_path = _safe_track_path(song_path, track_filename)
+    original_path = _safe_track_path(song_path, track_filename)
+    track_path = _playback_track(song_path, original_path)
     num_peaks = min(int(request.GET.get('peaks', 1000)), 4000)
 
     cache_dir = Path(settings.WAVEFORM_CACHE_DIR)
@@ -1494,7 +1562,7 @@ def master_audio(request, song_name: str):
 def master_waveform(request, song_name: str):
     """Reuses the same waveform logic but for the master track specifically."""
     song_path = _safe_song_path(song_name)
-    master = _find_master_track(song_path)
+    master = _find_original_master_track(song_path)
     if not master:
         raise Http404
     return track_waveform(request, song_name, master.name)
@@ -1507,6 +1575,60 @@ def song_info_api(request, song_name: str):
     info = _load_song_info(song_path)
     lyrics = _load_lyrics(song_path)
     return JsonResponse({'info': info, 'lyrics': lyrics})
+
+
+@login_required
+@require_POST
+def song_pitch_update(request, song_name: str):
+    _safe_song_path(song_name)
+    try:
+        semitones = int(request.POST.get('semitones', '0'))
+    except ValueError:
+        return JsonResponse({'error': 'Invalid pitch value'}, status=400)
+    if semitones < -6 or semitones > 6:
+        return JsonResponse({'error': 'Pitch must be between -6 and +6 semitones'}, status=400)
+
+    active = PitchShiftJob.objects.filter(
+        song_name=song_name, status__in=('queued', 'processing'),
+    ).first()
+    if active:
+        return redirect('song_player', song_name=song_name)
+
+    if semitones == 0:
+        from .pitch_services import reset_pitch_variant
+        reset_pitch_variant(song_name)
+        PitchShiftJob.objects.filter(song_name=song_name).delete()
+        return redirect('song_player', song_name=song_name)
+
+    job, _ = PitchShiftJob.objects.update_or_create(
+        song_name=song_name,
+        defaults={
+            'semitones': semitones,
+            'created_by': request.user,
+            'status': 'queued',
+            'progress': 0,
+            'message': 'Queued',
+            'completed_at': None,
+            'updated_at': timezone.now(),
+        },
+    )
+    from .pitch_services import start_pitch_worker
+    start_pitch_worker()
+    return redirect('song_player', song_name=song_name)
+
+
+@login_required
+def song_pitch_status(request, song_name: str):
+    _safe_song_path(song_name)
+    job = PitchShiftJob.objects.filter(song_name=song_name).first()
+    if not job:
+        return JsonResponse({'status': 'idle', 'progress': 0, 'message': ''})
+    return JsonResponse({
+        'status': job.status,
+        'progress': job.progress,
+        'message': job.message,
+        'semitones': job.semitones,
+    })
 
 
 @login_required
@@ -1657,6 +1779,14 @@ def song_delete(request, song_name: str):
 
     song_path = _safe_song_path(song_name)
 
+    if PitchShiftJob.objects.filter(
+        song_name=song_name, status__in=('queued', 'processing'),
+    ).exists():
+        return JsonResponse(
+            {'error': 'Cannot delete while pitch generation is running.'},
+            status=400,
+        )
+
     in_setlists = SetlistEntry.objects.filter(song_name=song_name, is_break=False).exists()
     if in_setlists:
         return JsonResponse(
@@ -1666,6 +1796,7 @@ def song_delete(request, song_name: str):
 
     if song_path.exists():
         shutil.rmtree(song_path)
+    PitchShiftJob.objects.filter(song_name=song_name).delete()
 
     return redirect('song_list')
 

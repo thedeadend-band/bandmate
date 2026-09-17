@@ -41,6 +41,40 @@
 <h1 class="song-title">{{ song_name }}</h1>
 {% endif %}
 
+<section class="pitch-control" aria-labelledby="pitch-control-title">
+  <div class="pitch-control-copy">
+    <strong id="pitch-control-title">Playback pitch</strong>
+    <span>Tempo remains unchanged. Drums and click tracks stay at their original pitch.</span>
+  </div>
+  <form method="post" action="{% url 'song_pitch_update' song_name %}" class="pitch-control-form">
+    {% csrf_token %}
+    <select name="semitones" class="pitch-select" aria-label="Pitch adjustment in semitones"
+            {% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}disabled{% endif %}>
+      {% for value in pitch_options %}
+      <option value="{{ value }}" {% if value == current_pitch %}selected{% endif %}>
+        {% if value == 0 %}Original{% elif value > 0 %}+{{ value }} semitone{% if value != 1 %}s{% endif %}{% else %}{{ value }} semitone{% if value != -1 %}s{% endif %}{% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary pitch-apply-btn"
+            {% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}disabled{% endif %}>
+      {% if current_pitch %}Change pitch{% else %}Generate{% endif %}
+    </button>
+  </form>
+  <div class="pitch-job-status{% if pitch_job.status == 'failed' %} pitch-job-error{% endif %}"
+       id="pitch-job-status"
+       data-status-url="{% url 'song_pitch_status' song_name %}"
+       data-active="{% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}true{% else %}false{% endif %}">
+    {% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}
+      {{ pitch_job.message }} ({{ pitch_job.progress }}%)
+    {% elif pitch_job.status == 'failed' %}
+      {{ pitch_job.message }}
+    {% elif current_pitch %}
+      Active: {{ current_pitch|stringformat:"+d" }} semitone{% if current_pitch != 1 and current_pitch != -1 %}s{% endif %}
+    {% endif %}
+  </div>
+</section>
+
 <div id="song-link-panel" class="song-link-panel" hidden>
   <div class="song-link-header">
     <strong id="song-link-title">Link Track</strong>
@@ -392,6 +426,34 @@
   });
   saveBtn?.addEventListener('click', () => save(false));
   clearBtn?.addEventListener('click', () => save(true));
+})();
+</script>
+<script>
+(function() {
+  var status = document.getElementById('pitch-job-status');
+  if (!status || status.dataset.active !== 'true') return;
+
+  function pollPitchJob() {
+    fetch(status.dataset.statusUrl)
+      .then(function(response) { return response.json(); })
+      .then(function(job) {
+        status.textContent = (job.message || job.status) + ' (' + job.progress + '%)';
+        if (job.status === 'done') {
+          window.location.reload();
+          return;
+        }
+        if (job.status === 'failed') {
+          status.classList.add('pitch-job-error');
+          document.querySelectorAll('.pitch-control-form select, .pitch-control-form button')
+            .forEach(function(control) { control.disabled = false; });
+          return;
+        }
+        window.setTimeout(pollPitchJob, 2000);
+      })
+      .catch(function() { window.setTimeout(pollPitchJob, 4000); });
+  }
+
+  window.setTimeout(pollPitchJob, 1500);
 })();
 </script>
 {% endblock %}

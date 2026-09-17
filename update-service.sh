@@ -34,6 +34,15 @@ fi
 # ---------- Step 2: Install dependencies -------------------------------------
 bold "[2/5] Installing dependencies..."
 source .venv/bin/activate
+if ! command -v rubberband > /dev/null 2>&1; then
+    if apt-get update -qq && apt-get install -y -qq rubberband-cli; then
+        green "  ✓ Rubber Band installed"
+    else
+        red "  ✗ Rubber Band installation failed"
+        red "    Pitch generation will be unavailable until rubberband-cli is installed."
+        FAILED=1
+    fi
+fi
 if pip install -r requirements.txt --no-cache-dir -q 2>&1 | tee /tmp/bandmate-pip.log; then
     green "  ✓ Dependencies installed"
 else
