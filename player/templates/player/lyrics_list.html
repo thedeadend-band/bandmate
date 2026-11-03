@@ -13,7 +13,7 @@
 
 <h2 class="queue-subtitle">Playlists</h2>
 {% if setlists %}
-<div class="songs-grid">
+<div class="songs-grid compact-song-grid">
   {% for sl in setlists %}
   <a href="{% url 'lyrics_setlist_player' sl.pk %}" class="song-card setlist-card lyrics-nav-link">
     <div class="song-icon setlist-icon">
@@ -40,7 +40,7 @@
 
 <h2 class="queue-subtitle" style="margin-top:24px">Songs</h2>
 {% if songs %}
-<div class="songs-grid">
+<div class="songs-grid compact-song-grid">
   {% for song in songs %}
   <div class="song-row">
     <a href="{% url 'lyrics_song_player' song.name %}" class="song-card lyrics-nav-link">

@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from .context_processors import group_context
 from .models import (
-    CalendarSource, Group, GroupMembership, GroupSong, Setlist,
+    CalendarSource, Group, GroupMembership, GroupSong, Setlist, SetlistEntry,
     SongCelebrationDismissal, SongReadiness, UserProfile,
 )
 from .user_display import user_display_name
@@ -50,6 +50,82 @@ class GroupCatalogTests(TestCase):
         self.assertContains(response, 'Primary Set')
         self.assertNotContains(response, 'Secondary Set')
 
+    @patch('player.views._song_duration_seconds')
+    def test_setlist_card_shows_total_song_duration(self, duration_mock):
+        duration_mock.side_effect = {'First Song': 185, 'Second Song': 265}.get
+        setlist = Setlist.objects.create(
+            group=self.primary, owner=self.alice, name='Timed Set')
+        SetlistEntry.objects.create(
+            setlist=setlist, song_name='First Song', position=0)
+        SetlistEntry.objects.create(
+            setlist=setlist, song_name='', position=1, is_break=True)
+        SetlistEntry.objects.create(
+            setlist=setlist, song_name='Second Song', position=2)
+        self.client.force_login(self.alice)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.get(reverse('setlist_list'))
+
+        self.assertContains(response, '7:30 total')
+        self.assertEqual(duration_mock.call_count, 2)
+
+    def test_audio_duration_format_includes_hours_when_needed(self):
+        from .views import _format_audio_duration
+
+        self.assertEqual(_format_audio_duration(185), '3:05')
+        self.assertEqual(_format_audio_duration(3725), '1:02:05')
+        self.assertEqual(_format_audio_duration(None), '--:--')
+
+    def test_setlist_owner_can_update_title_and_date_from_player(self):
+        setlist = Setlist.objects.create(
+            group=self.primary, owner=self.alice, name='Old Title')
+        self.client.force_login(self.alice)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.post(
+            reverse('setlist_details_update', args=[setlist.pk]),
+            {'name': 'New Title', 'date': '2026-11-15'},
+        )
+
+        self.assertRedirects(
+            response, reverse('setlist_player', args=[setlist.pk]),
+            fetch_redirect_response=False,
+        )
+        setlist.refresh_from_db()
+        self.assertEqual(setlist.name, 'New Title')
+        self.assertEqual(setlist.date.isoformat(), '2026-11-15')
+
+    def test_admin_can_update_another_users_setlist_details(self):
+        setlist = Setlist.objects.create(
+            group=self.primary, owner=self.alice, name='Old Title')
+        self.client.force_login(self.admin)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.post(
+            reverse('setlist_details_update', args=[setlist.pk]),
+            {'name': 'Admin Title', 'date': ''},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        setlist.refresh_from_db()
+        self.assertEqual(setlist.name, 'Admin Title')
+        self.assertIsNone(setlist.date)
+
+    def test_non_owner_cannot_update_setlist_details(self):
+        setlist = Setlist.objects.create(
+            group=self.primary, owner=self.alice, name='Alice Set')
+        self.client.force_login(self.bob)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.post(
+            reverse('setlist_details_update', args=[setlist.pk]),
+            {'name': 'Changed', 'date': '2026-11-15'},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        setlist.refresh_from_db()
+        self.assertEqual(setlist.name, 'Alice Set')
+
     def test_all_members_activate_song_and_dismiss_celebration(self):
         group_song = GroupSong.objects.create(
             group=self.primary, song_name='New Song')
@@ -87,9 +163,42 @@ class GroupCatalogTests(TestCase):
             group_song=group_song, user=self.alice).exists())
         self.assertEqual(group_context(request)['ready_celebrations'], [])
 
-    def test_admin_can_override_readiness(self):
+    def test_admin_can_set_each_members_readiness(self):
         group_song = GroupSong.objects.create(
             group=self.primary, song_name='Override Song')
+        self.client.force_login(self.admin)
+        self.select_group(self.client, self.primary)
+
+        readiness_url = reverse(
+            'song_readiness_update', args=[group_song.song_name])
+        alice_response = self.client.post(
+            readiness_url,
+            {'user_id': self.alice.pk, 'is_ready': '1'},
+        )
+
+        self.assertEqual(alice_response.status_code, 302)
+        self.assertTrue(SongReadiness.objects.get(
+            group_song=group_song, user=self.alice).is_ready)
+        group_song.refresh_from_db()
+        self.assertEqual(group_song.status, 'on_deck')
+
+        self.client.post(
+            readiness_url,
+            {'user_id': self.bob.pk, 'is_ready': '1'},
+        )
+        group_song.refresh_from_db()
+        self.assertEqual(group_song.status, 'active')
+        self.assertIsNotNone(group_song.ready_date)
+
+        self.client.post(readiness_url, {'user_id': self.alice.pk})
+        group_song.refresh_from_db()
+        self.assertFalse(SongReadiness.objects.get(
+            group_song=group_song, user=self.alice).is_ready)
+        self.assertEqual(group_song.status, 'on_deck')
+
+    def test_admin_cannot_directly_mark_song_ready(self):
+        group_song = GroupSong.objects.create(
+            group=self.primary, song_name='No Override Song')
         self.client.force_login(self.admin)
         self.select_group(self.client, self.primary)
 
@@ -98,10 +207,9 @@ class GroupCatalogTests(TestCase):
             {'status': 'active'},
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 404)
         group_song.refresh_from_db()
-        self.assertEqual(group_song.status, 'active')
-        self.assertIsNotNone(group_song.ready_date)
+        self.assertEqual(group_song.status, 'on_deck')
 
     def test_removing_member_clears_stale_readiness(self):
         group_song = GroupSong.objects.create(

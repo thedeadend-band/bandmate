@@ -185,19 +185,6 @@ class SetlistPlayer {
     if (wasPlaying) await this.play();
   }
 
-  async _preloadDurations() {
-    for (let i = 0; i < this.songs.length; i++) {
-      try {
-        const url = `/api/songs/${encodeURIComponent(this.songs[i].name)}/master/waveform/`;
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        const data = await resp.json();
-        const el = document.querySelector(`.pp-track-dur[data-index="${this._domIndexForSong(i)}"]`);
-        if (el) el.textContent = this._fmt(data.duration);
-      } catch (_) { /* ignore */ }
-    }
-  }
-
   _domIndexForSong(songIndex) {
     let songCount = 0;
     for (let i = 0; i < this.allItems.length; i++) {

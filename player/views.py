@@ -5,7 +5,7 @@ import re
 import shutil
 import subprocess
 import zipfile
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
@@ -674,13 +674,20 @@ def song_readiness_update(request, song_name: str):
     group_song = get_object_or_404(
         GroupSong, group=request.active_group, song_name=song_name)
     if request.user.is_staff:
-        return JsonResponse({'error': 'Admin readiness does not count.'}, status=400)
-    if not GroupMembership.objects.filter(
-        group=request.active_group, user=request.user).exists():
-        raise Http404
+        target_user = get_object_or_404(
+            User,
+            pk=request.POST.get('user_id'),
+            is_staff=False,
+            group_memberships__group=request.active_group,
+        )
+    else:
+        if not GroupMembership.objects.filter(
+            group=request.active_group, user=request.user).exists():
+            raise Http404
+        target_user = request.user
     SongReadiness.objects.update_or_create(
         group_song=group_song,
-        user=request.user,
+        user=target_user,
         defaults={'is_ready': request.POST.get('is_ready') == '1'},
     )
     _recalculate_song_status(group_song)
@@ -696,14 +703,13 @@ def song_status_update(request, song_name: str):
     if status == 'retired':
         group_song.status = 'retired'
         group_song.save(update_fields=['status'])
-    elif request.user.is_staff and status in ('on_deck', 'active'):
-        changed_to_active = status == 'active' and group_song.status != 'active'
-        group_song.status = status
-        if status == 'active' and not group_song.ready_date:
-            group_song.ready_date = timezone.localdate()
-        group_song.save(update_fields=['status', 'ready_date'])
-        if changed_to_active:
-            group_song.celebration_dismissals.all().delete()
+    elif (
+        request.user.is_staff and status == 'on_deck'
+        and group_song.status == 'retired'
+    ):
+        group_song.status = 'on_deck'
+        group_song.save(update_fields=['status'])
+        _recalculate_song_status(group_song)
     else:
         raise Http404
     return redirect('song_player', song_name=song_name)
@@ -1388,10 +1394,66 @@ def attributions(request):
 BREAK_SENTINEL = '__BREAK__'
 
 
+@lru_cache(maxsize=1024)
+def _probe_audio_duration(path_string: str, mtime_ns: int, file_size: int):
+    """Return audio duration without decoding; file metadata invalidates the cache."""
+    del mtime_ns, file_size
+    probe = subprocess.run(
+        [
+            'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1', path_string,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=True,
+    )
+    duration = float(probe.stdout.strip())
+    return duration if duration > 0 else None
+
+
+def _song_duration_seconds(song_name: str):
+    try:
+        master = _find_master_track(_safe_song_path(song_name))
+        if not master:
+            return None
+        file_stat = master.stat()
+        return _probe_audio_duration(
+            str(master), file_stat.st_mtime_ns, file_stat.st_size)
+    except (Http404, OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def _format_audio_duration(duration):
+    if duration is None:
+        return '--:--'
+    total_seconds = max(0, int(round(duration)))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f'{hours}:{minutes:02d}:{seconds:02d}'
+    return f'{minutes}:{seconds:02d}'
+
+
+def _setlist_duration_seconds(setlist):
+    total = 0
+    for entry in setlist.entries.all():
+        if entry.is_break:
+            continue
+        duration = _song_duration_seconds(entry.song_name)
+        if duration is None:
+            return None
+        total += duration
+    return total
+
+
 @login_required
 def setlist_list(request):
     setlists = Setlist.objects.filter(group=request.active_group).select_related(
         'owner').prefetch_related('entries')
+    for setlist in setlists:
+        total_duration = _setlist_duration_seconds(setlist)
+        setlist.total_duration_display = _format_audio_duration(total_duration)
     has_spotify = SpotifyConnection.objects.filter(user=request.user).exists()
     spotify_configured = bool(_spotify_config()[0] and _spotify_config()[1])
     return render(request, 'player/setlist_list.html', {
@@ -1954,6 +2016,31 @@ def setlist_edit(request, setlist_id: int):
 
 
 @login_required
+@require_POST
+def setlist_details_update(request, setlist_id: int):
+    sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
+    if sl.owner != request.user and not request.user.is_staff:
+        raise Http404
+
+    name = request.POST.get('name', '').strip()
+    date_value = request.POST.get('date', '').strip()
+    if not name:
+        error = quote('Setlist title is required.')
+        return redirect(f'{reverse("setlist_player", args=[sl.pk])}?details_error={error}')
+
+    try:
+        parsed_date = date.fromisoformat(date_value) if date_value else None
+    except ValueError:
+        error = quote('Enter a valid setlist date.')
+        return redirect(f'{reverse("setlist_player", args=[sl.pk])}?details_error={error}')
+
+    sl.name = name
+    sl.date = parsed_date
+    sl.save(update_fields=['name', 'date', 'updated_at'])
+    return redirect('setlist_player', setlist_id=sl.pk)
+
+
+@login_required
 def setlist_delete(request, setlist_id: int):
     sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
     if sl.owner != request.user and not request.user.is_staff:
@@ -1980,10 +2067,13 @@ def setlist_player(request, setlist_id: int):
         master = _find_master_track(song_path)
         if master:
             tracks = _get_tracks(song_path)
+            duration = _song_duration_seconds(entry.song_name)
             setlist_items.append({
                 'name': entry.song_name,
                 'master_filename': master.name,
                 'tracks': tracks,
+                'duration': duration,
+                'duration_display': _format_audio_duration(duration),
                 'is_break': False,
             })
 
@@ -1997,6 +2087,7 @@ def setlist_player(request, setlist_id: int):
         'setlist': sl,
         'setlist_items': setlist_items,
         'can_edit_setlist': sl.owner == request.user or request.user.is_staff,
+        'details_error': request.GET.get('details_error', ''),
         'spotify_configured': bool(_spotify_config()[0] and _spotify_config()[1]),
         'instrument_categories': [
             category for category in TRACK_CATEGORY_ORDER
