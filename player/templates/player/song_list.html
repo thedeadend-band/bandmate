@@ -6,31 +6,18 @@
   <h1 class="page-title">Catalog</h1>
   <div class="section-header-actions">
     <form method="get" class="catalog-sort-form">
-      <select name="sort" class="form-input" aria-label="Sort catalog">
+      <span class="catalog-sort-label">Sort</span>
+      <select name="sort" class="form-input" aria-label="Sort catalog" onchange="this.form.submit()">
         <option value="ready_date"{% if sort_by == 'ready_date' %} selected{% endif %}>Ready Date</option>
         <option value="artist"{% if sort_by == 'artist' %} selected{% endif %}>Artist</option>
         <option value="title"{% if sort_by == 'title' %} selected{% endif %}>Title</option>
       </select>
-      <select name="direction" class="form-input" aria-label="Sort direction">
+      <select name="direction" class="form-input" aria-label="Sort direction" onchange="this.form.submit()">
         <option value="asc"{% if sort_direction == 'asc' %} selected{% endif %}>Ascending</option>
         <option value="desc"{% if sort_direction == 'desc' %} selected{% endif %}>Descending</option>
       </select>
-      <button type="submit" class="btn btn-secondary">Sort</button>
     </form>
-    <a href="{% url 'wizard_start' %}" class="btn btn-add">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-      New Song
-    </a>
-    {% if user.is_staff %}
-    <button type="button" class="btn btn-secondary" id="upload-btn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Upload ZIP
-    </button>
-    {% endif %}
   </div>
-  <input type="file" id="upload-input" accept=".zip" style="display:none">
 </div>
 
 {% if songs %}
@@ -148,52 +135,6 @@
     }, 3000);
   }
 
-  const btn = document.getElementById('upload-btn');
-  const input = document.getElementById('upload-input');
-  if (!btn || !input) return;
-
-  btn.addEventListener('click', () => input.click());
-
-  input.addEventListener('change', () => {
-    const file = input.files[0];
-    if (!file) return;
-    uploadZip(file);
-    input.value = '';
-  });
-
-  function uploadZip(file) {
-    const form = new FormData();
-    form.append('zipfile', file);
-
-    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
-      || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-    btn.disabled = true;
-    btn.textContent = 'Uploading\u2026';
-
-    fetch('{% url "song_upload" %}', {
-      method: 'POST',
-      headers: { 'X-CSRFToken': csrfToken },
-      body: form,
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.error) {
-        alert('Upload failed: ' + data.error);
-        resetBtn();
-      } else if (data.ok) {
-        window.location.reload();
-      }
-    })
-    .catch(err => {
-      alert('Upload failed: ' + err.message);
-      resetBtn();
-    });
-  }
-
-  function resetBtn() {
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload Song';
-  }
 })();
 </script>
 {% endblock %}

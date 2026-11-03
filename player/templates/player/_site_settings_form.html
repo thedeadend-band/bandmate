@@ -1,0 +1,24 @@
+{% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+
+<form method="post" class="admin-form">
+  {% csrf_token %}
+  <h3 class="admin-section-title">Song Lookup API (GetSongBPM / GetSongKey)</h3>
+  <p class="form-hint admin-form-intro">Used by the New Song Wizard to look up tempo, key, and time signature. Get a free API key at <a href="https://getsongbpm.com/api" target="_blank" rel="noopener">getsongbpm.com/api</a> or <a href="https://getsongkey.com/api" target="_blank" rel="noopener">getsongkey.com/api</a>.</p>
+
+  <div class="form-group">
+    <label for="song_api_key">API Key</label>
+    <input type="text" id="song_api_key" name="song_api_key" value="{{ site.song_api_key }}" placeholder="e.g. abc123def456..." class="form-input" autocomplete="off">
+  </div>
+
+  <h3 class="admin-section-title">Spotify Integration</h3>
+  <p class="form-hint admin-form-intro">Configure Spotify app credentials so users can import and export setlists. Add this Redirect URI to the Spotify developer app: <code>{{ request.scheme }}://{{ request.get_host }}/spotify/callback/</code></p>
+  <div class="form-group">
+    <label for="spotify_client_id">Spotify Client ID</label>
+    <input type="text" id="spotify_client_id" name="spotify_client_id" value="{{ site.spotify_client_id }}" class="form-input" autocomplete="off">
+  </div>
+  <div class="form-group">
+    <label for="spotify_client_secret">Spotify Client Secret</label>
+    <input type="password" id="spotify_client_secret" name="spotify_client_secret" value="{{ site.spotify_client_secret }}" class="form-input" autocomplete="off">
+  </div>
+  <button type="submit" class="btn btn-add">Save Site Settings</button>
+</form>

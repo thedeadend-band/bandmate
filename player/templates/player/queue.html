@@ -1,4 +1,5 @@
 {% extends "player/base.html" %}
+{% load player_tags %}
 {% block title %}Queue – BandMate{% endblock %}
 
 {% block content %}
@@ -56,7 +57,7 @@
           {{ job.get_status_display }} &mdash; {{ job.semitones|stringformat:"+d" }} semitones{% if job.message %} &mdash; {{ job.message }}{% endif %}
         </span>
         {% endif %}
-        <span class="queue-time">{{ job.queue_type }} | Queued by {{ job.created_by.username }}</span>
+        <span class="queue-time">{{ job.queue_type }} | Queued by {{ job.created_by|display_name }}</span>
         <span class="queue-time">{{ job.created_at|timesince }} ago</span>
       </div>
       <div class="queue-card-actions">

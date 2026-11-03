@@ -2,112 +2,16 @@
 {% block title %}Admin – Settings{% endblock %}
 
 {% block content %}
-<a href="{% url 'admin_users' %}" class="back-link">
+<a href="{% url 'admin_home' %}" class="back-link">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <polyline points="15 18 9 12 15 6"/>
   </svg>
-  Back to Users
+  Back to Settings
 </a>
 
 <div class="admin-header">
   <h1 class="page-title">Site Settings</h1>
 </div>
 
-{% if success %}
-<div class="alert alert-success">{{ success }}</div>
-{% endif %}
-
-<form method="post" class="admin-form">
-  {% csrf_token %}
-  <div class="form-group">
-    <label>Calendar Sources</label>
-    <div class="admin-calendar-list" id="calendar-list">
-      {% for cal in calendar_entries %}
-      <div class="admin-calendar-row">
-        <input type="hidden" name="calendar_id" value="{{ cal.pk }}">
-        <input type="color" name="calendar_color" value="{{ cal.color }}" class="admin-calendar-color" title="Calendar color">
-        <input type="text" name="calendar_name" value="{{ cal.name }}" placeholder="Public, Private, Rehearsals..." class="form-input">
-        <input type="url" name="calendar_url" value="{{ cal.ics_url }}" placeholder="https://.../calendar.ics or webcal://..." class="form-input">
-        <button type="button" class="admin-calendar-remove" title="Remove calendar">×</button>
-      </div>
-      {% empty %}
-      <div class="admin-calendar-row">
-        <input type="hidden" name="calendar_id" value="">
-        <input type="color" name="calendar_color" value="#4a9eff" class="admin-calendar-color" title="Calendar color">
-        <input type="text" name="calendar_name" value="" placeholder="Public, Private, Rehearsals..." class="form-input">
-        <input type="url" name="calendar_url" value="" placeholder="https://.../calendar.ics or webcal://..." class="form-input">
-        <button type="button" class="admin-calendar-remove" title="Remove calendar">×</button>
-      </div>
-      {% endfor %}
-    </div>
-    <button type="button" class="btn btn-secondary admin-calendar-add" id="calendar-add-btn">Add Calendar</button>
-    <p class="form-hint">
-      Add each calendar's secret/public iCal URL, not the embed URL. In Google Calendar: Settings &gt; your calendar &gt; Integrate calendar &gt; copy the Secret address in iCal format or Public address in iCal format.
-    </p>
-  </div>
-
-  <h3 class="admin-section-title">Song Lookup API (GetSongBPM / GetSongKey)</h3>
-  <p class="form-hint" style="margin-bottom:12px">Used by the New Song Wizard to look up tempo, key, and time signature. Get a free API key at <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--accent-blue)">getsongbpm.com/api</a> or <a href="https://getsongkey.com/api" target="_blank" style="color:var(--accent-blue)">getsongkey.com/api</a> (same API, either site works).</p>
-
-  <div class="form-group">
-    <label for="song_api_key">API Key</label>
-    <input type="text" id="song_api_key" name="song_api_key"
-           value="{{ site.song_api_key }}"
-           placeholder="e.g. abc123def456..."
-           class="form-input" autocomplete="off">
-  </div>
-
-  <h3 class="admin-section-title">Spotify Integration</h3>
-  <p class="form-hint" style="margin-bottom:12px">
-    Configure Spotify app credentials so users can import/export setlists from/to Spotify playlists.
-    In your Spotify developer app, add this Redirect URI:
-    <code>{{ request.scheme }}://{{ request.get_host }}/spotify/callback/</code>
-  </p>
-  <div class="form-group">
-    <label for="spotify_client_id">Spotify Client ID</label>
-    <input type="text" id="spotify_client_id" name="spotify_client_id"
-           value="{{ site.spotify_client_id }}" class="form-input" autocomplete="off">
-  </div>
-  <div class="form-group">
-    <label for="spotify_client_secret">Spotify Client Secret</label>
-    <input type="password" id="spotify_client_secret" name="spotify_client_secret"
-           value="{{ site.spotify_client_secret }}" class="form-input" autocomplete="off">
-  </div>
-
-  <button type="submit" class="btn btn-add">Save</button>
-</form>
-<script>
-(function() {
-  var list = document.getElementById('calendar-list');
-  var addBtn = document.getElementById('calendar-add-btn');
-  if (!list || !addBtn) return;
-
-  function makeRow() {
-    var row = document.createElement('div');
-    row.className = 'admin-calendar-row';
-    row.innerHTML =
-      '<input type="hidden" name="calendar_id" value="">' +
-      '<input type="color" name="calendar_color" value="#4a9eff" class="admin-calendar-color" title="Calendar color">' +
-      '<input type="text" name="calendar_name" value="" placeholder="Public, Private, Rehearsals..." class="form-input">' +
-      '<input type="url" name="calendar_url" value="" placeholder="https://.../calendar.ics or webcal://..." class="form-input">' +
-      '<button type="button" class="admin-calendar-remove" title="Remove calendar">×</button>';
-    return row;
-  }
-
-  addBtn.addEventListener('click', function() {
-    list.appendChild(makeRow());
-  });
-
-  list.addEventListener('click', function(e) {
-    var btn = e.target.closest('.admin-calendar-remove');
-    if (!btn) return;
-    var rows = list.querySelectorAll('.admin-calendar-row');
-    if (rows.length <= 1) {
-      rows[0].querySelectorAll('input').forEach(function(input) { input.value = ''; });
-    } else {
-      btn.closest('.admin-calendar-row').remove();
-    }
-  });
-})();
-</script>
+{% include "player/_site_settings_form.html" %}
 {% endblock %}

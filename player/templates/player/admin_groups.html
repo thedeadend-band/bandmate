@@ -1,7 +1,8 @@
 {% extends "player/base.html" %}
 {% block title %}Admin – Groups{% endblock %}
 {% block content %}
-<div class="admin-header"><h1 class="page-title">Groups</h1><a href="{% url 'admin_group_add' %}" class="btn btn-add">Add Group</a></div>
+<a href="{% url 'admin_home' %}" class="back-link">Back to Settings</a>
+<div class="admin-header"><h1 class="page-title">Groups</h1><a href="{% url 'admin_group_add' %}" class="btn btn-add">+ Group</a></div>
 <div class="admin-list">
 {% for group in groups %}
   <div class="admin-row">

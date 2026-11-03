@@ -18,6 +18,10 @@ class LyricsPlayer {
     this.lyricOffset = 0;
     this.currentLyricIndex = -1;
     this.isScrubbingLyrics = false;
+    this.isProgressScrubbing = false;
+    this.resumeAfterProgressScrub = false;
+    this._seekGeneration = 0;
+    this._playbackGeneration = 0;
     this._lyricsScrollEndTimer = null;
     this.wakeLock = null;
     this._bindEvents();
@@ -35,8 +39,14 @@ class LyricsPlayer {
     });
     document.getElementById('ly-prev')?.addEventListener('click', () => this.prev());
     document.getElementById('ly-next')?.addEventListener('click', () => this.next());
-    document.getElementById('ly-skip-back')?.addEventListener('click', () => this.skipBy(-5));
-    document.getElementById('ly-skip-forward')?.addEventListener('click', () => this.skipBy(5));
+    document.getElementById('ly-skip-back')?.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.skipBy(-5);
+    });
+    document.getElementById('ly-skip-forward')?.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.skipBy(5);
+    });
     document.addEventListener('keydown', (e) => {
       if (this._isTypingTarget(e.target)) return;
       switch (e.code || e.key) {
@@ -74,10 +84,17 @@ class LyricsPlayer {
 
     const progress = document.getElementById('ly-progress');
     if (progress) {
-      progress.addEventListener('input', () => {
-        const pct = Math.max(0, Math.min(1000, Number(progress.value || 0))) / 1000;
-        this.seekTo((this.duration || 0) * pct);
+      progress.addEventListener('pointerdown', (event) => {
+        progress.setPointerCapture?.(event.pointerId);
+        this._beginProgressScrub();
       });
+      progress.addEventListener('input', () => {
+        this._beginProgressScrub();
+        this._previewProgressSeek(progress);
+      });
+      progress.addEventListener('change', () => this._endProgressScrub(progress));
+      progress.addEventListener('pointerup', () => this._endProgressScrub(progress));
+      progress.addEventListener('pointercancel', () => this._endProgressScrub(progress));
     }
 
     document.addEventListener('visibilitychange', () => {
@@ -197,6 +214,7 @@ class LyricsPlayer {
     if (!this.buffers.length) return;
     this._ensureAudioContext();
     await this.audioContext.resume();
+    const playbackGeneration = ++this._playbackGeneration;
     this.isPlaying = true;
     const startAt = this.audioContext.currentTime + 0.03;
     this.playStartTime = startAt;
@@ -208,12 +226,15 @@ class LyricsPlayer {
       src.connect(this.gainNode);
       src.start(startAt, Math.min(this.playOffset, buffer.duration));
       if (index === longestIndex) src.onended = () => {
-      if (!this.isPlaying) return;
-      if (this.mode === 'setlist' && this.currentIndex < this.items.length - 1) {
-        this.loadIndex(this.currentIndex + 1, true);
-      } else {
-        this.stop();
-      }
+        if (
+          playbackGeneration !== this._playbackGeneration ||
+          !this.isPlaying
+        ) return;
+        if (this.mode === 'setlist' && this.currentIndex < this.items.length - 1) {
+          this.loadIndex(this.currentIndex + 1, true);
+        } else {
+          this.stop();
+        }
       };
       return src;
     });
@@ -226,7 +247,11 @@ class LyricsPlayer {
     if (!this.isPlaying) return;
     this.playOffset = this.currentTime();
     this.isPlaying = false;
-    this.sources.forEach(source => { try { source.stop(); } catch (_) {} });
+    this._playbackGeneration += 1;
+    this.sources.forEach(source => {
+      source.onended = null;
+      try { source.stop(); } catch (_) {}
+    });
     this.sources = [];
     this._releaseWakeLock();
     this._showPause(false);
@@ -245,7 +270,12 @@ class LyricsPlayer {
   }
 
   skipBy(seconds) {
-    this.seekTo(this.currentTime() + seconds);
+    const shouldResume = this.isPlaying;
+    const currentPosition = this.currentTime();
+    const safePosition = Number.isFinite(currentPosition)
+      ? currentPosition
+      : (Number(this.playOffset) || 0);
+    return this.seekTo(safePosition + seconds, shouldResume);
   }
 
   prev() {
@@ -268,23 +298,53 @@ class LyricsPlayer {
     this.loadIndex(Math.min(this.items.length - 1, this.currentIndex + 1), this.isPlaying);
   }
 
-  async seekTo(seconds) {
-    const wasPlaying = this.isPlaying;
-    this.pause();
-    this.playOffset = Math.max(0, Math.min(seconds, this.duration || 0));
+  async seekTo(seconds, shouldResume = this.isPlaying) {
+    if (!Number.isFinite(Number(seconds))) return;
+    const generation = ++this._seekGeneration;
+    if (this.isPlaying) this.pause();
+    this._setSeekPosition(Number(seconds));
+    if (shouldResume && generation === this._seekGeneration) await this.play();
+  }
+
+  _setSeekPosition(seconds) {
+    const duration = Number.isFinite(Number(this.duration)) ? Number(this.duration) : 0;
+    this.playOffset = Math.max(0, Math.min(Number(seconds), duration));
     this._updateTime();
     this.currentLyricIndex = -1;
     this._updateLyrics();
-    if (wasPlaying) await this.play();
+  }
+
+  _beginProgressScrub() {
+    if (this.isProgressScrubbing) return;
+    this._seekGeneration += 1;
+    this.isProgressScrubbing = true;
+    this.resumeAfterProgressScrub = this.isPlaying;
+    if (this.isPlaying) this.pause();
+  }
+
+  _previewProgressSeek(progress) {
+    const pct = Math.max(0, Math.min(1000, Number(progress.value || 0))) / 1000;
+    this._setSeekPosition((this.duration || 0) * pct);
+  }
+
+  async _endProgressScrub(progress) {
+    if (!this.isProgressScrubbing) return;
+    this._previewProgressSeek(progress);
+    this.isProgressScrubbing = false;
+    const shouldResume = this.resumeAfterProgressScrub;
+    this.resumeAfterProgressScrub = false;
+    if (shouldResume) await this.play();
   }
 
   currentTime() {
-    if (!this.isPlaying) return this.playOffset;
+    const offset = Number.isFinite(Number(this.playOffset)) ? Number(this.playOffset) : 0;
+    if (!this.isPlaying) return offset;
     const now = this.audioEnabled && this.audioContext
       ? this.audioContext.currentTime
       : performance.now() / 1000;
-    const elapsed = now - this.playStartTime;
-    return Math.min(this.playOffset + elapsed, this.duration || 0);
+    const elapsed = Math.max(0, now - this.playStartTime);
+    const duration = Number.isFinite(Number(this.duration)) ? Number(this.duration) : 0;
+    return Math.min(offset + elapsed, duration);
   }
 
   _startAnimation() {

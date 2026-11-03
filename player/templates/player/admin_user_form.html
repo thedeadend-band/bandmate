@@ -2,11 +2,11 @@
 {% block title %}{{ form_title }} – Admin{% endblock %}
 
 {% block content %}
-<a href="{% url 'admin_users' %}" class="back-link">
+<a href="{% url 'admin_home' %}#users" class="back-link">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <polyline points="15 18 9 12 15 6"/>
   </svg>
-  Back to Users
+  Back to Settings
 </a>
 
 <h1 class="page-title">{{ form_title }}</h1>
@@ -23,6 +23,10 @@
   <div class="form-group">
     <label for="username">Username</label>
     <input type="text" id="username" name="username" value="{{ form_username }}" autocomplete="off" required>
+  </div>
+  <div class="form-group">
+    <label for="display_name">Display Name <span class="label-hint">(optional)</span></label>
+    <input type="text" id="display_name" name="display_name" value="{{ form_display_name }}" autocomplete="off">
   </div>
   <div class="form-group">
     <label for="password">Password{% if edit_user %} <span class="label-hint">(leave blank to keep current)</span>{% endif %}</label>

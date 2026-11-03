@@ -37,6 +37,18 @@ class GroupMembership(models.Model):
         return f'{self.user} in {self.group}'
 
 
+class UserProfile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='bandmate_profile',
+    )
+    display_name = models.CharField(max_length=150, blank=True, default='')
+
+    def __str__(self):
+        return self.display_name or self.user.get_username()
+
+
 class Setlist(models.Model):
     group = models.ForeignKey(
         Group, on_delete=models.CASCADE, related_name='setlists')

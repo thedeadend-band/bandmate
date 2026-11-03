@@ -1,12 +1,15 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 
 from .context_processors import group_context
 from .models import (
-    Group, GroupMembership, GroupSong, Setlist, SongCelebrationDismissal,
-    SongReadiness,
+    CalendarSource, Group, GroupMembership, GroupSong, Setlist,
+    SongCelebrationDismissal, SongReadiness, UserProfile,
 )
+from .user_display import user_display_name
 
 
 class GroupCatalogTests(TestCase):
@@ -117,8 +120,108 @@ class GroupCatalogTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse('admin_groups'))
+        self.assertRedirects(
+            response,
+            f'{reverse("admin_home")}#groups',
+            fetch_redirect_response=False,
+        )
         self.assertFalse(GroupMembership.objects.filter(
             group=self.primary, user=self.alice).exists())
         self.assertFalse(SongReadiness.objects.filter(
             group_song=group_song, user=self.alice).exists())
+
+
+class UserDisplayNameTests(TestCase):
+    def test_display_name_falls_back_to_username(self):
+        user = User.objects.create_user(username='casey', password='test')
+
+        self.assertEqual(user_display_name(user), 'casey')
+
+    def test_admin_display_name_has_admin_suffix(self):
+        user = User.objects.create_user(
+            username='admin-user', password='test', is_staff=True)
+        UserProfile.objects.create(user=user, display_name='Jordan')
+
+        self.assertEqual(user_display_name(user), 'Jordan (admin)')
+
+    def test_admin_can_update_a_users_display_name(self):
+        admin = User.objects.create_user(
+            username='admin', password='test', is_staff=True)
+        user = User.objects.create_user(username='casey', password='test')
+        self.client.force_login(admin)
+
+        response = self.client.post(
+            reverse('admin_user_edit', args=[user.pk]),
+            {
+                'username': user.username,
+                'display_name': 'Casey Jones',
+                'password': '',
+                'is_staff': '0',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(user.bandmate_profile.display_name, 'Casey Jones')
+
+
+class CalendarSourcePermissionsTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='test', is_staff=True)
+        self.member = User.objects.create_user(
+            username='member', password='test')
+        self.group = Group.objects.create(name='Band')
+        GroupMembership.objects.create(group=self.group, user=self.member)
+
+    def select_group(self, client, group):
+        session = client.session
+        session['active_group_id'] = group.pk
+        session.save()
+
+    def test_member_can_manage_group_calendar_sources(self):
+        self.client.force_login(self.member)
+        self.select_group(self.client, self.group)
+
+        with patch('player.calendar_sync.sync_due_calendar_sources'):
+            response = self.client.post(reverse('calendar_sources'), {
+                'calendar_id': [''],
+                'calendar_name': ['Rehearsals'],
+                'calendar_url': ['https://example.com/rehearsals.ics'],
+                'calendar_color': ['#22cc88'],
+            })
+
+        self.assertEqual(response.status_code, 200)
+        source = CalendarSource.objects.get(group=self.group)
+        self.assertEqual(source.name, 'Rehearsals')
+        self.assertEqual(source.color, '#22cc88')
+
+    def test_admin_without_membership_cannot_manage_calendar_sources(self):
+        self.client.force_login(self.admin)
+        self.select_group(self.client, self.group)
+
+        response = self.client.get(reverse('calendar_sources'))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_site_settings_only_show_universal_integrations(self):
+        self.client.force_login(self.admin)
+        self.select_group(self.client, self.group)
+
+        response = self.client.get(reverse('admin_settings'))
+
+        self.assertContains(response, 'Song Lookup API')
+        self.assertContains(response, 'Spotify Integration')
+        self.assertNotContains(response, 'Calendar Sources')
+
+    def test_admin_settings_home_orders_all_management_sections(self):
+        self.client.force_login(self.admin)
+        self.select_group(self.client, self.group)
+
+        response = self.client.get(reverse('admin_home'))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(content.index('Site Settings'), content.index('Groups'))
+        self.assertLess(content.index('Groups'), content.index('Users'))
+        self.assertContains(response, '+ Group')
+        self.assertContains(response, '+ User')

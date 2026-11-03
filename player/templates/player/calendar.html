@@ -4,6 +4,9 @@
 {% block content %}
 <div class="section-header">
   <h1 class="page-title">Calendar</h1>
+  {% if can_manage_calendars %}
+  <a href="{% url 'calendar_sources' %}" class="btn btn-secondary">Manage Calendars</a>
+  {% endif %}
 </div>
 
 {% if calendar_sources %}
@@ -233,7 +236,12 @@
 {% else %}
 <div class="empty-state">
   <h3>No calendar configured</h3>
-  <p>An admin can add named iCal calendar sources in Settings.</p>
+  {% if can_manage_calendars %}
+  <p>Add an iCal source for {{ active_group.name }} to start using the calendar.</p>
+  <a href="{% url 'calendar_sources' %}" class="btn btn-add">Add Calendar</a>
+  {% else %}
+  <p>A member of {{ active_group.name }} can add an iCal source.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

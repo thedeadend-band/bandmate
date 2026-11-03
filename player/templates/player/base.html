@@ -1,4 +1,4 @@
-{% load static %}
+{% load static player_tags %}
 <!DOCTYPE html>
 <html lang="en" data-theme="dark"{% if active_group %} data-group-theme="{{ active_group.color_scheme }}"{% endif %}>
 <head>
@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=15">
+  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=18">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -66,7 +66,7 @@
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <span class="sidebar-user">{{ user.username }}</span>
+      <span class="sidebar-user">{{ user|display_name }}</span>
       <button type="button" class="sidebar-close" id="sidebar-close" aria-label="Close menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -123,7 +123,7 @@
         Attributions
       </a>
       {% if user.is_staff %}
-      <a href="{% url 'admin_users' %}" class="sidebar-nav-item{% if nav_active == 'settings' %} active{% endif %}">
+      <a href="{% url 'admin_home' %}" class="sidebar-nav-item{% if nav_active == 'settings' %} active{% endif %}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>

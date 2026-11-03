@@ -2,13 +2,6 @@
 {% block title %}New Song – BandMate{% endblock %}
 
 {% block content %}
-<a href="{% url 'song_list' %}" class="back-link">
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="15 18 9 12 15 6"/>
-  </svg>
-  Back to Catalog
-</a>
-
 <div class="wiz-start-page">
   <h1 class="page-title">New Song Wizard</h1>
   <p class="wiz-start-desc">Create a new song step by step: enter song info, look up tempo and key, choose a track source, detect beats, quantize, separate stems, add lyrics, and finalize.</p>
@@ -23,6 +16,16 @@
     </button>
   </form>
 
+  {% if user.is_staff %}
+  <button type="button" class="btn btn-secondary wiz-dl-tracks-btn" id="upload-btn">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+    Upload ZIP
+  </button>
+  <input type="file" id="upload-input" accept=".zip" hidden>
+  {% endif %}
+
   <a href="{% url 'download_tracks' %}" class="btn btn-secondary wiz-dl-tracks-btn">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
@@ -32,4 +35,42 @@
     Download Tracks
   </a>
 </div>
+
+{% if user.is_staff %}
+<script>
+(function() {
+  const button = document.getElementById('upload-btn');
+  const input = document.getElementById('upload-input');
+  if (!button || !input) return;
+  const originalHtml = button.innerHTML;
+
+  button.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('zipfile', file);
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+      || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    button.disabled = true;
+    button.textContent = 'Uploading\u2026';
+    try {
+      const response = await fetch('{% url "song_upload" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || 'Upload failed');
+      window.location.href = '{% url "song_list" %}';
+    } catch (error) {
+      alert('Upload failed: ' + error.message);
+      button.disabled = false;
+      button.innerHTML = originalHtml;
+      input.value = '';
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

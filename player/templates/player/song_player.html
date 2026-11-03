@@ -1,4 +1,5 @@
 {% extends "player/base.html" %}
+{% load player_tags %}
 {% load static %}
 {% block title %}{% if song_info.artist and song_info.title %}{{ song_info.artist }} – {{ song_info.title }}{% else %}{{ song_name }}{% endif %} – BandMate{% endblock %}
 
@@ -56,7 +57,7 @@
     <label class="checkbox-label"><input type="checkbox" name="is_ready" value="1"{% if user_ready %} checked{% endif %} onchange="this.form.submit()"> I have learned my part</label>
   </form>
   {% endif %}
-  <div class="readiness-members">{% for row in readiness_rows %}<span class="readiness-member{% if row.is_ready %} ready{% endif %}">{{ row.user.username }}: {% if row.is_ready %}Ready{% else %}Learning{% endif %}</span>{% endfor %}</div>
+  <div class="readiness-members">{% for row in readiness_rows %}<span class="readiness-member{% if row.is_ready %} ready{% endif %}">{{ row.user|display_name }}: {% if row.is_ready %}Ready{% else %}Learning{% endif %}</span>{% endfor %}</div>
   <div class="readiness-actions">
     {% if group_song.status != 'retired' %}<form method="post" action="{% url 'song_status_update' song_name %}" onsubmit="return confirm('Retire this song?');">{% csrf_token %}<input type="hidden" name="status" value="retired"><button class="btn btn-secondary" type="submit">Retire</button></form>{% endif %}
     {% if user.is_staff %}

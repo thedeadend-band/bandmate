@@ -61,6 +61,7 @@ urlpatterns = [
     path('api/songs/<str:song_name>/links/', views.song_links_update, name='song_links_update'),
     # Calendar
     path('calendar/', views.calendar_view, name='calendar'),
+    path('calendar/sources/', views.calendar_sources, name='calendar_sources'),
     # Download Tracks
     path('download-tracks/', views.download_tracks, name='download_tracks'),
     path('api/download-tracks/search/', views.download_tracks_search, name='download_tracks_search'),
@@ -76,7 +77,8 @@ urlpatterns = [
     # Attributions
     path('attributions/', views.attributions, name='attributions'),
     # Admin console
-    path('admin-console/', views.admin_users, name='admin_users'),
+    path('admin-console/', views.admin_home, name='admin_home'),
+    path('admin-console/users/', views.admin_users, name='admin_users'),
     path('admin-console/settings/', views.admin_settings, name='admin_settings'),
     path('admin-console/groups/', views.admin_groups, name='admin_groups'),
     path('admin-console/groups/new/', views.admin_group_edit, name='admin_group_add'),

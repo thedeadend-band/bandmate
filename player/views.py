@@ -30,7 +30,9 @@ from .models import (
     CalendarEvent, CalendarSource, Group, GroupMembership, GroupSong,
     Setlist, SetlistEntry, SongCelebrationDismissal, SongReadiness,
     PitchShiftJob, PlaybackPreference, SiteSettings, SpotifyConnection,
+    UserProfile,
 )
+from .user_display import user_display_name
 
 
 def _staff_required(view_func):
@@ -1064,6 +1066,29 @@ def track_waveform(request, song_name: str, track_filename: str):
 # Admin console – user management
 # ---------------------------------------------------------------------------
 
+def _save_site_settings(request, site):
+    site.song_api_key = request.POST.get('song_api_key', '').strip()
+    site.spotify_client_id = request.POST.get('spotify_client_id', '').strip()
+    site.spotify_client_secret = request.POST.get('spotify_client_secret', '').strip()
+    site.save()
+
+
+@_staff_required
+def admin_home(request):
+    site = SiteSettings.load()
+    success = None
+    if request.method == 'POST':
+        _save_site_settings(request, site)
+        success = 'Settings saved.'
+    return render(request, 'player/admin_home.html', {
+        'site': site,
+        'groups': Group.objects.prefetch_related('memberships__user'),
+        'users': User.objects.order_by('username'),
+        'success': success,
+        'nav_active': 'settings',
+    })
+
+
 @_staff_required
 def admin_users(request):
     users = User.objects.order_by('username')
@@ -1075,6 +1100,7 @@ def admin_user_add(request):
     error = None
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
+        display_name = request.POST.get('display_name', '').strip()
         password = request.POST.get('password', '')
         is_staff = request.POST.get('is_staff') == '1'
 
@@ -1085,15 +1111,17 @@ def admin_user_add(request):
         elif len(password) < 4:
             error = 'Password must be at least 4 characters.'
         else:
-            User.objects.create_user(
+            user = User.objects.create_user(
                 username=username, password=password, is_staff=is_staff,
             )
-            return redirect('admin_users')
+            UserProfile.objects.create(user=user, display_name=display_name)
+            return redirect(f'{reverse("admin_home")}#users')
 
     return render(request, 'player/admin_user_form.html', {
         'form_title': 'Add User',
         'error': error,
         'form_username': request.POST.get('username', ''),
+        'form_display_name': request.POST.get('display_name', ''),
         'form_is_staff': request.POST.get('is_staff') == '1',
     })
 
@@ -1106,6 +1134,7 @@ def admin_user_edit(request, user_id: int):
 
     if request.method == 'POST':
         new_username = request.POST.get('username', '').strip()
+        display_name = request.POST.get('display_name', '').strip()
         new_password = request.POST.get('password', '')
         is_staff = request.POST.get('is_staff') == '1'
 
@@ -1126,14 +1155,20 @@ def admin_user_edit(request, user_id: int):
                     target.set_password(new_password)
             if not error:
                 target.save()
+                profile, _ = UserProfile.objects.get_or_create(user=target)
+                profile.display_name = display_name
+                profile.save(update_fields=['display_name'])
                 success = 'User updated.'
 
+    profile, _ = UserProfile.objects.get_or_create(user=target)
+
     return render(request, 'player/admin_user_form.html', {
-        'form_title': f'Edit User – {target.username}',
+        'form_title': f'Edit User – {user_display_name(target)}',
         'edit_user': target,
         'error': error,
         'success': success,
         'form_username': target.username,
+        'form_display_name': profile.display_name,
         'form_is_staff': target.is_staff,
     })
 
@@ -1143,9 +1178,9 @@ def admin_user_delete(request, user_id: int):
     target = get_object_or_404(User, pk=user_id)
     if request.method == 'POST':
         if target.pk == request.user.pk:
-            return redirect('admin_users')
+            return redirect(f'{reverse("admin_home")}#users')
         target.delete()
-    return redirect('admin_users')
+    return redirect(f'{reverse("admin_home")}#users')
 
 
 @_staff_required
@@ -1198,7 +1233,7 @@ def admin_group_edit(request, group_id=None):
                         group_song=group_song, user_id=user_id)
             for group_song in group.songs.exclude(status='retired'):
                 _recalculate_song_status(group_song)
-            return redirect('admin_groups')
+            return redirect(f'{reverse("admin_home")}#groups')
     selected_ids = set(
         group.memberships.values_list('user_id', flat=True) if group else [])
     return render(request, 'player/admin_group_form.html', {
@@ -1217,50 +1252,10 @@ def admin_settings(request):
     site = SiteSettings.load()
     success = None
     if request.method == 'POST':
-        calendar_ids = request.POST.getlist('calendar_id')
-        calendar_names = request.POST.getlist('calendar_name')
-        calendar_urls = request.POST.getlist('calendar_url')
-        calendar_colors = request.POST.getlist('calendar_color')
-        saved_ids = []
-        for idx, url in enumerate(calendar_urls):
-            url = url.strip()
-            if not url:
-                continue
-            name = calendar_names[idx].strip() if idx < len(calendar_names) else ''
-            color = calendar_colors[idx].strip() if idx < len(calendar_colors) else ''
-            source_id = calendar_ids[idx].strip() if idx < len(calendar_ids) else ''
-            source = None
-            if source_id.isdigit():
-                source = CalendarSource.objects.filter(
-                    pk=int(source_id), group=request.active_group).first()
-            if not source:
-                source = CalendarSource(group=request.active_group)
-            source.name = name or f'Calendar {len(saved_ids) + 1}'
-            source.ics_url = url
-            source.color = color or '#4a9eff'
-            source.is_enabled = True
-            source.save()
-            saved_ids.append(source.pk)
-
-        CalendarSource.objects.filter(group=request.active_group).exclude(
-            pk__in=saved_ids).delete()
-        first_source = CalendarSource.objects.filter(
-            group=request.active_group).order_by('name').first()
-        site.google_calendar_url = first_source.ics_url if first_source else ''
-        site.song_api_key = request.POST.get('song_api_key', '').strip()
-        site.spotify_client_id = request.POST.get('spotify_client_id', '').strip()
-        site.spotify_client_secret = request.POST.get('spotify_client_secret', '').strip()
-        site.save()
-        try:
-            from .calendar_sync import sync_due_calendar_sources
-            sync_due_calendar_sources(force=True)
-        except Exception:
-            pass
+        _save_site_settings(request, site)
         success = 'Settings saved.'
     return render(request, 'player/admin_settings.html', {
         'site': site,
-        'calendar_entries': CalendarSource.objects.filter(
-            group=request.active_group).order_by('name'),
         'success': success,
         'nav_active': 'settings',
     })
@@ -1323,6 +1318,59 @@ def calendar_view(request):
     return render(request, 'player/calendar.html', {
         'calendar_sources': source_data,
         'calendar_events': event_data,
+        'can_manage_calendars': GroupMembership.objects.filter(
+            group=request.active_group, user=request.user).exists(),
+        'nav_active': 'calendar',
+    })
+
+
+@login_required
+def calendar_sources(request):
+    if not GroupMembership.objects.filter(
+        group=request.active_group, user=request.user
+    ).exists():
+        raise Http404
+
+    success = None
+    if request.method == 'POST':
+        source_ids = request.POST.getlist('calendar_id')
+        names = request.POST.getlist('calendar_name')
+        urls = request.POST.getlist('calendar_url')
+        colors = request.POST.getlist('calendar_color')
+        saved_ids = []
+        for index, raw_url in enumerate(urls):
+            ics_url = raw_url.strip()
+            if not ics_url:
+                continue
+            source_id = source_ids[index].strip() if index < len(source_ids) else ''
+            source = None
+            if source_id.isdigit():
+                source = CalendarSource.objects.filter(
+                    pk=int(source_id), group=request.active_group).first()
+            if not source:
+                source = CalendarSource(group=request.active_group)
+            name = names[index].strip() if index < len(names) else ''
+            color = colors[index].strip() if index < len(colors) else ''
+            source.name = name or f'Calendar {len(saved_ids) + 1}'
+            source.ics_url = ics_url
+            source.color = color or '#4a9eff'
+            source.is_enabled = True
+            source.save()
+            saved_ids.append(source.pk)
+
+        CalendarSource.objects.filter(group=request.active_group).exclude(
+            pk__in=saved_ids).delete()
+        try:
+            from .calendar_sync import sync_due_calendar_sources
+            sync_due_calendar_sources(force=True)
+        except Exception:
+            pass
+        success = 'Calendar sources saved.'
+
+    return render(request, 'player/calendar_sources.html', {
+        'calendar_entries': CalendarSource.objects.filter(
+            group=request.active_group).order_by('name'),
+        'success': success,
         'nav_active': 'calendar',
     })
 
