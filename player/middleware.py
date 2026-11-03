@@ -44,6 +44,7 @@ class WizardCleanupMiddleware:
     wizard pages. This covers normal link navigation, logout, etc."""
 
     WIZARD_PATH_PREFIXES = ('/songs/new/', '/api/songs/new/', '/queue/', '/api/queue/')
+    WIZARD_RESOURCE_NAMES = {'group_logo'}
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -56,6 +57,9 @@ class WizardCleanupMiddleware:
 
         path = request.path
         if any(path.startswith(p) for p in self.WIZARD_PATH_PREFIXES):
+            return response
+        match = getattr(request, 'resolver_match', None)
+        if match and match.url_name in self.WIZARD_RESOURCE_NAMES:
             return response
 
         try:

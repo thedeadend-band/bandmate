@@ -8,9 +8,39 @@ from django.urls import reverse
 from .context_processors import group_context
 from .models import (
     CalendarSource, Group, GroupMembership, GroupSong, Setlist, SetlistEntry,
-    SongCelebrationDismissal, SongReadiness, UserProfile,
+    SongCelebrationDismissal, SongReadiness, SongWizard, UserProfile,
 )
 from .user_display import user_display_name
+
+
+class WizardNavigationTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='wizard-admin', password='test', is_staff=True)
+        self.group = Group.objects.create(name='Wizard Band')
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session['active_group_id'] = self.group.pk
+        session.save()
+
+    def test_group_logo_request_does_not_delete_active_wizard(self):
+        wizard = SongWizard.objects.create(created_by=self.admin)
+        song_info_url = reverse(
+            'wizard_step', args=[wizard.pk, 'song_info'])
+
+        self.assertEqual(self.client.get(song_info_url).status_code, 200)
+        self.client.get(reverse('group_logo', args=[self.group.pk]))
+
+        self.assertTrue(SongWizard.objects.filter(pk=wizard.pk).exists())
+        response = self.client.post(song_info_url, {
+            'title': 'Route Test',
+            'artist': 'Test Artist',
+        })
+        self.assertRedirects(
+            response,
+            reverse('wizard_step', args=[wizard.pk, 'tempo_key']),
+            fetch_redirect_response=False,
+        )
 
 
 class GroupCatalogTests(TestCase):
