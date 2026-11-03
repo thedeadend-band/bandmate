@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from datetime import date
 
 from django.contrib.auth.models import User
 from django.test import Client, RequestFactory, TestCase
@@ -49,6 +50,53 @@ class GroupCatalogTests(TestCase):
 
         self.assertContains(response, 'Primary Set')
         self.assertNotContains(response, 'Secondary Set')
+
+    def test_setlists_are_sorted_by_date_descending_with_undated_last(self):
+        Setlist.objects.create(
+            group=self.primary, owner=self.alice, name='Undated')
+        Setlist.objects.create(
+            group=self.primary, owner=self.alice, name='Older',
+            date=date(2026, 10, 1))
+        Setlist.objects.create(
+            group=self.primary, owner=self.alice, name='Newest',
+            date=date(2026, 12, 1))
+        self.client.force_login(self.alice)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.get(reverse('setlist_list'))
+
+        self.assertEqual(
+            [setlist.name for setlist in response.context['setlists']],
+            ['Newest', 'Older', 'Undated'],
+        )
+
+    @patch('player.views._get_available_songs')
+    def test_catalog_can_filter_by_song_status(self, available_songs_mock):
+        available_songs_mock.return_value = [
+            {'name': 'Ready Song', 'artist': 'Alpha', 'title': 'Ready Song', 'track_count': 4,
+             'spotify_track_url': '', 'youtube_video_url': ''},
+            {'name': 'Deck Song', 'artist': 'Beta', 'title': 'Deck Song', 'track_count': 4,
+             'spotify_track_url': '', 'youtube_video_url': ''},
+            {'name': 'Retired Song', 'artist': 'Gamma', 'title': 'Retired Song', 'track_count': 4,
+             'spotify_track_url': '', 'youtube_video_url': ''},
+        ]
+        GroupSong.objects.create(
+            group=self.primary, song_name='Ready Song', status='active')
+        GroupSong.objects.create(
+            group=self.primary, song_name='Deck Song', status='on_deck')
+        GroupSong.objects.create(
+            group=self.primary, song_name='Retired Song', status='retired')
+        self.client.force_login(self.alice)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.get(
+            reverse('song_list'), {'status': 'on_deck', 'sort': 'title'})
+
+        self.assertEqual(
+            [song['name'] for song in response.context['songs']],
+            ['Deck Song'],
+        )
+        self.assertEqual(response.context['status_filter'], 'on_deck')
 
     @patch('player.views._song_duration_seconds')
     def test_setlist_card_shows_total_song_duration(self, duration_mock):

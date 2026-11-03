@@ -568,8 +568,10 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.catalog-sort-form { display:flex; gap:6px; align-items:center; }
-.catalog-sort-label { color:var(--text-secondary); font-size:0.85rem; font-weight:600; }
+.catalog-sort-form { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.catalog-sort-label,
+.catalog-filter-label { color:var(--text-secondary); font-size:0.85rem; font-weight:600; }
+.catalog-filter-label { margin-left:8px; }
 .catalog-sort-form .form-input { width:auto; min-width:110px; padding:7px 9px; }
 .catalog-status { font-weight:700; }
 .status-on_deck { color:var(--accent-yellow); }

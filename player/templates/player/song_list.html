@@ -16,6 +16,13 @@
         <option value="asc"{% if sort_direction == 'asc' %} selected{% endif %}>Ascending</option>
         <option value="desc"{% if sort_direction == 'desc' %} selected{% endif %}>Descending</option>
       </select>
+      <span class="catalog-filter-label">Filter</span>
+      <select name="status" class="form-input" aria-label="Filter catalog by status" onchange="this.form.submit()">
+        <option value=""{% if not status_filter %} selected{% endif %}>All statuses</option>
+        <option value="active"{% if status_filter == 'active' %} selected{% endif %}>Ready to Play</option>
+        <option value="on_deck"{% if status_filter == 'on_deck' %} selected{% endif %}>On-Deck</option>
+        <option value="retired"{% if status_filter == 'retired' %} selected{% endif %}>Retired</option>
+      </select>
     </form>
   </div>
 </div>

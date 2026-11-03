@@ -20,6 +20,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.models import User
+from django.db.models import F
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -573,6 +574,13 @@ def song_list(request):
         for s in songs:
             s['in_setlist'] = s['name'] in used_songs
 
+    status_filter = request.GET.get('status', '')
+    valid_statuses = {value for value, _ in GroupSong.STATUS_CHOICES}
+    if status_filter in valid_statuses:
+        songs = [song for song in songs if song['status'] == status_filter]
+    else:
+        status_filter = ''
+
     sort_by = request.GET.get('sort', 'artist')
     direction = request.GET.get('direction', 'asc')
     reverse = direction == 'desc'
@@ -593,6 +601,7 @@ def song_list(request):
         'songs': songs,
         'sort_by': sort_by,
         'sort_direction': direction,
+        'status_filter': status_filter,
         'nav_active': 'multitrack',
     })
 
@@ -1450,7 +1459,8 @@ def _setlist_duration_seconds(setlist):
 @login_required
 def setlist_list(request):
     setlists = Setlist.objects.filter(group=request.active_group).select_related(
-        'owner').prefetch_related('entries')
+        'owner').prefetch_related('entries').order_by(
+            F('date').desc(nulls_last=True), '-updated_at')
     for setlist in setlists:
         total_duration = _setlist_duration_seconds(setlist)
         setlist.total_duration_display = _format_audio_duration(total_duration)
