@@ -14,8 +14,36 @@ _thread_lock = threading.Lock()
 _thread_active = False
 
 
+def _recover_interrupted_jobs() -> None:
+    """Requeue work left behind by a stopped queue worker.
+
+    This must only run while holding the process-wide queue file lock. A user
+    pause is left alone; only processing and legacy restart-generated states
+    are recovered.
+    """
+    from .models import PitchShiftJob, StemSeparationJob
+
+    StemSeparationJob.objects.filter(status='processing').update(
+        status='queued', progress=0, message='Queued after worker restart')
+    StemSeparationJob.objects.filter(
+        status='paused',
+        message__in=('Paused (service restarted)', 'Paused'),
+    ).update(status='queued', progress=0, message='Queued after worker restart')
+    PitchShiftJob.objects.filter(status='processing').update(
+        status='queued', progress=0, message='Queued after worker restart')
+    PitchShiftJob.objects.filter(
+        status='failed', message='Interrupted (service restarted)'
+    ).update(status='queued', progress=0, message='Queued after worker restart')
+
+
 def _next_job():
     from .models import PitchShiftJob, StemSeparationJob
+
+    if (
+        StemSeparationJob.objects.filter(status='processing').exists()
+        or PitchShiftJob.objects.filter(status='processing').exists()
+    ):
+        return 'busy', None
 
     stem_job = StemSeparationJob.objects.filter(
         status='queued').order_by('created_at').first()
@@ -69,6 +97,7 @@ def _worker_loop() -> None:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open('a+') as lock_file:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            _recover_interrupted_jobs()
 
             while True:
                 next_job = _next_job()
@@ -77,6 +106,8 @@ def _worker_loop() -> None:
                 kind, job = next_job
                 if kind == 'retry':
                     continue
+                if kind == 'busy':
+                    break
                 if kind == 'stem':
                     from .wizard_services import _job_still_exists, _process_queue_job
                     _process_queue_job(job)

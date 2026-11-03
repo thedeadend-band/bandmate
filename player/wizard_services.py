@@ -1510,7 +1510,11 @@ def _process_queue_job(job) -> None:
         if _job_still_exists(job):
             job.refresh_from_db()
             job.status = 'paused'
-            job.message = 'Paused'
+            job.message = (
+                'Paused by user'
+                if job.message == 'Pausing by user…'
+                else 'Paused'
+            )
             job.save()
     except StemSeparationJob.DoesNotExist:
         logger.info('Queue job %d was deleted during processing', job.pk)

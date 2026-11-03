@@ -86,7 +86,7 @@ def queue_pause(request, job_id):
         raise Http404
     if job.status == 'processing':
         job.status = 'paused'
-        job.message = 'Pausing…'
+        job.message = 'Pausing by user…'
         job.save()
     return redirect('queue_list')
 

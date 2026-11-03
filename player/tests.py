@@ -7,8 +7,9 @@ from django.urls import reverse
 
 from .context_processors import group_context
 from .models import (
-    CalendarSource, Group, GroupMembership, GroupSong, Setlist, SetlistEntry,
-    SongCelebrationDismissal, SongReadiness, SongWizard, UserProfile,
+    CalendarSource, Group, GroupMembership, GroupSong, PitchShiftJob, Setlist,
+    SetlistEntry, SongCelebrationDismissal, SongReadiness, SongWizard,
+    StemSeparationJob, UserProfile,
 )
 from .user_display import user_display_name
 
@@ -41,6 +42,84 @@ class WizardNavigationTests(TestCase):
             reverse('wizard_step', args=[wizard.pk, 'tempo_key']),
             fetch_redirect_response=False,
         )
+
+
+class AudioJobQueueTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='queue-user', password='test')
+
+    def stem_job(self, title, **values):
+        return StemSeparationJob.objects.create(
+            title=title,
+            artist='Test Artist',
+            created_by=self.user,
+            staging_dir=f'/tmp/{title}',
+            **values,
+        )
+
+    def test_processing_job_blocks_newer_queued_job(self):
+        from .job_queue import _next_job
+
+        active = self.stem_job('Active', status='processing')
+        queued = PitchShiftJob.objects.create(
+            song_name='Queued Pitch', semitones=-1,
+            created_by=self.user,
+        )
+
+        self.assertEqual(_next_job(), ('busy', None))
+        active.refresh_from_db()
+        queued.refresh_from_db()
+        self.assertEqual(active.status, 'processing')
+        self.assertEqual(queued.status, 'queued')
+
+    def test_recovered_job_keeps_fifo_precedence(self):
+        from .job_queue import _next_job, _recover_interrupted_jobs
+
+        interrupted = self.stem_job('Interrupted', status='processing')
+        newer = self.stem_job('Newer')
+
+        _recover_interrupted_jobs()
+        kind, selected = _next_job()
+
+        self.assertEqual(kind, 'stem')
+        self.assertEqual(selected.pk, interrupted.pk)
+        newer.refresh_from_db()
+        self.assertEqual(newer.status, 'queued')
+
+    def test_recovery_preserves_user_paused_job(self):
+        from .job_queue import _recover_interrupted_jobs
+
+        user_paused = self.stem_job(
+            'User Paused', status='paused', message='Paused by user')
+        legacy_restart = self.stem_job(
+            'Restart Paused', status='paused',
+            message='Paused')
+
+        _recover_interrupted_jobs()
+
+        user_paused.refresh_from_db()
+        legacy_restart.refresh_from_db()
+        self.assertEqual(user_paused.status, 'paused')
+        self.assertEqual(legacy_restart.status, 'queued')
+
+    def test_recovered_pitch_job_keeps_fifo_precedence_over_new_stem(self):
+        from .job_queue import _next_job, _recover_interrupted_jobs
+
+        interrupted = PitchShiftJob.objects.create(
+            song_name='Interrupted Pitch', semitones=-2,
+            created_by=self.user, status='failed',
+            message='Interrupted (service restarted)',
+        )
+        newer = self.stem_job('Newer Stem')
+
+        _recover_interrupted_jobs()
+        kind, selected = _next_job()
+
+        self.assertEqual(kind, 'pitch')
+        self.assertEqual(selected.pk, interrupted.pk)
+        newer.refresh_from_db()
+        self.assertEqual(newer.status, 'queued')
 
 
 class GroupCatalogTests(TestCase):
