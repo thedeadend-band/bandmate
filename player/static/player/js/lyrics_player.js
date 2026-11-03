@@ -1,14 +1,8 @@
 class LyricsPlayer {
-  constructor(items, mode, options = {}) {
+  constructor(items, mode) {
     this.items = items || [];
     this.mode = mode || 'setlist';
-    this.audioEnabled = options.audioEnabled !== false;
     this.currentIndex = 0;
-    this.audioContext = null;
-    this.sources = [];
-    this.gainNode = null;
-    this.buffers = [];
-    this.selectedCategories = window.instrumentSelection || new Set(['master']);
     this.isPlaying = false;
     this.playStartTime = 0;
     this.playOffset = 0;
@@ -21,13 +15,9 @@ class LyricsPlayer {
     this.isProgressScrubbing = false;
     this.resumeAfterProgressScrub = false;
     this._seekGeneration = 0;
-    this._playbackGeneration = 0;
     this._lyricsScrollEndTimer = null;
     this.wakeLock = null;
     this._bindEvents();
-    window.addEventListener('instrument-selection-change', (event) => {
-      this._changeInstruments(event.detail.enabledCategories);
-    });
     if (this.items.length) {
       this.loadIndex(0);
     }
@@ -130,12 +120,7 @@ class LyricsPlayer {
       this.lyricOffset = infoData?.info?.lyric_offset_secs || 0;
       this._renderLyrics();
 
-      if (this.audioEnabled) {
-        await this._loadAudio(item);
-      } else {
-        this.buffers = [];
-        this.duration = this._lyricsDuration();
-      }
+      this.duration = this._lyricsDuration();
       this._updateTime();
 
       if (autoPlay || wasPlaying) await this.play();
@@ -144,41 +129,6 @@ class LyricsPlayer {
       document.getElementById('ly-lyrics-scroller').innerHTML =
         '<div class="lyrics-line active">Failed to load song.</div>';
     }
-  }
-
-  async _loadAudio(item) {
-    this._ensureAudioContext();
-    const tracks = (item.tracks || []).filter(track =>
-      this.selectedCategories.has(track.category));
-    this.buffers = await Promise.all(tracks.map(async track => {
-      const url = `/api/songs/${encodeURIComponent(item.song_name)}/tracks/` +
-        `${encodeURIComponent(track.filename)}/audio/`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Audio failed');
-      const arr = await response.arrayBuffer();
-      return this.audioContext.decodeAudioData(arr);
-    }));
-    this.duration = this.buffers.reduce(
-      (duration, buffer) => Math.max(duration, buffer.duration || 0), 0);
-  }
-
-  async _changeInstruments(categories) {
-    if (!this.items.length || !this.audioEnabled) return;
-    const wasPlaying = this.isPlaying;
-    const position = this.currentTime();
-    if (wasPlaying) this.pause();
-    this.selectedCategories = new Set(categories);
-    await this._loadAudio(this.items[this.currentIndex]);
-    this.playOffset = Math.min(position, this.duration);
-    this._updateTime();
-    if (wasPlaying) await this.play();
-  }
-
-  _ensureAudioContext() {
-    if (this.audioContext) return;
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    this.gainNode = this.audioContext.createGain();
-    this.gainNode.connect(this.audioContext.destination);
   }
 
   _lyricsDuration() {
@@ -202,42 +152,9 @@ class LyricsPlayer {
 
   async play() {
     if (this.isPlaying) return;
-    if (!this.audioEnabled) {
-      if (!this.duration) return;
-      this.isPlaying = true;
-      this.playStartTime = performance.now() / 1000;
-      await this._requestWakeLock();
-      this._showPause(true);
-      this._startAnimation();
-      return;
-    }
-    if (!this.buffers.length) return;
-    this._ensureAudioContext();
-    await this.audioContext.resume();
-    const playbackGeneration = ++this._playbackGeneration;
+    if (!this.duration) return;
     this.isPlaying = true;
-    const startAt = this.audioContext.currentTime + 0.03;
-    this.playStartTime = startAt;
-    const longestIndex = this.buffers.reduce(
-      (best, buffer, index, all) => buffer.duration > all[best].duration ? index : best, 0);
-    this.sources = this.buffers.map((buffer, index) => {
-      const src = this.audioContext.createBufferSource();
-      src.buffer = buffer;
-      src.connect(this.gainNode);
-      src.start(startAt, Math.min(this.playOffset, buffer.duration));
-      if (index === longestIndex) src.onended = () => {
-        if (
-          playbackGeneration !== this._playbackGeneration ||
-          !this.isPlaying
-        ) return;
-        if (this.mode === 'setlist' && this.currentIndex < this.items.length - 1) {
-          this.loadIndex(this.currentIndex + 1, true);
-        } else {
-          this.stop();
-        }
-      };
-      return src;
-    });
+    this.playStartTime = performance.now() / 1000;
     await this._requestWakeLock();
     this._showPause(true);
     this._startAnimation();
@@ -247,12 +164,6 @@ class LyricsPlayer {
     if (!this.isPlaying) return;
     this.playOffset = this.currentTime();
     this.isPlaying = false;
-    this._playbackGeneration += 1;
-    this.sources.forEach(source => {
-      source.onended = null;
-      try { source.stop(); } catch (_) {}
-    });
-    this.sources = [];
     this._releaseWakeLock();
     this._showPause(false);
     this._stopAnimation();
@@ -339,9 +250,7 @@ class LyricsPlayer {
   currentTime() {
     const offset = Number.isFinite(Number(this.playOffset)) ? Number(this.playOffset) : 0;
     if (!this.isPlaying) return offset;
-    const now = this.audioEnabled && this.audioContext
-      ? this.audioContext.currentTime
-      : performance.now() / 1000;
+    const now = performance.now() / 1000;
     const elapsed = Math.max(0, now - this.playStartTime);
     const duration = Number.isFinite(Number(this.duration)) ? Number(this.duration) : 0;
     return Math.min(offset + elapsed, duration);
@@ -352,7 +261,7 @@ class LyricsPlayer {
       if (!this.isPlaying) return;
       this._updateTime();
       this._updateLyrics();
-      if (!this.audioEnabled && this.duration > 0 && this.currentTime() >= this.duration) {
+      if (this.duration > 0 && this.currentTime() >= this.duration) {
         if (this.mode === 'setlist' && this.currentIndex < this.items.length - 1) {
           this.loadIndex(this.currentIndex + 1, true);
         } else {
@@ -545,14 +454,6 @@ class LyricsPlayer {
 
 document.addEventListener('DOMContentLoaded', () => {
   const mode = window.LYRICS_PLAYER_MODE || 'setlist';
-  const audioPreferenceKey = 'bm-lyrics-audio-enabled';
-  const params = new URLSearchParams(window.location.search);
-  const audioParam = params.get('audio');
-  const storedAudio = localStorage.getItem(audioPreferenceKey);
-  const audioEnabled = audioParam === null
-    ? storedAudio !== '0'
-    : audioParam !== '0';
-  localStorage.setItem(audioPreferenceKey, audioEnabled ? '1' : '0');
   let items = [];
   if (mode === 'single') {
     const el = document.getElementById('ly-single-item');
@@ -562,5 +463,5 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) items = JSON.parse(el.textContent);
   }
   if (!items.length) return;
-  window.lyricsPlayer = new LyricsPlayer(items, mode, { audioEnabled });
+  window.lyricsPlayer = new LyricsPlayer(items, mode);
 });

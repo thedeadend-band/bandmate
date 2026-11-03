@@ -1499,9 +1499,6 @@ def lyrics_setlist_player(request, setlist_id: int):
             song_path = _safe_song_path(entry.song_name)
         except Http404:
             continue
-        master = _find_master_track(song_path)
-        if not master:
-            continue
         info = _load_song_info(song_path) or {}
         artist = info.get('artist') or ''
         title = info.get('title') or entry.song_name
@@ -1518,22 +1515,11 @@ def lyrics_setlist_player(request, setlist_id: int):
             'title': title,
             'detail': ' · '.join(detail_bits),
             'display': f'{artist} – {title}' if artist else title,
-            'tracks': _get_tracks(song_path),
         })
-
-    instrument_categories = []
-    present_categories = {
-        track['category'] for item in items for track in item['tracks']
-    }
-    instrument_categories = [
-        category for category in TRACK_CATEGORY_ORDER if category in present_categories
-    ]
 
     return render(request, 'player/lyrics_setlist_player.html', {
         'setlist': sl,
         'items': items,
-        'instrument_categories': instrument_categories,
-        'selected_instruments': _playback_categories(request.user, request.active_group),
         'nav_active': 'lyrics',
     })
 
@@ -1542,9 +1528,6 @@ def lyrics_setlist_player(request, setlist_id: int):
 def lyrics_song_player(request, song_name: str):
     get_object_or_404(GroupSong, group=request.active_group, song_name=song_name)
     song_path = _safe_song_path(song_name)
-    master = _find_master_track(song_path)
-    if not master:
-        raise Http404
     info = _load_song_info(song_path) or {}
     artist = info.get('artist') or ''
     title = info.get('title') or song_name
@@ -1561,12 +1544,9 @@ def lyrics_song_player(request, song_name: str):
         'title': title,
         'detail': ' · '.join(detail_bits),
         'display': f'{artist} – {title}' if artist else title,
-        'tracks': _get_tracks(song_path),
     }
     return render(request, 'player/lyrics_song_player.html', {
         'item': item,
-        'instrument_categories': _available_categories(item['tracks']),
-        'selected_instruments': _playback_categories(request.user, request.active_group),
         'nav_active': 'lyrics',
     })
 

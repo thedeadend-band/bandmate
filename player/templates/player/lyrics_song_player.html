@@ -21,7 +21,6 @@
         <div class="lyrics-current-detail" id="ly-current-detail">{{ item.detail }}</div>
       </div>
     </div>
-    {% include "player/_instrument_selector.html" %}
   </div>
 
   <div class="lyrics-main" id="ly-main">
@@ -57,5 +56,5 @@
 <script>
   window.LYRICS_PLAYER_MODE = 'single';
 </script>
-<script src="{% static 'player/js/lyrics_player.js' %}?v=20261103-seek-race"></script>
+<script src="{% static 'player/js/lyrics_player.js' %}?v=20261103-lyrics-only"></script>
 {% endblock %}

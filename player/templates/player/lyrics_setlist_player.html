@@ -26,7 +26,6 @@
         <div class="lyrics-next-title" id="ly-next-title">—</div>
       </div>
     </div>
-    {% include "player/_instrument_selector.html" %}
   </div>
 
   <div class="lyrics-main" id="ly-main">
@@ -62,11 +61,11 @@
 <script>
   window.LYRICS_PLAYER_MODE = 'setlist';
 </script>
-<script src="{% static 'player/js/lyrics_player.js' %}?v=20261103-seek-race"></script>
+<script src="{% static 'player/js/lyrics_player.js' %}?v=20261103-lyrics-only"></script>
 {% else %}
 <div class="empty-state">
   <h3>No playable songs</h3>
-  <p>This playlist has no songs with a Master track.</p>
+  <p>This setlist has no available songs.</p>
 </div>
 {% endif %}
 {% endblock %}
