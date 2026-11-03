@@ -9,7 +9,7 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="15 18 9 12 15 6"/>
     </svg>
-    Back to Songs
+    Back to Catalog
   </a>
   <div class="song-top-actions">
     {% if user.is_staff %}
@@ -223,16 +223,15 @@ function confirmPitchChange(form) {
 </div>
 {% endif %}
 
+{% include "player/_instrument_selector.html" %}
+
 <!-- Track list -->
 <div class="tracks-container" id="tracks">
   {% for track in tracks %}
+  {% if track.category == 'master' %}
   <div class="track" data-index="{{ forloop.counter0 }}" data-filename="{{ track.filename }}">
     <div class="track-header">
       <span class="track-name">{{ track.name }}</span>
-      <div class="track-buttons">
-        <button class="mute-btn" data-index="{{ forloop.counter0 }}" title="Mute">M</button>
-        <button class="solo-btn" data-index="{{ forloop.counter0 }}" title="Solo">S</button>
-      </div>
     </div>
     <div class="waveform-container" data-index="{{ forloop.counter0 }}">
       <canvas class="waveform-canvas"></canvas>
@@ -240,19 +239,8 @@ function confirmPitchChange(form) {
       <div class="hover-line"></div>
       <div class="loading-overlay"><span>Loading waveform…</span></div>
     </div>
-    <div class="track-sliders">
-      <div class="track-slider-group">
-        <label class="slider-label">VOL</label>
-        <input type="range" class="track-range vol-slider" data-index="{{ forloop.counter0 }}" min="0" max="100" value="100">
-        <span class="slider-value vol-value" data-index="{{ forloop.counter0 }}">100</span>
-      </div>
-      <div class="track-slider-group">
-        <label class="slider-label">PAN</label>
-        <input type="range" class="track-range pan-slider" data-index="{{ forloop.counter0 }}" min="-100" max="100" value="0">
-        <span class="slider-value pan-value" data-index="{{ forloop.counter0 }}">C</span>
-      </div>
-    </div>
   </div>
+  {% endif %}
   {% endfor %}
 </div>
 
@@ -320,7 +308,7 @@ function confirmPitchChange(form) {
 <script>
   const SONG_NAME = "{{ song_name|escapejs }}";
 </script>
-<script src="{% static 'player/js/player.js' %}?v=20260703-controls"></script>
+<script src="{% static 'player/js/player.js' %}?v=20261102-instruments"></script>
 <script>
 (function() {
   const panel = document.getElementById('song-link-panel');

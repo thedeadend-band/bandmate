@@ -249,6 +249,19 @@ class PitchShiftJob(models.Model):
         return f'{self.song_name}: {self.semitones:+d} ({self.get_status_display()})'
 
 
+class PlaybackPreference(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='playback_preference',
+    )
+    enabled_categories = models.JSONField(default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'Playback preferences for {self.user}'
+
+
 class SpotifyConnection(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,

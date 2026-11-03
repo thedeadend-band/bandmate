@@ -55,6 +55,7 @@
 <div class="pp-now-playing">
   <div class="pp-now-label" id="pp-now-label">Select a song to play</div>
   <div class="song-info-panel" id="pp-info-panel" style="display:none"></div>
+  {% include "player/_instrument_selector.html" %}
   <div class="waveform-container pp-waveform" id="pp-waveform-container">
     <canvas class="waveform-canvas" id="pp-canvas"></canvas>
     <div class="playhead" id="pp-playhead"></div>
@@ -119,5 +120,5 @@
 </div>
 
 {{ setlist_items|json_script:"pp-data" }}
-<script src="{% static 'player/js/setlist_player.js' %}?v=20260703-controls"></script>
+<script src="{% static 'player/js/setlist_player.js' %}?v=20261102-instruments"></script>
 {% endblock %}

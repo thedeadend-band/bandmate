@@ -26,6 +26,7 @@
         <div class="lyrics-next-title" id="ly-next-title">—</div>
       </div>
     </div>
+    {% include "player/_instrument_selector.html" %}
   </div>
 
   <div class="lyrics-main" id="ly-main">
@@ -61,7 +62,7 @@
 <script>
   window.LYRICS_PLAYER_MODE = 'setlist';
 </script>
-<script src="{% static 'player/js/lyrics_player.js' %}?v=20260703-controls"></script>
+<script src="{% static 'player/js/lyrics_player.js' %}?v=20261102-instruments"></script>
 {% else %}
 <div class="empty-state">
   <h3>No playable songs</h3>

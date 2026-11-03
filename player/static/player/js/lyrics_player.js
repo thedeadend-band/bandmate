@@ -5,9 +5,10 @@ class LyricsPlayer {
     this.audioEnabled = options.audioEnabled !== false;
     this.currentIndex = 0;
     this.audioContext = null;
-    this.source = null;
+    this.sources = [];
     this.gainNode = null;
-    this.buffer = null;
+    this.buffers = [];
+    this.selectedCategories = window.instrumentSelection || new Set(['master']);
     this.isPlaying = false;
     this.playStartTime = 0;
     this.playOffset = 0;
@@ -20,6 +21,9 @@ class LyricsPlayer {
     this._lyricsScrollEndTimer = null;
     this.wakeLock = null;
     this._bindEvents();
+    window.addEventListener('instrument-selection-change', (event) => {
+      this._changeInstruments(event.detail.enabledCategories);
+    });
     if (this.items.length) {
       this.loadIndex(0);
     }
@@ -110,9 +114,9 @@ class LyricsPlayer {
       this._renderLyrics();
 
       if (this.audioEnabled) {
-        await this._loadAudio(item.song_name);
+        await this._loadAudio(item);
       } else {
-        this.buffer = null;
+        this.buffers = [];
         this.duration = this._lyricsDuration();
       }
       this._updateTime();
@@ -125,13 +129,32 @@ class LyricsPlayer {
     }
   }
 
-  async _loadAudio(songName) {
+  async _loadAudio(item) {
     this._ensureAudioContext();
-    const audioResp = await fetch(`/api/songs/${encodeURIComponent(songName)}/master/audio/`);
-    if (!audioResp.ok) throw new Error('Audio failed');
-    const arr = await audioResp.arrayBuffer();
-    this.buffer = await this.audioContext.decodeAudioData(arr);
-    this.duration = this.buffer.duration || 0;
+    const tracks = (item.tracks || []).filter(track =>
+      this.selectedCategories.has(track.category));
+    this.buffers = await Promise.all(tracks.map(async track => {
+      const url = `/api/songs/${encodeURIComponent(item.song_name)}/tracks/` +
+        `${encodeURIComponent(track.filename)}/audio/`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Audio failed');
+      const arr = await response.arrayBuffer();
+      return this.audioContext.decodeAudioData(arr);
+    }));
+    this.duration = this.buffers.reduce(
+      (duration, buffer) => Math.max(duration, buffer.duration || 0), 0);
+  }
+
+  async _changeInstruments(categories) {
+    if (!this.items.length || !this.audioEnabled) return;
+    const wasPlaying = this.isPlaying;
+    const position = this.currentTime();
+    if (wasPlaying) this.pause();
+    this.selectedCategories = new Set(categories);
+    await this._loadAudio(this.items[this.currentIndex]);
+    this.playOffset = Math.min(position, this.duration);
+    this._updateTime();
+    if (wasPlaying) await this.play();
   }
 
   _ensureAudioContext() {
@@ -171,25 +194,29 @@ class LyricsPlayer {
       this._startAnimation();
       return;
     }
-    if (!this.buffer) return;
+    if (!this.buffers.length) return;
     this._ensureAudioContext();
     await this.audioContext.resume();
     this.isPlaying = true;
     const startAt = this.audioContext.currentTime + 0.03;
     this.playStartTime = startAt;
-    const src = this.audioContext.createBufferSource();
-    src.buffer = this.buffer;
-    src.connect(this.gainNode);
-    src.start(startAt, this.playOffset);
-    src.onended = () => {
+    const longestIndex = this.buffers.reduce(
+      (best, buffer, index, all) => buffer.duration > all[best].duration ? index : best, 0);
+    this.sources = this.buffers.map((buffer, index) => {
+      const src = this.audioContext.createBufferSource();
+      src.buffer = buffer;
+      src.connect(this.gainNode);
+      src.start(startAt, Math.min(this.playOffset, buffer.duration));
+      if (index === longestIndex) src.onended = () => {
       if (!this.isPlaying) return;
       if (this.mode === 'setlist' && this.currentIndex < this.items.length - 1) {
         this.loadIndex(this.currentIndex + 1, true);
       } else {
         this.stop();
       }
-    };
-    this.source = src;
+      };
+      return src;
+    });
     await this._requestWakeLock();
     this._showPause(true);
     this._startAnimation();
@@ -199,10 +226,8 @@ class LyricsPlayer {
     if (!this.isPlaying) return;
     this.playOffset = this.currentTime();
     this.isPlaying = false;
-    if (this.source) {
-      try { this.source.stop(); } catch (_) {}
-      this.source = null;
-    }
+    this.sources.forEach(source => { try { source.stop(); } catch (_) {} });
+    this.sources = [];
     this._releaseWakeLock();
     this._showPause(false);
     this._stopAnimation();

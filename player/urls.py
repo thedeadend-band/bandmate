@@ -51,6 +51,7 @@ urlpatterns = [
     path('api/songs/<str:song_name>/master/audio/', views.master_audio, name='master_audio'),
     path('api/songs/<str:song_name>/master/waveform/', views.master_waveform, name='master_waveform'),
     path('api/songs/<str:song_name>/info/', views.song_info_api, name='song_info_api'),
+    path('api/playback-preferences/', views.playback_preferences, name='playback_preferences'),
     path('api/songs/<str:song_name>/links/', views.song_links_update, name='song_links_update'),
     # Calendar
     path('calendar/', views.calendar_view, name='calendar'),

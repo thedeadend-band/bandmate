@@ -18,8 +18,9 @@ class SetlistPlayer {
     this.songs = items.filter(it => !it.is_break);
     this.audioContext = null;
     this.currentIndex = -1;
-    this.buffer = null;
-    this.source = null;
+    this.buffers = [];
+    this.sources = [];
+    this.selectedCategories = window.instrumentSelection || new Set(['master']);
     this.gainNode = null;
     this.isPlaying = false;
     this.playStartTime = 0;
@@ -40,8 +41,10 @@ class SetlistPlayer {
 
     this._initAudio();
     this._bindEvents();
-    this._preloadDurations();
     if (this.songs.length > 0) this.loadSong(0);
+    window.addEventListener('instrument-selection-change', (event) => {
+      this._changeInstruments(event.detail.enabledCategories);
+    });
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && this.isPlaying) {
@@ -95,6 +98,7 @@ class SetlistPlayer {
     if (this.isPlaying) this.pause();
 
     this.playOffset = 0;
+    this.buffers = [];
     this.currentIndex = index;
     this.currentLyricIndex = -1;
     this._highlightRow(index);
@@ -144,15 +148,20 @@ class SetlistPlayer {
           `${this.songInfo.artist} \u2013 ${this.songInfo.title}`;
       }
 
-      label.textContent = 'Loading audio\u2026';
-      const audioUrl = `/api/songs/${encodeURIComponent(song.name)}/master/audio/`;
-      const audioResp = await fetch(audioUrl);
-      if (!audioResp.ok) throw new Error(`Audio ${audioResp.status}`);
-      const arrayBuf = await audioResp.arrayBuffer();
-      this.buffer = await this.audioContext.decodeAudioData(arrayBuf);
+      label.textContent = 'Loading selected tracks\u2026';
+      const selectedTracks = (song.tracks || []).filter(track =>
+        this.selectedCategories.has(track.category));
+      this.buffers = await Promise.all(selectedTracks.map(async track => {
+        const audioUrl = `/api/songs/${encodeURIComponent(song.name)}/tracks/` +
+          `${encodeURIComponent(track.filename)}/audio/`;
+        const audioResp = await fetch(audioUrl);
+        if (!audioResp.ok) throw new Error(`Audio ${audioResp.status}`);
+        const arrayBuf = await audioResp.arrayBuffer();
+        return this.audioContext.decodeAudioData(arrayBuf);
+      }));
 
       overlay.classList.add('hidden');
-      document.getElementById('pp-play').classList.remove('disabled');
+      document.getElementById('pp-play').classList.toggle('disabled', !this.buffers.length);
       this._updatePlayhead();
 
       if (wasPlaying) await this.play();
@@ -161,6 +170,19 @@ class SetlistPlayer {
       label.textContent = 'Load failed';
       label.style.color = getComputedStyle(document.documentElement).getPropertyValue('--accent-red');
     }
+  }
+
+  async _changeInstruments(categories) {
+    if (this.currentIndex < 0) return;
+    const wasPlaying = this.isPlaying;
+    const position = this.currentTime();
+    if (wasPlaying) this.pause();
+    this.selectedCategories = new Set(categories);
+    await this.loadSong(this.currentIndex);
+    this.playOffset = Math.min(position, this.duration);
+    this._updatePlayhead();
+    this._updateTime();
+    if (wasPlaying) await this.play();
   }
 
   async _preloadDurations() {
@@ -403,7 +425,7 @@ class SetlistPlayer {
   /* ---- Transport ------------------------------------------------------- */
 
   async play() {
-    if (!this.buffer) return;
+    if (!this.buffers.length) return;
     if (this.isPlaying) return;
     await this.audioContext.resume();
     if (this._iosAudio) this._iosAudio.play().catch(function() {});
@@ -412,16 +434,20 @@ class SetlistPlayer {
 
     const startAt = this.audioContext.currentTime + 0.05;
     this.playStartTime = startAt;
-    const src = this.audioContext.createBufferSource();
-    src.buffer = this.buffer;
-    src.connect(this.gainNode);
-    src.start(startAt, this.playOffset);
-    src.onended = () => {
+    const longestIndex = this.buffers.reduce(
+      (best, buffer, index, all) => buffer.duration > all[best].duration ? index : best, 0);
+    this.sources = this.buffers.map((buffer, index) => {
+      const src = this.audioContext.createBufferSource();
+      src.buffer = buffer;
+      src.connect(this.gainNode);
+      src.start(startAt, Math.min(this.playOffset, buffer.duration));
+      if (index === longestIndex) src.onended = () => {
       if (this.isPlaying && this.currentTime() >= this.duration - 0.1) {
         this._autoAdvance();
       }
-    };
-    this.source = src;
+      };
+      return src;
+    });
     this._startAnimation();
     this._requestWakeLock();
     this._showPause(true);
@@ -431,10 +457,8 @@ class SetlistPlayer {
     if (!this.isPlaying) return;
     this.playOffset = this.currentTime();
     this.isPlaying = false;
-    if (this.source) {
-      try { this.source.stop(); } catch (_) {}
-      this.source = null;
-    }
+    this.sources.forEach(source => { try { source.stop(); } catch (_) {} });
+    this.sources = [];
     if (this._iosAudio) this._iosAudio.pause();
     this._stopAnimation();
     this._releaseWakeLock();

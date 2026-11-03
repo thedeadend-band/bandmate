@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=13">
+  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=14">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -76,7 +76,7 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
         </svg>
-        Multitrack
+        Catalog
       </a>
       {% if user.is_staff %}
       <a href="{% url 'wizard_start' %}" class="sidebar-nav-item{% if nav_active == 'song_wizard' %} active{% endif %}">

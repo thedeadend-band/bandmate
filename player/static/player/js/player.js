@@ -14,6 +14,7 @@ class MultiTrackPlayer {
     this.duration = 0;
     this.animationId = null;
     this.loadedCount = 0;
+    this.selectedCategories = window.instrumentSelection || new Set(['master']);
 
     this.lyrics = null;
     this.lyricOffset = 0;
@@ -23,12 +24,12 @@ class MultiTrackPlayer {
 
     this._initAudioContext();
     this._initTracks(trackData);
-    this._applyDefaultMutes();
-    this._restoreMixerSettings();
     this._applyMuteState();
-    this._updateTrackDimming();
     this._initLyrics();
     this._bindEvents();
+    window.addEventListener('instrument-selection-change', (event) => {
+      this._changeInstruments(event.detail.enabledCategories);
+    });
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && this.isPlaying) {
@@ -79,10 +80,11 @@ class MultiTrackPlayer {
   _initTracks(trackData) {
     trackData.forEach((data, index) => {
       const el = document.querySelector(`.track[data-index="${index}"]`);
-      const canvas = el.querySelector('.waveform-canvas');
+      const canvas = el?.querySelector('.waveform-canvas') || null;
       const track = {
         name: data.name,
         filename: data.filename,
+        category: data.category || 'other',
         buffer: null,
         source: null,
         gainNode: this.audioContext.createGain(),
@@ -94,6 +96,8 @@ class MultiTrackPlayer {
         peaks: null,
         duration: 0,
         loaded: false,
+        loading: false,
+        waveformLoaded: false,
         canvas,
         element: el,
         dpr: 1,
@@ -103,7 +107,9 @@ class MultiTrackPlayer {
       track.gainNode.connect(track.panNode);
       track.panNode.connect(this.outputNode);
       this.tracks.push(track);
-      this._loadTrack(track);
+      if (track.category === 'master' || this.selectedCategories.has(track.category)) {
+        this._loadTrack(track);
+      }
     });
   }
 
@@ -167,36 +173,44 @@ class MultiTrackPlayer {
   /* ---- Loading -------------------------------------------------------- */
 
   async _loadTrack(track) {
-    const overlay = track.element.querySelector('.loading-overlay');
-    const label = overlay.querySelector('span');
+    if (track.loading) return;
+    track.loading = true;
+    const overlay = track.element?.querySelector('.loading-overlay');
+    const label = overlay?.querySelector('span');
 
     try {
-      label.textContent = 'Loading waveform\u2026';
-      const wfUrl =
-        `/api/songs/${encodeURIComponent(this.songName)}/tracks/` +
-        `${encodeURIComponent(track.filename)}/waveform/`;
-      const wfResp = await fetch(wfUrl);
-      if (!wfResp.ok) throw new Error(`Waveform ${wfResp.status}`);
-      const wfData = await wfResp.json();
-      track.channels = wfData.channels || 1;
-      if (track.channels >= 2) {
-        track.peaksLeft = wfData.peaks_left;
-        track.peaksRight = wfData.peaks_right;
-        track.peaks = wfData.peaks_left; // used for length reference
-      } else {
-        track.peaks = wfData.peaks;
+      if (track.category === 'master' && !track.waveformLoaded) {
+        if (label) label.textContent = 'Loading waveform\u2026';
+        const wfUrl =
+          `/api/songs/${encodeURIComponent(this.songName)}/tracks/` +
+          `${encodeURIComponent(track.filename)}/waveform/`;
+        const wfResp = await fetch(wfUrl);
+        if (!wfResp.ok) throw new Error(`Waveform ${wfResp.status}`);
+        const wfData = await wfResp.json();
+        track.channels = wfData.channels || 1;
+        if (track.channels >= 2) {
+          track.peaksLeft = wfData.peaks_left;
+          track.peaksRight = wfData.peaks_right;
+          track.peaks = wfData.peaks_left;
+        } else {
+          track.peaks = wfData.peaks;
+        }
+        track.duration = wfData.duration;
+        track.waveformLoaded = true;
+        this._setupCanvas(track);
+        this._drawWaveform(track);
+        if (track.duration > this.duration) {
+          this.duration = track.duration;
+          this._updateTimeDisplay();
+        }
       }
-      track.duration = wfData.duration;
 
-      this._setupCanvas(track);
-      this._drawWaveform(track);
-
-      if (track.duration > this.duration) {
-        this.duration = track.duration;
-        this._updateTimeDisplay();
+      if (!this.selectedCategories.has(track.category)) {
+        overlay?.classList.add('hidden');
+        return;
       }
-
-      label.textContent = 'Loading audio\u2026';
+      if (track.loaded) return;
+      if (label) label.textContent = 'Loading audio\u2026';
       const audioUrl =
         `/api/songs/${encodeURIComponent(this.songName)}/tracks/` +
         `${encodeURIComponent(track.filename)}/audio/`;
@@ -206,26 +220,45 @@ class MultiTrackPlayer {
       track.buffer = await this.audioContext.decodeAudioData(arrayBuf);
 
       track.loaded = true;
-      overlay.classList.add('hidden');
+      overlay?.classList.add('hidden');
       this.loadedCount++;
       this._updateLoadingStatus();
     } catch (err) {
       console.error(`Failed to load track "${track.name}":`, err);
-      label.textContent = 'Load failed';
-      label.style.color = getComputedStyle(document.documentElement).getPropertyValue('--accent-red');
+      if (label) {
+        label.textContent = 'Load failed';
+        label.style.color = getComputedStyle(document.documentElement).getPropertyValue('--accent-red');
+      }
+    } finally {
+      track.loading = false;
     }
   }
 
   _updateLoadingStatus() {
     const el = document.getElementById('loading-status');
-    if (this.loadedCount < this.tracks.length) {
-      el.textContent = `${this.loadedCount}/${this.tracks.length} tracks loaded`;
+    const selected = this.tracks.filter(track => this.selectedCategories.has(track.category));
+    const loaded = selected.filter(track => track.loaded).length;
+    if (loaded < selected.length) {
+      el.textContent = `${loaded}/${selected.length} tracks loaded`;
     } else {
       el.textContent = '';
     }
-    if (this.loadedCount > 0) {
+    if (loaded > 0) {
       document.getElementById('play-btn').classList.remove('disabled');
     }
+  }
+
+  async _changeInstruments(categories) {
+    const wasPlaying = this.isPlaying;
+    if (wasPlaying) this.pause();
+    this.selectedCategories = new Set(categories);
+    document.getElementById('play-btn').classList.add('disabled');
+    await Promise.all(this.tracks
+      .filter(track => this.selectedCategories.has(track.category) && !track.loaded)
+      .map(track => this._loadTrack(track)));
+    this._applyMuteState();
+    this._updateLoadingStatus();
+    if (wasPlaying) await this.play();
   }
 
   /* ---- Lyrics --------------------------------------------------------- */
@@ -364,6 +397,7 @@ class MultiTrackPlayer {
   /* ---- Canvas / Waveform ---------------------------------------------- */
 
   _setupCanvas(track) {
+    if (!track.canvas) return;
     const container = track.canvas.parentElement;
     const rect = container.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -375,7 +409,7 @@ class MultiTrackPlayer {
   }
 
   _drawWaveform(track) {
-    if (!track.peaks || !track.peaks.length) return;
+    if (!track.canvas || !track.peaks || !track.peaks.length) return;
     const ctx = track.canvas.getContext('2d');
     const dpr = track.dpr;
     const w = track.displayWidth;
@@ -579,9 +613,8 @@ class MultiTrackPlayer {
   }
 
   _applyMuteState() {
-    const anySolo = this.tracks.some(t => t.soloed);
     for (const t of this.tracks) {
-      const audible = anySolo ? (t.soloed && !t.muted) : !t.muted;
+      const audible = this.selectedCategories.has(t.category);
       const gain = audible ? t.volume : 0;
       t.gainNode.gain.setValueAtTime(gain, this.audioContext.currentTime);
     }
@@ -591,7 +624,7 @@ class MultiTrackPlayer {
     const anySolo = this.tracks.some(t => t.soloed);
     for (const t of this.tracks) {
       const active = anySolo ? (t.soloed && !t.muted) : !t.muted;
-      t.element.classList.toggle('dimmed', !active);
+      t.element?.classList.toggle('dimmed', !active);
     }
   }
 

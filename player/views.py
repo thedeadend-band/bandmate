@@ -28,7 +28,7 @@ from django_ratelimit.decorators import ratelimit
 
 from .models import (
     CalendarEvent, CalendarSource, Setlist, SetlistEntry,
-    PitchShiftJob, SiteSettings, SpotifyConnection,
+    PitchShiftJob, PlaybackPreference, SiteSettings, SpotifyConnection,
 )
 
 
@@ -44,6 +44,9 @@ def _staff_required(view_func):
 
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.ogg', '.aiff', '.aif'}
 LOSSLESS_EXTENSIONS = {'.flac', '.wav', '.aiff', '.aif'}
+TRACK_CATEGORY_ORDER = (
+    'master', 'vocals', 'guitars', 'bass', 'keys', 'drums', 'click', 'other',
+)
 
 CONTENT_TYPES = {
     '.mp3': 'audio/mpeg',
@@ -92,9 +95,41 @@ def _get_tracks(song_path: Path) -> list[dict]:
                 'name': f.stem,
                 'filename': f.name,
                 'extension': f.suffix.lower(),
+                'category': _track_category(f.stem),
             })
     tracks.sort(key=lambda t: (0 if t['name'].lower() == 'master' else 1, t['name'].lower()))
     return tracks
+
+
+def _track_category(track_name: str) -> str:
+    name = track_name.lower()
+    if name == 'master' or name.startswith('master.'):
+        return 'master'
+    if 'click' in name or 'metronome' in name:
+        return 'click'
+    if 'vocal' in name or 'voice' in name:
+        return 'vocals'
+    if 'guitar' in name or 'gtr' in name:
+        return 'guitars'
+    if 'bass' in name:
+        return 'bass'
+    if any(word in name for word in ('piano', 'keys', 'keyboard', 'organ', 'synth')):
+        return 'keys'
+    if any(word in name for word in ('drum', 'percussion', 'kick', 'snare', 'cymbal')):
+        return 'drums'
+    return 'other'
+
+
+def _available_categories(tracks: list[dict]) -> list[str]:
+    present = {track['category'] for track in tracks}
+    return [category for category in TRACK_CATEGORY_ORDER if category in present]
+
+
+def _playback_categories(user) -> list[str]:
+    preference, _ = PlaybackPreference.objects.get_or_create(
+        user=user, defaults={'enabled_categories': ['master']})
+    selected = preference.enabled_categories or ['master']
+    return [value for value in selected if value in TRACK_CATEGORY_ORDER] or ['master']
 
 
 def _active_pitch_manifest(song_path: Path) -> tuple[Path, dict] | None:
@@ -517,8 +552,35 @@ def song_player(request, song_name: str):
         'pitch_job': PitchShiftJob.objects.filter(song_name=song_name).first(),
         'pitch_options': range(-6, 7),
         'current_pitch': current_pitch,
+        'instrument_categories': _available_categories(tracks),
+        'selected_instruments': _playback_categories(request.user),
         'nav_active': 'multitrack',
     })
+
+
+@login_required
+@require_POST
+def playback_preferences(request):
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'error': 'Invalid request'}, status=400)
+    categories = payload.get('enabled_categories', [])
+    if not isinstance(categories, list):
+        return JsonResponse({'error': 'Invalid categories'}, status=400)
+    categories = [
+        value for value in TRACK_CATEGORY_ORDER
+        if value in categories
+    ]
+    if 'master' in categories:
+        categories = ['master']
+    elif not categories:
+        categories = ['master']
+    PlaybackPreference.objects.update_or_create(
+        user=request.user,
+        defaults={'enabled_categories': categories},
+    )
+    return JsonResponse({'enabled_categories': categories})
 
 
 @_staff_required
@@ -1079,11 +1141,22 @@ def lyrics_setlist_player(request, setlist_id: int):
             'title': title,
             'detail': ' · '.join(detail_bits),
             'display': f'{artist} – {title}' if artist else title,
+            'tracks': _get_tracks(song_path),
         })
+
+    instrument_categories = []
+    present_categories = {
+        track['category'] for item in items for track in item['tracks']
+    }
+    instrument_categories = [
+        category for category in TRACK_CATEGORY_ORDER if category in present_categories
+    ]
 
     return render(request, 'player/lyrics_setlist_player.html', {
         'setlist': sl,
         'items': items,
+        'instrument_categories': instrument_categories,
+        'selected_instruments': _playback_categories(request.user),
         'nav_active': 'lyrics',
     })
 
@@ -1110,9 +1183,12 @@ def lyrics_song_player(request, song_name: str):
         'title': title,
         'detail': ' · '.join(detail_bits),
         'display': f'{artist} – {title}' if artist else title,
+        'tracks': _get_tracks(song_path),
     }
     return render(request, 'player/lyrics_song_player.html', {
         'item': item,
+        'instrument_categories': _available_categories(item['tracks']),
+        'selected_instruments': _playback_categories(request.user),
         'nav_active': 'lyrics',
     })
 
@@ -1575,17 +1651,30 @@ def setlist_player(request, setlist_id: int):
             continue
         master = _find_master_track(song_path)
         if master:
+            tracks = _get_tracks(song_path)
             setlist_items.append({
                 'name': entry.song_name,
                 'master_filename': master.name,
+                'tracks': tracks,
                 'is_break': False,
             })
+
+    present_categories = {
+        track['category']
+        for item in setlist_items if not item.get('is_break')
+        for track in item.get('tracks', [])
+    }
 
     return render(request, 'player/setlist_player.html', {
         'setlist': sl,
         'setlist_items': setlist_items,
         'can_edit_setlist': sl.owner == request.user or request.user.is_staff,
         'spotify_configured': bool(_spotify_config()[0] and _spotify_config()[1]),
+        'instrument_categories': [
+            category for category in TRACK_CATEGORY_ORDER
+            if category in present_categories
+        ],
+        'selected_instruments': _playback_categories(request.user),
     })
 
 
