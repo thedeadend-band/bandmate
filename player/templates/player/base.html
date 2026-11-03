@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark"{% if active_group %} data-group-theme="{{ active_group.color_scheme }}"{% endif %}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=14">
+  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=15">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -41,10 +41,12 @@
         <path d="M9 18V5l12-2v13"/>
         <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
       </svg>
-      BandMate
+      {% if active_group.logo %}<img src="{% url 'group_logo' active_group.pk %}" class="navbar-group-logo" alt="">{% endif %}
+      {{ active_group.name|default:"BandMate" }}
     </a>
     {% if user.is_authenticated %}
     <div class="navbar-right">
+      <a href="{% url 'group_select' %}" class="group-switch" title="Switch group">Switch Group</a>
       <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode">
         <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
@@ -78,14 +80,16 @@
         </svg>
         Catalog
       </a>
-      {% if user.is_staff %}
+      <a href="{% url 'group_songs' %}" class="sidebar-nav-item{% if nav_active == 'songs' %} active{% endif %}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M2 5h5M4.5 2.5v5"/></svg>
+        Songs
+      </a>
       <a href="{% url 'wizard_start' %}" class="sidebar-nav-item{% if nav_active == 'song_wizard' %} active{% endif %}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
         </svg>
         Song Wizard
       </a>
-      {% endif %}
       <a href="{% url 'setlist_list' %}" class="sidebar-nav-item{% if nav_active == 'setlists' %} active{% endif %}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
@@ -139,6 +143,18 @@
   </aside>
   {% endif %}
 
+  {% if ready_celebrations %}
+  <div class="celebration-stack">
+    {% for song in ready_celebrations %}
+    <div class="celebration-banner" data-celebration-id="{{ song.pk }}">
+      <span><strong>{{ song.song_name }}</strong> is ready to play at the next practice.</span>
+      <a href="{% url 'song_player' song.song_name %}">View</a>
+      <button type="button" class="celebration-dismiss" aria-label="Dismiss">×</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <main class="container {% block container_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
@@ -187,6 +203,19 @@
       close.addEventListener('click', shut);
       overlay.addEventListener('click', shut);
     })();
+  </script>
+  <script>
+  (function() {
+    function csrfToken() { return document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1] || ''; }
+    document.querySelectorAll('.celebration-dismiss').forEach(function(button) {
+      button.addEventListener('click', function() {
+        var banner = button.closest('[data-celebration-id]');
+        fetch('/api/celebrations/' + banner.dataset.celebrationId + '/dismiss/', {
+          method: 'POST', headers: {'X-CSRFToken': csrfToken()}
+        }).then(function(response) { if (response.ok) banner.remove(); });
+      });
+    });
+  })();
   </script>
   {% if user.is_authenticated %}
   <script>

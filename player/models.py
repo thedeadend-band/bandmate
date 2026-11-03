@@ -3,7 +3,43 @@ from django.db import models
 from django.utils import timezone
 
 
+class Group(models.Model):
+    COLOR_SCHEMES = [
+        ('blue', 'Blue'), ('green', 'Green'), ('red', 'Red'),
+        ('gold', 'Gold'), ('teal', 'Teal'), ('violet', 'Violet'),
+        ('pink', 'Pink'), ('cyan', 'Cyan'), ('lime', 'Lime'),
+        ('coral', 'Coral'), ('indigo', 'Indigo'), ('mono', 'Monochrome'),
+    ]
+    name = models.CharField(max_length=120, unique=True)
+    logo = models.FileField(upload_to='group-logos/', blank=True, default='')
+    color_scheme = models.CharField(
+        max_length=20, choices=COLOR_SCHEMES, default='blue')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class GroupMembership(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='memberships')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='group_memberships')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('group', 'user')]
+
+    def __str__(self):
+        return f'{self.user} in {self.group}'
+
+
 class Setlist(models.Model):
+    group = models.ForeignKey(
+        Group, on_delete=models.CASCADE, related_name='setlists')
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -139,6 +175,8 @@ class SiteSettings(models.Model):
 
 
 class CalendarSource(models.Model):
+    group = models.ForeignKey(
+        Group, on_delete=models.CASCADE, related_name='calendar_sources')
     name = models.CharField(max_length=120)
     ics_url = models.URLField(max_length=2000)
     color = models.CharField(max_length=20, default='#4a9eff')
@@ -250,16 +288,66 @@ class PitchShiftJob(models.Model):
 
 
 class PlaybackPreference(models.Model):
-    user = models.OneToOneField(
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='playback_preference',
+        related_name='playback_preferences',
     )
+    group = models.ForeignKey(
+        Group, on_delete=models.CASCADE, related_name='playback_preferences')
     enabled_categories = models.JSONField(default=list, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'Playback preferences for {self.user}'
+
+    class Meta:
+        unique_together = [('user', 'group')]
+
+
+class GroupSong(models.Model):
+    STATUS_CHOICES = [
+        ('on_deck', 'On-Deck'),
+        ('active', 'Ready to Play'),
+        ('retired', 'Retired'),
+    ]
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='songs')
+    song_name = models.CharField(max_length=500)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='on_deck')
+    ready_date = models.DateField(null=True, blank=True)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['song_name']
+        unique_together = [('group', 'song_name')]
+
+    def __str__(self):
+        return f'{self.group}: {self.song_name}'
+
+
+class SongReadiness(models.Model):
+    group_song = models.ForeignKey(
+        GroupSong, on_delete=models.CASCADE, related_name='readiness')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='song_readiness')
+    is_ready = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('group_song', 'user')]
+
+
+class SongCelebrationDismissal(models.Model):
+    group_song = models.ForeignKey(
+        GroupSong, on_delete=models.CASCADE, related_name='celebration_dismissals')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='song_celebration_dismissals')
+    dismissed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('group_song', 'user')]
 
 
 class SpotifyConnection(models.Model):

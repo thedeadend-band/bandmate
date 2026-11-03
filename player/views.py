@@ -11,7 +11,7 @@ from urllib.parse import quote, urlencode, urlparse
 
 import numpy as np
 from django.utils import timezone
-from datetime import timedelta
+from datetime import date, timedelta
 from urllib import request as urlrequest
 from urllib import error as urlerror
 
@@ -27,7 +27,8 @@ from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
 from .models import (
-    CalendarEvent, CalendarSource, Setlist, SetlistEntry,
+    CalendarEvent, CalendarSource, Group, GroupMembership, GroupSong,
+    Setlist, SetlistEntry, SongCelebrationDismissal, SongReadiness,
     PitchShiftJob, PlaybackPreference, SiteSettings, SpotifyConnection,
 )
 
@@ -125,9 +126,9 @@ def _available_categories(tracks: list[dict]) -> list[str]:
     return [category for category in TRACK_CATEGORY_ORDER if category in present]
 
 
-def _playback_categories(user) -> list[str]:
+def _playback_categories(user, group) -> list[str]:
     preference, _ = PlaybackPreference.objects.get_or_create(
-        user=user, defaults={'enabled_categories': ['master']})
+        user=user, group=group, defaults={'enabled_categories': ['master']})
     selected = preference.enabled_categories or ['master']
     return [value for value in selected if value in TRACK_CATEGORY_ORDER] or ['master']
 
@@ -462,6 +463,19 @@ def _get_available_songs() -> list[dict]:
     return songs
 
 
+def _group_catalog_songs(group, statuses=None) -> list[dict]:
+    query = GroupSong.objects.filter(group=group)
+    if statuses:
+        query = query.filter(status__in=statuses)
+    names = set(query.values_list('song_name', flat=True))
+    return [song for song in _get_available_songs() if song['name'] in names]
+
+
+def _require_group_song(request, song_name):
+    return get_object_or_404(
+        GroupSong, group=request.active_group, song_name=song_name)
+
+
 # ---------------------------------------------------------------------------
 # Auth views
 # ---------------------------------------------------------------------------
@@ -469,7 +483,7 @@ def _get_available_songs() -> list[dict]:
 @ratelimit(key='ip', rate='5/m', method='POST', block=False)
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect('song_list')
+        return redirect('group_select')
 
     error = None
     if request.method == 'POST':
@@ -481,7 +495,7 @@ def login_view(request):
             user = authenticate(request, username=username, password=password)
             if user is not None:
                 login(request, user)
-                return redirect(request.GET.get('next', '/'))
+                return redirect('group_select')
             error = 'Invalid username or password.'
 
     return render(request, 'player/login.html', {'error': error})
@@ -492,6 +506,31 @@ def logout_view(request):
     return redirect('login')
 
 
+@login_required
+def group_select(request):
+    groups = Group.objects.all() if request.user.is_staff else Group.objects.filter(
+        memberships__user=request.user)
+    groups = groups.distinct().order_by('name')
+    if request.method == 'POST':
+        group = get_object_or_404(groups, pk=request.POST.get('group_id'))
+        request.session['active_group_id'] = group.pk
+        return redirect('song_list')
+    if groups.count() == 1:
+        request.session['active_group_id'] = groups.first().pk
+        return redirect('song_list')
+    return render(request, 'player/group_select.html', {'groups': groups})
+
+
+@login_required
+def group_logo(request, group_id: int):
+    allowed = Group.objects.all() if request.user.is_staff else Group.objects.filter(
+        memberships__user=request.user)
+    group = get_object_or_404(allowed, pk=group_id)
+    if not group.logo:
+        raise Http404
+    return FileResponse(group.logo.open('rb'))
+
+
 # ---------------------------------------------------------------------------
 # Page views
 # ---------------------------------------------------------------------------
@@ -499,12 +538,21 @@ def logout_view(request):
 @login_required
 @ensure_csrf_cookie
 def song_list(request):
-    songs = _get_available_songs()
+    group_songs = list(GroupSong.objects.filter(group=request.active_group))
+    catalog_names = {item.song_name: item for item in group_songs}
+    songs = [
+        song for song in _get_available_songs() if song['name'] in catalog_names
+    ]
     active_pitch_jobs = {
         job.song_name: job
         for job in PitchShiftJob.objects.filter(status__in=('queued', 'processing'))
     }
     for song in songs:
+        catalog_item = catalog_names[song['name']]
+        song['catalog_id'] = catalog_item.pk
+        song['status'] = catalog_item.status
+        song['status_label'] = catalog_item.get_status_display()
+        song['ready_date'] = catalog_item.ready_date
         pitch_job = active_pitch_jobs.get(song['name'])
         song['pitch_active'] = pitch_job is not None
         if pitch_job:
@@ -516,13 +564,33 @@ def song_list(request):
 
     if request.user.is_staff:
         used_songs = set(
-            SetlistEntry.objects.filter(is_break=False).values_list('song_name', flat=True).distinct()
+            SetlistEntry.objects.filter(
+                setlist__group=request.active_group, is_break=False,
+            ).values_list('song_name', flat=True).distinct()
         )
         for s in songs:
             s['in_setlist'] = s['name'] in used_songs
 
+    sort_by = request.GET.get('sort', 'artist')
+    direction = request.GET.get('direction', 'asc')
+    reverse = direction == 'desc'
+    if sort_by == 'ready_date':
+        songs.sort(
+            key=lambda song: (
+                song['ready_date'] is None,
+                song['ready_date'] or date.min,
+            ),
+            reverse=reverse,
+        )
+    elif sort_by == 'title':
+        songs.sort(key=lambda song: song['title'].lower(), reverse=reverse)
+    else:
+        sort_by = 'artist'
+        songs.sort(key=lambda song: (song['artist'].lower(), song['title'].lower()), reverse=reverse)
     return render(request, 'player/song_list.html', {
         'songs': songs,
+        'sort_by': sort_by,
+        'sort_direction': direction,
         'nav_active': 'multitrack',
     })
 
@@ -531,6 +599,8 @@ def song_list(request):
 
 @login_required
 def song_player(request, song_name: str):
+    group_song = get_object_or_404(
+        GroupSong, group=request.active_group, song_name=song_name)
     song_path = _safe_song_path(song_name)
     if PitchShiftJob.objects.filter(
         song_name=song_name, status__in=('queued', 'processing'),
@@ -553,8 +623,120 @@ def song_player(request, song_name: str):
         'pitch_options': range(-6, 7),
         'current_pitch': current_pitch,
         'instrument_categories': _available_categories(tracks),
-        'selected_instruments': _playback_categories(request.user),
+        'selected_instruments': _playback_categories(request.user, request.active_group),
+        'group_song': group_song,
+        'readiness_rows': _readiness_rows(group_song),
+        'user_ready': SongReadiness.objects.filter(
+            group_song=group_song, user=request.user, is_ready=True).exists(),
         'nav_active': 'multitrack',
+    })
+
+
+def _readiness_rows(group_song):
+    members = User.objects.filter(
+        group_memberships__group=group_song.group, is_staff=False,
+    ).distinct().order_by('username')
+    ready_ids = set(SongReadiness.objects.filter(
+        group_song=group_song, is_ready=True).values_list('user_id', flat=True))
+    return [
+        {'user': user, 'is_ready': user.pk in ready_ids}
+        for user in members
+    ]
+
+
+def _recalculate_song_status(group_song):
+    if group_song.status == 'retired':
+        return
+    member_ids = list(User.objects.filter(
+        group_memberships__group=group_song.group, is_staff=False,
+    ).distinct().values_list('pk', flat=True))
+    ready_ids = set(SongReadiness.objects.filter(
+        group_song=group_song, user_id__in=member_ids, is_ready=True,
+    ).values_list('user_id', flat=True))
+    all_ready = bool(member_ids) and ready_ids == set(member_ids)
+    new_status = 'active' if all_ready else 'on_deck'
+    if new_status == 'active' and group_song.status != 'active':
+        group_song.status = 'active'
+        if not group_song.ready_date:
+            group_song.ready_date = timezone.localdate()
+        group_song.save(update_fields=['status', 'ready_date'])
+        group_song.celebration_dismissals.all().delete()
+    elif new_status != group_song.status:
+        group_song.status = new_status
+        group_song.save(update_fields=['status'])
+
+
+@login_required
+@require_POST
+def song_readiness_update(request, song_name: str):
+    group_song = get_object_or_404(
+        GroupSong, group=request.active_group, song_name=song_name)
+    if request.user.is_staff:
+        return JsonResponse({'error': 'Admin readiness does not count.'}, status=400)
+    if not GroupMembership.objects.filter(
+        group=request.active_group, user=request.user).exists():
+        raise Http404
+    SongReadiness.objects.update_or_create(
+        group_song=group_song,
+        user=request.user,
+        defaults={'is_ready': request.POST.get('is_ready') == '1'},
+    )
+    _recalculate_song_status(group_song)
+    return redirect('song_player', song_name=song_name)
+
+
+@login_required
+@require_POST
+def song_status_update(request, song_name: str):
+    group_song = get_object_or_404(
+        GroupSong, group=request.active_group, song_name=song_name)
+    status = request.POST.get('status')
+    if status == 'retired':
+        group_song.status = 'retired'
+        group_song.save(update_fields=['status'])
+    elif request.user.is_staff and status in ('on_deck', 'active'):
+        changed_to_active = status == 'active' and group_song.status != 'active'
+        group_song.status = status
+        if status == 'active' and not group_song.ready_date:
+            group_song.ready_date = timezone.localdate()
+        group_song.save(update_fields=['status', 'ready_date'])
+        if changed_to_active:
+            group_song.celebration_dismissals.all().delete()
+    else:
+        raise Http404
+    return redirect('song_player', song_name=song_name)
+
+
+@login_required
+@require_POST
+def celebration_dismiss(request, group_song_id: int):
+    group_song = get_object_or_404(
+        GroupSong, pk=group_song_id, group=request.active_group, status='active')
+    SongCelebrationDismissal.objects.get_or_create(
+        group_song=group_song, user=request.user)
+    return JsonResponse({'ok': True})
+
+
+@login_required
+def group_songs(request):
+    existing = set(GroupSong.objects.filter(
+        group=request.active_group).values_list('song_name', flat=True))
+    available = [song for song in _get_available_songs() if song['name'] not in existing]
+    if request.method == 'POST':
+        song_name = request.POST.get('song_name', '')
+        if song_name not in {song['name'] for song in available}:
+            raise Http404
+        group_song = GroupSong.objects.create(
+            group=request.active_group, song_name=song_name, status='on_deck')
+        for user_id in GroupMembership.objects.filter(
+            group=request.active_group, user__is_staff=False,
+        ).values_list('user_id', flat=True):
+            SongReadiness.objects.get_or_create(
+                group_song=group_song, user_id=user_id)
+        return redirect('group_songs')
+    return render(request, 'player/group_songs.html', {
+        'available_songs': available,
+        'nav_active': 'songs',
     })
 
 
@@ -577,7 +759,7 @@ def playback_preferences(request):
     elif not categories:
         categories = ['master']
     PlaybackPreference.objects.update_or_create(
-        user=request.user,
+        user=request.user, group=request.active_group,
         defaults={'enabled_categories': categories},
     )
     return JsonResponse({'enabled_categories': categories})
@@ -585,6 +767,7 @@ def playback_preferences(request):
 
 @_staff_required
 def song_edit(request, song_name: str):
+    _require_group_song(request, song_name)
     song_path = _safe_song_path(song_name)
     info_path = song_path / 'info.json'
     try:
@@ -679,6 +862,7 @@ def _song_band_details(info: dict) -> dict:
 @login_required
 def song_download_zip(request, song_name: str):
     """Stream all audio tracks for a song as a ZIP archive."""
+    _require_group_song(request, song_name)
     import io
     import zipfile
 
@@ -743,6 +927,7 @@ def _get_compressed_audio(track_path: Path) -> tuple:
 
 @login_required
 def track_audio(request, song_name: str, track_filename: str):
+    _require_group_song(request, song_name)
     song_path = _safe_song_path(song_name)
     original_path = _safe_track_path(song_path, track_filename)
     track_path = _playback_track(song_path, original_path)
@@ -773,6 +958,7 @@ def _compute_channel_peaks(samples, num_peaks):
 
 @login_required
 def track_waveform(request, song_name: str, track_filename: str):
+    _require_group_song(request, song_name)
     song_path = _safe_song_path(song_name)
     original_path = _safe_track_path(song_path, track_filename)
     track_path = _playback_track(song_path, original_path)
@@ -963,6 +1149,70 @@ def admin_user_delete(request, user_id: int):
 
 
 @_staff_required
+def admin_groups(request):
+    return render(request, 'player/admin_groups.html', {
+        'groups': Group.objects.prefetch_related('memberships__user'),
+        'nav_active': 'settings',
+    })
+
+
+@_staff_required
+def admin_group_edit(request, group_id=None):
+    group = get_object_or_404(Group, pk=group_id) if group_id else None
+    error = None
+    users = User.objects.filter(is_staff=False).order_by('username')
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        scheme = request.POST.get('color_scheme', 'blue')
+        if not name:
+            error = 'Group name is required.'
+        elif Group.objects.exclude(pk=group.pk if group else None).filter(name=name).exists():
+            error = 'A group with that name already exists.'
+        else:
+            if not group:
+                group = Group()
+            group.name = name
+            group.color_scheme = (
+                scheme if scheme in dict(Group.COLOR_SCHEMES) else 'blue')
+            if request.FILES.get('logo'):
+                group.logo = request.FILES['logo']
+            group.save()
+            selected_ids = {
+                int(value) for value in request.POST.getlist('members')
+                if value.isdigit()
+            }
+            removed_ids = list(
+                GroupMembership.objects.filter(group=group)
+                .exclude(user_id__in=selected_ids)
+                .values_list('user_id', flat=True)
+            )
+            GroupMembership.objects.filter(
+                group=group, user_id__in=removed_ids).delete()
+            SongReadiness.objects.filter(
+                group_song__group=group, user_id__in=removed_ids).delete()
+            for user_id in selected_ids:
+                GroupMembership.objects.get_or_create(
+                    group=group, user_id=user_id)
+                for group_song in group.songs.all():
+                    SongReadiness.objects.get_or_create(
+                        group_song=group_song, user_id=user_id)
+            for group_song in group.songs.exclude(status='retired'):
+                _recalculate_song_status(group_song)
+            return redirect('admin_groups')
+    selected_ids = set(
+        group.memberships.values_list('user_id', flat=True) if group else [])
+    return render(request, 'player/admin_group_form.html', {
+        'group': group,
+        'users': users,
+        'selected_ids': selected_ids,
+        'selected_scheme': group.color_scheme if group else 'blue',
+        'color_schemes': Group.COLOR_SCHEMES,
+        'error': error,
+        'nav_active': 'settings',
+    })
+
+
+@_staff_required
 def admin_settings(request):
     site = SiteSettings.load()
     success = None
@@ -981,9 +1231,10 @@ def admin_settings(request):
             source_id = calendar_ids[idx].strip() if idx < len(calendar_ids) else ''
             source = None
             if source_id.isdigit():
-                source = CalendarSource.objects.filter(pk=int(source_id)).first()
+                source = CalendarSource.objects.filter(
+                    pk=int(source_id), group=request.active_group).first()
             if not source:
-                source = CalendarSource()
+                source = CalendarSource(group=request.active_group)
             source.name = name or f'Calendar {len(saved_ids) + 1}'
             source.ics_url = url
             source.color = color or '#4a9eff'
@@ -991,8 +1242,10 @@ def admin_settings(request):
             source.save()
             saved_ids.append(source.pk)
 
-        CalendarSource.objects.exclude(pk__in=saved_ids).delete()
-        first_source = CalendarSource.objects.order_by('name').first()
+        CalendarSource.objects.filter(group=request.active_group).exclude(
+            pk__in=saved_ids).delete()
+        first_source = CalendarSource.objects.filter(
+            group=request.active_group).order_by('name').first()
         site.google_calendar_url = first_source.ics_url if first_source else ''
         site.song_api_key = request.POST.get('song_api_key', '').strip()
         site.spotify_client_id = request.POST.get('spotify_client_id', '').strip()
@@ -1006,7 +1259,8 @@ def admin_settings(request):
         success = 'Settings saved.'
     return render(request, 'player/admin_settings.html', {
         'site': site,
-        'calendar_entries': CalendarSource.objects.order_by('name'),
+        'calendar_entries': CalendarSource.objects.filter(
+            group=request.active_group).order_by('name'),
         'success': success,
         'nav_active': 'settings',
     })
@@ -1018,7 +1272,8 @@ def admin_settings(request):
 
 @login_required
 def calendar_view(request):
-    sources = list(CalendarSource.objects.filter(is_enabled=True).order_by('name'))
+    sources = list(CalendarSource.objects.filter(
+        group=request.active_group, is_enabled=True).order_by('name'))
     if sources:
         try:
             from .calendar_sync import sync_due_calendar_sources
@@ -1087,7 +1342,8 @@ BREAK_SENTINEL = '__BREAK__'
 
 @login_required
 def setlist_list(request):
-    setlists = Setlist.objects.select_related('owner').prefetch_related('entries')
+    setlists = Setlist.objects.filter(group=request.active_group).select_related(
+        'owner').prefetch_related('entries')
     has_spotify = SpotifyConnection.objects.filter(user=request.user).exists()
     spotify_configured = bool(_spotify_config()[0] and _spotify_config()[1])
     return render(request, 'player/setlist_list.html', {
@@ -1100,8 +1356,9 @@ def setlist_list(request):
 
 @login_required
 def lyrics_home(request):
-    setlists = Setlist.objects.select_related('owner').prefetch_related('entries')
-    songs = _get_available_songs()
+    setlists = Setlist.objects.filter(group=request.active_group).select_related(
+        'owner').prefetch_related('entries')
+    songs = _group_catalog_songs(request.active_group)
     return render(request, 'player/lyrics_list.html', {
         'setlists': setlists,
         'songs': songs,
@@ -1111,7 +1368,7 @@ def lyrics_home(request):
 
 @login_required
 def lyrics_setlist_player(request, setlist_id: int):
-    sl = get_object_or_404(Setlist, pk=setlist_id)
+    sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
     entries = list(sl.entries.order_by('position'))
 
     items = []
@@ -1156,13 +1413,14 @@ def lyrics_setlist_player(request, setlist_id: int):
         'setlist': sl,
         'items': items,
         'instrument_categories': instrument_categories,
-        'selected_instruments': _playback_categories(request.user),
+        'selected_instruments': _playback_categories(request.user, request.active_group),
         'nav_active': 'lyrics',
     })
 
 
 @login_required
 def lyrics_song_player(request, song_name: str):
+    get_object_or_404(GroupSong, group=request.active_group, song_name=song_name)
     song_path = _safe_song_path(song_name)
     master = _find_master_track(song_path)
     if not master:
@@ -1188,7 +1446,7 @@ def lyrics_song_player(request, song_name: str):
     return render(request, 'player/lyrics_song_player.html', {
         'item': item,
         'instrument_categories': _available_categories(item['tracks']),
-        'selected_instruments': _playback_categories(request.user),
+        'selected_instruments': _playback_categories(request.user, request.active_group),
         'nav_active': 'lyrics',
     })
 
@@ -1275,9 +1533,10 @@ def setlist_import_spotify(request):
     review_rows = None
     playlist_name = ''
     playlist_ref = ''
-    available = _get_available_songs()
+    available = _group_catalog_songs(request.active_group, statuses=('active',))
     available_choices = sorted([s['name'] for s in available], key=lambda x: x.lower())
-    editable_setlists = Setlist.objects.filter(owner=request.user).order_by('-updated_at')
+    editable_setlists = Setlist.objects.filter(
+        owner=request.user, group=request.active_group).order_by('-updated_at')
 
     if request.method == 'POST':
         action = request.POST.get('action', 'load')
@@ -1353,9 +1612,12 @@ def setlist_import_spotify(request):
                 error = 'Select at least one BandMate track (or load another playlist).'
             else:
                 if target == '__new__':
-                    sl = Setlist.objects.create(name=playlist_name, owner=request.user)
+                    sl = Setlist.objects.create(
+                        name=playlist_name, owner=request.user, group=request.active_group)
                 else:
-                    sl = get_object_or_404(Setlist, pk=int(target), owner=request.user)
+                    sl = get_object_or_404(
+                        Setlist, pk=int(target), owner=request.user,
+                        group=request.active_group)
                     sl.name = playlist_name or sl.name
                     sl.save(update_fields=['name', 'updated_at'])
                     sl.entries.all().delete()
@@ -1396,7 +1658,7 @@ def setlist_import_spotify(request):
 
 @login_required
 def setlist_export_spotify(request, setlist_id: int):
-    sl = get_object_or_404(Setlist, pk=setlist_id)
+    sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
     if sl.owner != request.user and not request.user.is_staff:
         raise Http404
     error = None
@@ -1532,7 +1794,8 @@ def spotify_track_search_api(request):
 
 @login_required
 def setlist_create(request):
-    songs = _get_available_songs()
+    songs = _group_catalog_songs(request.active_group, statuses=('active',))
+    allowed_song_names = {song['name'] for song in songs}
     error = None
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -1542,6 +1805,11 @@ def setlist_create(request):
             error = 'Setlist name is required.'
         elif not song_names:
             error = 'Add at least one song.'
+        elif any(
+            song_name != BREAK_SENTINEL and song_name not in allowed_song_names
+            for song_name in song_names
+        ):
+            error = 'Only Ready to Play songs can be added to a setlist.'
         else:
             seen = set()
             deduped = []
@@ -1550,7 +1818,8 @@ def setlist_create(request):
                     deduped.append(sn)
                     if sn != BREAK_SENTINEL:
                         seen.add(sn)
-            sl = Setlist.objects.create(name=name, date=date, owner=request.user)
+            sl = Setlist.objects.create(
+                name=name, date=date, owner=request.user, group=request.active_group)
             for i, sn in enumerate(deduped):
                 is_break = sn == BREAK_SENTINEL
                 SetlistEntry.objects.create(
@@ -1571,10 +1840,16 @@ def setlist_create(request):
 
 @login_required
 def setlist_edit(request, setlist_id: int):
-    sl = get_object_or_404(Setlist, pk=setlist_id)
+    sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
     if sl.owner != request.user and not request.user.is_staff:
         raise Http404
-    songs = _get_available_songs()
+    songs = _group_catalog_songs(request.active_group, statuses=('active',))
+    active_names = {song['name'] for song in songs}
+    current_names = set(sl.entries.filter(is_break=False).values_list('song_name', flat=True))
+    for song in _group_catalog_songs(request.active_group, statuses=('retired',)):
+        if song['name'] in current_names and song['name'] not in active_names:
+            songs.append(song)
+    allowed_song_names = {song['name'] for song in songs}
     error = None
     success = None
 
@@ -1586,6 +1861,11 @@ def setlist_edit(request, setlist_id: int):
             error = 'Setlist name is required.'
         elif not song_names:
             error = 'Add at least one song.'
+        elif any(
+            song_name != BREAK_SENTINEL and song_name not in allowed_song_names
+            for song_name in song_names
+        ):
+            error = 'Only Ready to Play songs can be added to this setlist.'
         else:
             seen = set()
             deduped = []
@@ -1627,7 +1907,7 @@ def setlist_edit(request, setlist_id: int):
 
 @login_required
 def setlist_delete(request, setlist_id: int):
-    sl = get_object_or_404(Setlist, pk=setlist_id)
+    sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
     if sl.owner != request.user and not request.user.is_staff:
         raise Http404
     if request.method == 'POST':
@@ -1637,7 +1917,7 @@ def setlist_delete(request, setlist_id: int):
 
 @login_required
 def setlist_player(request, setlist_id: int):
-    sl = get_object_or_404(Setlist, pk=setlist_id)
+    sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
     entries = list(sl.entries.order_by('position'))
 
     setlist_items = []
@@ -1674,7 +1954,7 @@ def setlist_player(request, setlist_id: int):
             category for category in TRACK_CATEGORY_ORDER
             if category in present_categories
         ],
-        'selected_instruments': _playback_categories(request.user),
+        'selected_instruments': _playback_categories(request.user, request.active_group),
     })
 
 
@@ -1682,7 +1962,7 @@ def setlist_player(request, setlist_id: int):
 def setlist_export(request, setlist_id: int):
     """Export a setlist as a PDF with one page per set (split by breaks)."""
     from .export import render_setlist_pdf
-    sl = get_object_or_404(Setlist, pk=setlist_id)
+    sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
     entries = list(sl.entries.order_by('position'))
 
     song_data = []
@@ -1716,7 +1996,7 @@ def setlist_export(request, setlist_id: int):
 def setlist_export_midi(request, setlist_id: int):
     """Export a setlist as a MIDI file with tempo map and markers."""
     from .export import render_setlist_midi
-    sl = get_object_or_404(Setlist, pk=setlist_id)
+    sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
     entries = list(sl.entries.order_by('position'))
 
     song_data = []
@@ -1748,6 +2028,7 @@ def setlist_export_midi(request, setlist_id: int):
 
 @login_required
 def master_audio(request, song_name: str):
+    _require_group_song(request, song_name)
     song_path = _safe_song_path(song_name)
     master = _find_master_track(song_path)
     if not master:
@@ -1761,6 +2042,7 @@ def master_audio(request, song_name: str):
 @login_required
 def master_waveform(request, song_name: str):
     """Reuses the same waveform logic but for the master track specifically."""
+    _require_group_song(request, song_name)
     song_path = _safe_song_path(song_name)
     master = _find_original_master_track(song_path)
     if not master:
@@ -1771,6 +2053,7 @@ def master_waveform(request, song_name: str):
 @login_required
 def song_info_api(request, song_name: str):
     """Return info.json + lyrics.lrc data as JSON for a given song."""
+    _require_group_song(request, song_name)
     song_path = _safe_song_path(song_name)
     info = _load_song_info(song_path)
     lyrics = _load_lyrics(song_path)
@@ -1780,6 +2063,7 @@ def song_info_api(request, song_name: str):
 @login_required
 @require_POST
 def song_pitch_update(request, song_name: str):
+    _require_group_song(request, song_name)
     _safe_song_path(song_name)
     try:
         semitones = int(request.POST.get('semitones', '0'))
@@ -1819,6 +2103,7 @@ def song_pitch_update(request, song_name: str):
 
 @login_required
 def song_pitch_status(request, song_name: str):
+    _require_group_song(request, song_name)
     _safe_song_path(song_name)
     job = PitchShiftJob.objects.filter(song_name=song_name).first()
     if not job:
@@ -1834,6 +2119,7 @@ def song_pitch_status(request, song_name: str):
 @login_required
 @require_POST
 def song_links_update(request, song_name: str):
+    _require_group_song(request, song_name)
     song_path = _safe_song_path(song_name)
     info = _load_song_info(song_path) or {}
 
@@ -1996,6 +2282,7 @@ def song_delete(request, song_name: str):
 
     if song_path.exists():
         shutil.rmtree(song_path)
+    GroupSong.objects.filter(song_name=song_name).delete()
     PitchShiftJob.objects.filter(song_name=song_name).delete()
 
     return redirect('song_list')

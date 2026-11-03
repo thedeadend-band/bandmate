@@ -1,0 +1,14 @@
+{% extends "player/base.html" %}
+{% block title %}{% if group %}Edit{% else %}Add{% endif %} Group – BandMate{% endblock %}
+{% block content %}
+<a href="{% url 'admin_groups' %}" class="back-link">Back to Groups</a>
+<div class="wiz-content"><h1 class="page-title">{% if group %}Edit {{ group.name }}{% else %}Add Group{% endif %}</h1>
+{% if error %}<div class="error-message">{{ error }}</div>{% endif %}
+<form method="post" enctype="multipart/form-data" class="wiz-form">{% csrf_token %}
+  <div class="form-group"><label for="group-name">Name</label><input id="group-name" class="form-input" name="name" value="{{ group.name|default:'' }}" required></div>
+  <div class="form-group"><label for="group-logo">Logo</label><input id="group-logo" type="file" name="logo" accept="image/*" class="form-input"></div>
+  <div class="form-group"><label for="group-colors">Color Scheme</label><select id="group-colors" name="color_scheme" class="form-input">{% for value,label in color_schemes %}<option value="{{ value }}"{% if selected_scheme == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="form-group"><label>Members</label><div class="member-checklist">{% for member in users %}<label class="checkbox-label"><input type="checkbox" name="members" value="{{ member.pk }}"{% if member.pk in selected_ids %} checked{% endif %}>{{ member.username }}</label>{% endfor %}</div></div>
+  <button type="submit" class="btn btn-add">Save Group</button>
+</form></div>
+{% endblock %}

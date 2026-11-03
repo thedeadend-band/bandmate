@@ -8,6 +8,9 @@ urlpatterns = [
     path('', views.song_list, name='song_list'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
+    path('groups/select/', views.group_select, name='group_select'),
+    path('groups/<int:group_id>/logo/', views.group_logo, name='group_logo'),
+    path('songs/available/', views.group_songs, name='group_songs'),
     path('songs/upload/', views.song_upload, name='song_upload'),
     # New Song Wizard (must come before songs/<str:song_name>/ to avoid matching "new" as a song name)
     path('songs/new/', wizard_views.wizard_start, name='wizard_start'),
@@ -17,6 +20,9 @@ urlpatterns = [
     path('songs/<str:song_name>/edit/', views.song_edit, name='song_edit'),
     path('songs/<str:song_name>/download/', views.song_download_zip, name='song_download_zip'),
     path('songs/<str:song_name>/pitch/', views.song_pitch_update, name='song_pitch_update'),
+    path('songs/<str:song_name>/readiness/', views.song_readiness_update, name='song_readiness_update'),
+    path('songs/<str:song_name>/status/', views.song_status_update, name='song_status_update'),
+    path('api/celebrations/<int:group_song_id>/dismiss/', views.celebration_dismiss, name='celebration_dismiss'),
     path('api/songs/<str:song_name>/pitch/status/', views.song_pitch_status, name='song_pitch_status'),
     path('songs/<str:song_name>/', views.song_player, name='song_player'),
     path(
@@ -72,6 +78,9 @@ urlpatterns = [
     # Admin console
     path('admin-console/', views.admin_users, name='admin_users'),
     path('admin-console/settings/', views.admin_settings, name='admin_settings'),
+    path('admin-console/groups/', views.admin_groups, name='admin_groups'),
+    path('admin-console/groups/new/', views.admin_group_edit, name='admin_group_add'),
+    path('admin-console/groups/<int:group_id>/', views.admin_group_edit, name='admin_group_edit'),
     path('admin-console/add/', views.admin_user_add, name='admin_user_add'),
     path('admin-console/<int:user_id>/edit/', views.admin_user_edit, name='admin_user_edit'),
     path('admin-console/<int:user_id>/delete/', views.admin_user_delete, name='admin_user_delete'),

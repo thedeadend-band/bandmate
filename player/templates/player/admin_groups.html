@@ -1,0 +1,13 @@
+{% extends "player/base.html" %}
+{% block title %}Admin – Groups{% endblock %}
+{% block content %}
+<div class="admin-header"><h1 class="page-title">Groups</h1><a href="{% url 'admin_group_add' %}" class="btn btn-add">Add Group</a></div>
+<div class="admin-list">
+{% for group in groups %}
+  <div class="admin-row">
+    <div class="admin-row-info"><span class="admin-row-name">{{ group.name }}</span><span class="queue-time">{{ group.memberships.count }} members</span></div>
+    <a href="{% url 'admin_group_edit' group.pk %}" class="btn btn-secondary">Edit</a>
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

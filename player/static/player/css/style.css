@@ -84,6 +84,29 @@
   color-scheme: light;
 }
 
+[data-group-theme="green"] { --accent-blue: #28a86b; --accent-purple: #6fcf97; }
+[data-group-theme="red"] { --accent-blue: #e05263; --accent-purple: #ff8796; }
+[data-group-theme="gold"] { --accent-blue: #d59b20; --accent-purple: #f0c75e; }
+[data-group-theme="teal"] { --accent-blue: #159d9a; --accent-purple: #56c7c4; }
+[data-group-theme="violet"] { --accent-blue: #865bd8; --accent-purple: #b18bea; }
+[data-group-theme="pink"] { --accent-blue: #d94f96; --accent-purple: #ef8abd; }
+[data-group-theme="cyan"] { --accent-blue: #168eb5; --accent-purple: #55bedf; }
+[data-group-theme="lime"] { --accent-blue: #6f9f25; --accent-purple: #a0c85d; }
+[data-group-theme="coral"] { --accent-blue: #db6b52; --accent-purple: #ee9b87; }
+[data-group-theme="indigo"] { --accent-blue: #5368cf; --accent-purple: #8291e4; }
+[data-group-theme="mono"] { --accent-blue: #8b8f98; --accent-purple: #b8bbc2; }
+[data-theme="light"][data-group-theme="green"] { --accent-blue: #16844f; --accent-purple: #2f9e67; }
+[data-theme="light"][data-group-theme="red"] { --accent-blue: #c43d4f; --accent-purple: #d85c6c; }
+[data-theme="light"][data-group-theme="gold"] { --accent-blue: #a66f00; --accent-purple: #b8891f; }
+[data-theme="light"][data-group-theme="teal"] { --accent-blue: #087c79; --accent-purple: #249b98; }
+[data-theme="light"][data-group-theme="violet"] { --accent-blue: #6f40bd; --accent-purple: #8a60ce; }
+[data-theme="light"][data-group-theme="pink"] { --accent-blue: #b93679; --accent-purple: #ce5993; }
+[data-theme="light"][data-group-theme="cyan"] { --accent-blue: #087698; --accent-purple: #258eae; }
+[data-theme="light"][data-group-theme="lime"] { --accent-blue: #557d14; --accent-purple: #729d2d; }
+[data-theme="light"][data-group-theme="coral"] { --accent-blue: #b64d36; --accent-purple: #cb705d; }
+[data-theme="light"][data-group-theme="indigo"] { --accent-blue: #4054b5; --accent-purple: #6173cc; }
+[data-theme="light"][data-group-theme="mono"] { --accent-blue: #62666f; --accent-purple: #7a7f89; }
+
 html { font-size: 16px; }
 
 body {
@@ -165,6 +188,17 @@ textarea {
   align-items: center;
   gap: 8px;
 }
+
+.navbar-group-logo { width: 28px; height: 28px; object-fit: contain; }
+.group-switch { color: var(--text-secondary); font-size: 12px; text-decoration: none; }
+.celebration-stack { padding: 8px 16px 0; }
+.celebration-banner { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--success-bg); border:1px solid var(--accent-green); border-radius:6px; }
+.celebration-banner a { color:var(--accent-blue); }
+.celebration-dismiss { margin-left:auto; border:0; background:none; color:var(--text-secondary); font-size:22px; cursor:pointer; }
+.group-select-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; margin-top:20px; }
+.group-select-card { width:100%; min-height:130px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border); border-radius:8px; cursor:pointer; }
+.group-select-card img { width:64px; height:64px; object-fit:contain; }
+.member-checklist { display:flex; flex-wrap:wrap; gap:10px 18px; }
 
 .navbar-right {
   margin-left: auto;
@@ -433,6 +467,23 @@ textarea {
   gap: 14px;
   min-height: 64px;
 }
+
+.catalog-grid .song-card { padding: 10px 14px; min-height: 58px; }
+.catalog-grid .song-icon { width: 34px; height: 34px; }
+.catalog-grid .song-info h3 { font-size: 0.95rem; }
+.catalog-sort-form { display:flex; gap:6px; align-items:center; }
+.catalog-sort-form .form-input { width:auto; min-width:110px; padding:7px 9px; }
+.catalog-status { font-weight:700; }
+.status-on_deck { color:var(--accent-yellow); }
+.status-active { color:var(--accent-green); }
+.status-retired { color:var(--text-secondary); }
+.readiness-panel { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; padding:12px 0; border-bottom:1px solid var(--border); }
+.readiness-panel > div:first-child { display:flex; flex-direction:column; gap:2px; }
+.readiness-panel > div:first-child span { color:var(--text-secondary); font-size:12px; }
+.readiness-members { display:flex; flex-wrap:wrap; gap:6px; }
+.readiness-member { padding:3px 7px; border-radius:4px; background:var(--error-bg); color:var(--text-secondary); font-size:12px; }
+.readiness-member.ready { background:var(--success-bg); color:var(--accent-green); }
+.readiness-actions { margin-left:auto; display:flex; gap:8px; }
 
 .song-icon {
   color: var(--accent-purple);

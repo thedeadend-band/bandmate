@@ -6,12 +6,13 @@
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <polyline points="15 18 9 12 15 6"/>
   </svg>
-  Back to Songs
+  Back to Catalog
 </a>
 
 <div class="admin-header">
   <h1 class="page-title">Users</h1>
   <div class="admin-header-actions">
+    <a href="{% url 'admin_groups' %}" class="btn btn-secondary">Groups</a>
     <a href="{% url 'admin_settings' %}" class="btn btn-secondary">Site Settings</a>
     <a href="{% url 'admin_user_add' %}" class="btn btn-add">+ Add User</a>
   </div>

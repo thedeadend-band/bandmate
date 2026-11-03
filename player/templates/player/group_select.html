@@ -1,0 +1,23 @@
+{% extends "player/base.html" %}
+{% block title %}Select Group – BandMate{% endblock %}
+{% block content %}
+<div class="group-select-wrap">
+  <h1 class="page-title">Select Group</h1>
+  {% if groups %}
+  <div class="group-select-grid">
+    {% for group in groups %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="group_id" value="{{ group.pk }}">
+      <button type="submit" class="group-select-card">
+        {% if group.logo %}<img src="{% url 'group_logo' group.pk %}" alt="">{% endif %}
+        <strong>{{ group.name }}</strong>
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state"><h3>No groups assigned</h3><p>Ask an administrator to add you to a group.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

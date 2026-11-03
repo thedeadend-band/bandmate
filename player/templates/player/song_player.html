@@ -49,6 +49,23 @@
 <h1 class="song-title">{{ song_name }}</h1>
 {% endif %}
 
+<section class="readiness-panel">
+  <div><strong>{{ group_song.get_status_display }}</strong>{% if group_song.ready_date %}<span>Ready since {{ group_song.ready_date|date:"F j, Y" }}</span>{% endif %}</div>
+  {% if not user.is_staff %}
+  <form method="post" action="{% url 'song_readiness_update' song_name %}">{% csrf_token %}
+    <label class="checkbox-label"><input type="checkbox" name="is_ready" value="1"{% if user_ready %} checked{% endif %} onchange="this.form.submit()"> I have learned my part</label>
+  </form>
+  {% endif %}
+  <div class="readiness-members">{% for row in readiness_rows %}<span class="readiness-member{% if row.is_ready %} ready{% endif %}">{{ row.user.username }}: {% if row.is_ready %}Ready{% else %}Learning{% endif %}</span>{% endfor %}</div>
+  <div class="readiness-actions">
+    {% if group_song.status != 'retired' %}<form method="post" action="{% url 'song_status_update' song_name %}" onsubmit="return confirm('Retire this song?');">{% csrf_token %}<input type="hidden" name="status" value="retired"><button class="btn btn-secondary" type="submit">Retire</button></form>{% endif %}
+    {% if user.is_staff %}
+      {% if group_song.status != 'active' %}<form method="post" action="{% url 'song_status_update' song_name %}">{% csrf_token %}<input type="hidden" name="status" value="active"><button class="btn btn-add" type="submit">Mark Ready to Play</button></form>{% endif %}
+      {% if group_song.status != 'on_deck' %}<form method="post" action="{% url 'song_status_update' song_name %}">{% csrf_token %}<input type="hidden" name="status" value="on_deck"><button class="btn btn-secondary" type="submit">Move to On-Deck</button></form>{% endif %}
+    {% endif %}
+  </div>
+</section>
+
 <section class="pitch-control" aria-labelledby="pitch-control-title">
   <div class="pitch-control-copy">
     <strong id="pitch-control-title">Playback pitch</strong>

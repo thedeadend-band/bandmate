@@ -1,0 +1,18 @@
+{% extends "player/base.html" %}
+{% block title %}Add Songs – BandMate{% endblock %}
+{% block content %}
+<div class="section-header"><h1 class="page-title">Songs</h1></div>
+{% if available_songs %}
+<div class="songs-grid compact-song-grid">
+  {% for song in available_songs %}
+  <div class="song-card">
+    <div class="song-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+    <div class="song-info"><h3>{% if song.artist %}{{ song.artist }} – {% endif %}{{ song.title }}</h3><span class="track-count">{{ song.track_count }} tracks</span></div>
+    <form method="post">{% csrf_token %}<input type="hidden" name="song_name" value="{{ song.name }}"><button class="btn btn-add" type="submit">Add</button></form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state"><h3>All songs have been added</h3><p>New Song Wizard additions will appear here.</p></div>
+{% endif %}
+{% endblock %}
