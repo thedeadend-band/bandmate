@@ -160,6 +160,65 @@ class GroupCatalogTests(TestCase):
         self.assertContains(response, 'Primary Set')
         self.assertNotContains(response, 'Secondary Set')
 
+    def test_catalog_remove_only_removes_song_from_active_group(self):
+        primary_song = GroupSong.objects.create(
+            group=self.primary, song_name='Shared Song', status='active')
+        primary_song_id = primary_song.pk
+        GroupSong.objects.create(
+            group=self.secondary, song_name='Shared Song', status='active')
+        SongReadiness.objects.create(
+            group_song=primary_song, user=self.alice, is_ready=True)
+        self.client.force_login(self.admin)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.post(reverse(
+            'catalog_song_remove', kwargs={'song_name': 'Shared Song'}))
+
+        self.assertRedirects(response, reverse('song_list'))
+        self.assertFalse(GroupSong.objects.filter(
+            group=self.primary, song_name='Shared Song').exists())
+        self.assertTrue(GroupSong.objects.filter(
+            group=self.secondary, song_name='Shared Song').exists())
+        self.assertFalse(SongReadiness.objects.filter(
+            group_song_id=primary_song_id).exists())
+
+    def test_catalog_remove_rejects_song_used_by_group_setlist(self):
+        GroupSong.objects.create(
+            group=self.primary, song_name='Setlist Song', status='active')
+        setlist = Setlist.objects.create(
+            group=self.primary, owner=self.alice, name='Current Set')
+        SetlistEntry.objects.create(
+            setlist=setlist, song_name='Setlist Song', position=0)
+        self.client.force_login(self.admin)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.post(reverse(
+            'catalog_song_remove', kwargs={'song_name': 'Setlist Song'}))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(GroupSong.objects.filter(
+            group=self.primary, song_name='Setlist Song').exists())
+
+    @patch('player.views._get_available_songs')
+    def test_permanent_delete_is_only_visible_to_admins(self, available_songs_mock):
+        available_songs_mock.return_value = [{
+            'name': 'Available Song', 'artist': 'Artist',
+            'title': 'Available Song', 'track_count': 4,
+        }]
+        self.client.force_login(self.alice)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.get(reverse('group_songs'))
+        self.assertNotContains(response, 'Delete permanently')
+        response = self.client.post(reverse(
+            'song_delete', kwargs={'song_name': 'Available Song'}))
+        self.assertEqual(response.status_code, 404)
+
+        self.client.force_login(self.admin)
+        self.select_group(self.client, self.primary)
+        response = self.client.get(reverse('group_songs'))
+        self.assertContains(response, 'Delete permanently')
+
     def test_setlists_are_sorted_by_date_descending_with_undated_last(self):
         Setlist.objects.create(
             group=self.primary, owner=self.alice, name='Undated')

@@ -2388,10 +2388,36 @@ def song_upload(request):
 
 
 @_staff_required
-def song_delete(request, song_name: str):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
+@require_POST
+def catalog_song_remove(request, song_name: str):
+    group_song = get_object_or_404(
+        GroupSong, group=request.active_group, song_name=song_name)
 
+    if PitchShiftJob.objects.filter(
+        song_name=song_name, status__in=('queued', 'processing'),
+    ).exists():
+        return JsonResponse(
+            {'error': 'Cannot remove while pitch generation is running.'},
+            status=400,
+        )
+
+    if SetlistEntry.objects.filter(
+        setlist__group=request.active_group,
+        song_name=song_name,
+        is_break=False,
+    ).exists():
+        return JsonResponse(
+            {'error': 'Cannot remove: song is used in one or more setlists.'},
+            status=400,
+        )
+
+    group_song.delete()
+    return redirect('song_list')
+
+
+@_staff_required
+@require_POST
+def song_delete(request, song_name: str):
     song_path = _safe_song_path(song_name)
 
     if PitchShiftJob.objects.filter(
@@ -2414,7 +2440,7 @@ def song_delete(request, song_name: str):
     GroupSong.objects.filter(song_name=song_name).delete()
     PitchShiftJob.objects.filter(song_name=song_name).delete()
 
-    return redirect('song_list')
+    return redirect('group_songs')
 
 
 # ---------------------------------------------------------------------------
