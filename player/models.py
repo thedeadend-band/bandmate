@@ -114,6 +114,8 @@ class SongWizard(models.Model):
     title = models.CharField(max_length=255, blank=True, default='')
     artist = models.CharField(max_length=255, blank=True, default='')
     tempo = models.IntegerField(null=True, blank=True)
+    click_track_multiplier = models.PositiveSmallIntegerField(
+        choices=((1, '1x'), (2, '2x')), default=1)
     key = models.CharField(max_length=20, blank=True, default='')
     time_signature = models.CharField(max_length=10, default='4/4')
 
@@ -252,6 +254,8 @@ class StemSeparationJob(models.Model):
     staging_dir = models.CharField(max_length=500)
     song_dir = models.CharField(max_length=500, blank=True, default='')
     tempo = models.IntegerField(null=True, blank=True)
+    click_track_multiplier = models.PositiveSmallIntegerField(
+        choices=((1, '1x'), (2, '2x')), default=1)
     key = models.CharField(max_length=20, blank=True, default='')
     time_signature = models.CharField(max_length=10, default='4/4')
     lyrics_content = models.TextField(blank=True, default='')

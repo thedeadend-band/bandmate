@@ -74,6 +74,21 @@
     </div>
 
     <div class="form-group">
+      <label>Click &amp; MIDI Rate</label>
+      <div class="tempo-rate-control" role="radiogroup" aria-label="Click and MIDI rate">
+        <label>
+          <input type="radio" name="click_track_multiplier" value="1"{% if wizard.click_track_multiplier != 2 %} checked{% endif %}>
+          <span>1x</span>
+        </label>
+        <label>
+          <input type="radio" name="click_track_multiplier" value="2"{% if wizard.click_track_multiplier == 2 %} checked{% endif %}>
+          <span>2x</span>
+        </label>
+      </div>
+      <p class="form-hint">Click &amp; MIDI: <span id="click-rate-preview">--</span> BPM</p>
+    </div>
+
+    <div class="form-group">
       <label for="wiz-key">Key <span class="required">*</span></label>
       <input type="text" id="wiz-key" name="key" value="{{ wizard.key }}" placeholder="e.g. G major" autocomplete="off" required>
     </div>
@@ -119,9 +134,20 @@
   var tempo = document.getElementById('wiz-tempo');
   var key = document.getElementById('wiz-key');
   var btn = document.getElementById('next-btn');
-  function check() { btn.disabled = !(tempo.value.trim() && key.value.trim()); }
+  var clickPreview = document.getElementById('click-rate-preview');
+  var rateInputs = document.querySelectorAll('input[name="click_track_multiplier"]');
+  function updateClickRate() {
+    var selected = document.querySelector('input[name="click_track_multiplier"]:checked');
+    var bpm = parseInt(tempo.value, 10);
+    clickPreview.textContent = bpm && selected ? bpm * parseInt(selected.value, 10) : '--';
+  }
+  function check() {
+    btn.disabled = !(tempo.value.trim() && key.value.trim());
+    updateClickRate();
+  }
   tempo.addEventListener('input', check);
   key.addEventListener('input', check);
+  rateInputs.forEach(function(input) { input.addEventListener('change', updateClickRate); });
   check();
 
   var lookupForm = document.getElementById('lookup-form');

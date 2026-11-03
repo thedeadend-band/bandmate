@@ -20,6 +20,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from .tempo import click_bpm
+
 _DIR = os.path.dirname(__file__)
 ICON_DIR = os.path.join(_DIR, 'export_icons')
 FONT_DIR = os.path.join(_DIR, 'export_fonts')
@@ -321,7 +323,10 @@ def render_setlist_midi(setlist, song_data):
 
         title = _song_title(item)
         info = item.get('info') or {}
-        bpm = info.get('tempo', DEFAULT_BPM)
+        bpm = click_bpm(
+            info.get('tempo', DEFAULT_BPM),
+            info.get('click_track_multiplier', 1),
+        ) or DEFAULT_BPM
         tempo_us = mido.bpm2tempo(bpm)
 
         tempo_track.append(mido.MetaMessage(

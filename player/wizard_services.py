@@ -17,6 +17,8 @@ import urllib.request
 from pathlib import Path
 from typing import Optional, Tuple
 
+from .tempo import click_bpm
+
 logger = logging.getLogger(__name__)
 
 USER_AGENT = 'BandMate SongWizard/1.0'
@@ -479,14 +481,28 @@ def detect_beats(audio_path: str, wizard_model=None) -> list[float]:
             wizard_model.bg_task_message = 'Detecting beats...'
             wizard_model.save(update_fields=['bg_task_progress', 'bg_task_message'])
 
-        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+        reference_bpm = getattr(wizard_model, 'tempo', None)
+        if reference_bpm:
+            tempo = float(reference_bpm)
+            _, beat_frames = librosa.beat.beat_track(
+                y=y, sr=sr, bpm=tempo)
+        else:
+            tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
         beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
         beat_times = [round(t, 4) for t in beat_times]
 
         if wizard_model:
             wizard_model.bg_task_status = 'done'
             wizard_model.bg_task_progress = 100
-            wizard_model.bg_task_message = f'Detected {len(beat_times)} beats (est. {int(tempo) if not hasattr(tempo, "__len__") else int(tempo[0])} BPM)'
+            tempo_value = (
+                int(tempo) if not hasattr(tempo, '__len__')
+                else int(tempo[0])
+            )
+            tempo_source = 'metadata reference' if reference_bpm else 'estimate'
+            wizard_model.bg_task_message = (
+                f'Detected {len(beat_times)} beats at {tempo_value} BPM '
+                f'({tempo_source})'
+            )
             wizard_model.detected_beats = beat_times
             wizard_model.adjusted_beats = beat_times
             wizard_model.save(update_fields=[
@@ -559,10 +575,10 @@ def get_quantization_timing(beat_times: list[float], target_bpm: int) -> dict:
     if target_bpm <= 0:
         raise ValueError('Target tempo must be greater than zero')
 
-    click_interval = 60.0 / target_bpm
+    target_interval = 60.0 / target_bpm
     timing = {
-        'click_interval': click_interval,
-        'audio_interval': click_interval,
+        'target_interval': target_interval,
+        'audio_interval': target_interval,
         'audio_bpm': float(target_bpm),
         'interval_multiplier': 1.0,
         'projected_span_ratio': 1.0,
@@ -575,7 +591,7 @@ def get_quantization_timing(beat_times: list[float], target_bpm: int) -> dict:
     if detected_span <= 0:
         return timing
 
-    projected_span = (len(beats) - 1) * click_interval
+    projected_span = (len(beats) - 1) * target_interval
     span_ratio = projected_span / detected_span
     timing['projected_span_ratio'] = span_ratio
 
@@ -584,14 +600,14 @@ def get_quantization_timing(beat_times: list[float], target_bpm: int) -> dict:
     multiplier = _tempo_octave_multiplier(span_ratio)
 
     timing['interval_multiplier'] = multiplier
-    timing['audio_interval'] = click_interval * multiplier
+    timing['audio_interval'] = target_interval * multiplier
     timing['audio_bpm'] = 60.0 / timing['audio_interval']
     return timing
 
 
 def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
                    time_sig_num: int = 4, intro_bars: int = 2,
-                   wizard_model=None) -> str:
+                   wizard_model=None, intro_bpm: int | None = None) -> str:
     """
     Quantize audio to a fixed tempo, prepend click intro silence.
 
@@ -616,10 +632,10 @@ def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
         channels = y.shape[0]
 
         timing = get_quantization_timing(beat_times, target_bpm)
-        click_interval = timing['click_interval']
         target_interval = timing['audio_interval']
+        intro_interval = 60.0 / (intro_bpm or target_bpm)
         intro_beats = time_sig_num * intro_bars
-        intro_duration = intro_beats * click_interval
+        intro_duration = intro_beats * intro_interval
         intro_samples = int(intro_duration * sr)
 
         if wizard_model:
@@ -766,6 +782,8 @@ def run_quantize_and_click(wizard_model) -> None:
         return
 
     bpm = wizard_model.tempo or 120
+    generated_click_bpm = int(click_bpm(
+        bpm, wizard_model.click_track_multiplier) or bpm)
     ts_parts = wizard_model.time_signature.split('/')
     time_sig_num = int(ts_parts[0]) if ts_parts else 4
 
@@ -789,9 +807,12 @@ staging = Path({str(staging)!r})
 master = staging / "Master.wav"
 beats = json.loads({beats_json!r})
 bpm = {bpm}
+click_bpm = {generated_click_bpm}
 time_sig_num = {time_sig_num}
 
-quantized_path = quantize_audio(str(master), beats, bpm, time_sig_num=time_sig_num, wizard_model=wiz)
+quantized_path = quantize_audio(
+    str(master), beats, bpm, time_sig_num=time_sig_num,
+    wizard_model=wiz, intro_bpm=click_bpm)
 import soundfile as _sf
 _master_info = _sf.info(quantized_path)
 duration = _master_info.duration
@@ -807,11 +828,13 @@ quantized_stems = []
 for stem in all_stems:
     wiz.bg_task_message = f"Quantizing {{stem.stem}}..."
     wiz.save(update_fields=["bg_task_message"])
-    q_path = quantize_audio(str(stem), beats, bpm, time_sig_num=time_sig_num)
+    q_path = quantize_audio(
+        str(stem), beats, bpm, time_sig_num=time_sig_num,
+        intro_bpm=click_bpm)
     quantized_stems.append((stem, Path(q_path)))
 
 # Do not replace any source until every Rubber Band operation has succeeded.
-generate_click_track(str(staging), bpm, duration, time_sig_num=time_sig_num, sr=master_sr, start_offset=pre_beat_offset)
+generate_click_track(str(staging), click_bpm, duration, time_sig_num=time_sig_num, sr=master_sr, start_offset=pre_beat_offset)
 backup = staging / "Master_original.wav"
 shutil.move(str(master), str(backup))
 shutil.move(quantized_path, str(master))
@@ -1431,6 +1454,7 @@ def _finalize_song(job) -> None:
         'title': job.title,
         'artist': job.artist,
         'tempo': job.tempo,
+        'click_track_multiplier': job.click_track_multiplier,
         'key': job.key,
         'time_signature': job.time_signature,
         'lyric_offset': job.lyric_offset_secs,

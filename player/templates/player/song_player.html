@@ -154,7 +154,7 @@ function confirmPitchChange(form) {
     {% if song_info.tempo %}
     <span class="info-chip">
       <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 20h16L12 2z"/><line x1="12" y1="8" x2="17" y2="3"/></svg>
-      {{ song_info.tempo }} BPM
+      {{ song_info.tempo }} BPM{% if song_info.click_track_multiplier == 2 %} &middot; 2x click{% endif %}
     </span>
     {% endif %}
     {% if song_info.key %}

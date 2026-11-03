@@ -216,7 +216,10 @@ class SetlistPlayer {
 
     if (info.tempo || info.key) {
       html += '<div class="info-row">';
-      if (info.tempo) html += `<span class="info-chip">${PP_ICONS.tempo} ${info.tempo} BPM</span>`;
+      if (info.tempo) {
+        const clickRate = info.click_track_multiplier === 2 ? ' · 2x click' : '';
+        html += `<span class="info-chip">${PP_ICONS.tempo} ${info.tempo} BPM${clickRate}</span>`;
+      }
       if (info.key) html += `<span class="info-chip">${PP_ICONS.key} ${info.key}</span>`;
       html += '</div>';
     }

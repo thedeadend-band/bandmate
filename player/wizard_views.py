@@ -19,6 +19,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from .models import SiteSettings, SongWizard, StemSeparationJob
+from .tempo import click_bpm, normalize_click_multiplier
 from .wizard_services import (
     lookup_tempo_key, youtube_search, start_youtube_download,
     start_beat_detection, generate_waveform_peaks, get_audio_duration,
@@ -174,6 +175,8 @@ def step_tempo_key(request, wiz):
 
         elif action == 'next':
             tempo_str = request.POST.get('tempo', '').strip()
+            click_multiplier = normalize_click_multiplier(
+                request.POST.get('click_track_multiplier', 1))
             key_val = request.POST.get('key', '').strip()
             time_sig = request.POST.get('time_signature', '4/4').strip()
 
@@ -189,10 +192,14 @@ def step_tempo_key(request, wiz):
                 errors['key'] = 'Key is required.'
 
             if not errors:
+                wiz.click_track_multiplier = click_multiplier
                 wiz.key = key_val
                 wiz.time_signature = time_sig
                 wiz.current_step = 'lyrics'
-                wiz.save(update_fields=['tempo', 'key', 'time_signature', 'current_step'])
+                wiz.save(update_fields=[
+                    'tempo', 'click_track_multiplier', 'key',
+                    'time_signature', 'current_step',
+                ])
                 return redirect('wizard_step', wizard_id=wiz.pk, step_name='lyrics')
 
         elif action == 'back':
@@ -314,6 +321,7 @@ def step_track_source(request, wiz):
                             staging_dir=wiz.staging_dir,
                             song_dir=str(song_dir),
                             tempo=wiz.tempo,
+                            click_track_multiplier=wiz.click_track_multiplier,
                             key=wiz.key,
                             time_signature=wiz.time_signature,
                             lyrics_content=wiz.lyrics_content,
@@ -473,11 +481,14 @@ def step_quantize(request, wiz):
     has_click = staging and ((staging / 'Click.wav').exists() or (staging / 'Click.ogg').exists()) if staging else False
     timing = get_quantization_timing(
         wiz.adjusted_beats or wiz.detected_beats or [], wiz.tempo or 120)
+    generated_click_bpm = click_bpm(
+        wiz.tempo or 120, wiz.click_track_multiplier) or 120
     return render(request, 'player/wizard/quantize.html', _wizard_context(wiz, 'quantize', {
         'errors': errors,
         'has_click': has_click,
         'duration_protection_active': timing['interval_multiplier'] != 1.0,
         'audio_quantize_bpm': round(timing['audio_bpm']),
+        'click_bpm': round(generated_click_bpm),
     }))
 
 
@@ -536,6 +547,7 @@ def step_stem_separation(request, wiz):
                     staging_dir=wiz.staging_dir,
                     song_dir=str(song_dir),
                     tempo=wiz.tempo,
+                    click_track_multiplier=wiz.click_track_multiplier,
                     key=wiz.key,
                     time_signature=wiz.time_signature,
                     lyrics_content=wiz.lyrics_content,
@@ -569,6 +581,7 @@ def step_stem_separation(request, wiz):
                     staging_dir=wiz.staging_dir,
                     song_dir=str(song_dir),
                     tempo=wiz.tempo,
+                    click_track_multiplier=wiz.click_track_multiplier,
                     key=wiz.key,
                     time_signature=wiz.time_signature,
                     lyrics_content=wiz.lyrics_content,
@@ -631,7 +644,8 @@ def step_lyrics(request, wiz):
             wiz.save(update_fields=['lyrics_content', 'lyric_offset_secs', 'current_step'])
             return redirect('wizard_step', wizard_id=wiz.pk, step_name='band_details')
 
-    bpm = wiz.tempo or 120
+    bpm = click_bpm(
+        wiz.tempo or 120, wiz.click_track_multiplier) or 120
     ts_parts = wiz.time_signature.split('/')
     time_sig_num = int(ts_parts[0]) if ts_parts else 4
     auto_offset = round(time_sig_num * 2 * (60.0 / bpm), 3)

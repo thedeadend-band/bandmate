@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from datetime import date
 
 from django.contrib.auth.models import User
@@ -43,8 +43,52 @@ class WizardNavigationTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_metadata_step_saves_click_multiplier_separately(self):
+        wizard = SongWizard.objects.create(
+            created_by=self.admin, current_step='tempo_key',
+            title='Would?', artist='Alice In Chains')
+
+        response = self.client.post(
+            reverse('wizard_step', args=[wizard.pk, 'tempo_key']),
+            {
+                'action': 'next', 'tempo': '99',
+                'click_track_multiplier': '2',
+                'key': 'F# minor', 'time_signature': '4/4',
+            },
+        )
+
+        wizard.refresh_from_db()
+        self.assertRedirects(
+            response,
+            reverse('wizard_step', args=[wizard.pk, 'lyrics']),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(wizard.tempo, 99)
+        self.assertEqual(wizard.click_track_multiplier, 2)
+
 
 class QuantizationTimingTests(TestCase):
+    def test_beat_detection_uses_song_tempo_as_reference(self):
+        from .wizard_services import detect_beats
+
+        librosa = Mock()
+        librosa.load.return_value = ([0.0, 0.0], 22050)
+        librosa.beat.beat_track.return_value = (99.0, [1, 2, 3])
+        beat_times = Mock()
+        beat_times.tolist.return_value = [0.5, 1.0, 1.5]
+        librosa.frames_to_time.return_value = beat_times
+        wizard = Mock(tempo=99)
+
+        with patch.dict('sys.modules', {'librosa': librosa}):
+            detected = detect_beats('Master.wav', wizard)
+
+        self.assertEqual(detected, [0.5, 1.0, 1.5])
+        self.assertEqual(librosa.beat.beat_track.call_args.kwargs['bpm'], 99.0)
+        self.assertEqual(
+            wizard.bg_task_message,
+            'Detected 3 beats at 99 BPM (metadata reference)',
+        )
+
     def test_double_tempo_preserves_audio_beat_interval(self):
         from .wizard_services import get_quantization_timing
 
@@ -53,7 +97,7 @@ class QuantizationTimingTests(TestCase):
         self.assertEqual(timing['interval_multiplier'], 2.0)
         self.assertAlmostEqual(timing['audio_interval'], 0.5)
         self.assertAlmostEqual(timing['audio_bpm'], 120)
-        self.assertAlmostEqual(timing['click_interval'], 0.25)
+        self.assertAlmostEqual(timing['target_interval'], 0.25)
 
     def test_half_tempo_preserves_audio_beat_interval(self):
         from .wizard_services import get_quantization_timing
@@ -63,7 +107,7 @@ class QuantizationTimingTests(TestCase):
         self.assertEqual(timing['interval_multiplier'], 0.5)
         self.assertAlmostEqual(timing['audio_interval'], 0.5)
         self.assertAlmostEqual(timing['audio_bpm'], 120)
-        self.assertAlmostEqual(timing['click_interval'], 1.0)
+        self.assertAlmostEqual(timing['target_interval'], 1.0)
 
     def test_normal_tempo_adjustment_is_not_overridden(self):
         from .wizard_services import get_quantization_timing
@@ -73,6 +117,31 @@ class QuantizationTimingTests(TestCase):
         self.assertEqual(timing['interval_multiplier'], 1.0)
         self.assertAlmostEqual(timing['audio_interval'], 0.5)
         self.assertAlmostEqual(timing['audio_bpm'], 120)
+
+    def test_click_multiplier_does_not_change_song_tempo(self):
+        from .tempo import click_bpm
+
+        self.assertEqual(click_bpm(99, 2), 198)
+
+    def test_midi_export_applies_click_multiplier(self):
+        import mido
+        from types import SimpleNamespace
+        from .export import render_setlist_midi
+
+        midi = render_setlist_midi(
+            SimpleNamespace(name='Tempo Test'),
+            [{
+                'song_name': 'Would?',
+                'info': {'tempo': 99, 'click_track_multiplier': 2},
+            }],
+        )
+        parsed = mido.MidiFile(file=midi)
+        tempo_message = next(
+            message for message in parsed.tracks[0]
+            if message.type == 'set_tempo'
+        )
+
+        self.assertAlmostEqual(mido.tempo2bpm(tempo_message.tempo), 198, places=2)
 
 
 class AudioJobQueueTests(TestCase):

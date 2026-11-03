@@ -253,6 +253,44 @@ textarea {
   color: var(--accent-blue);
 }
 
+.tempo-rate-control {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+.tempo-rate-control label { cursor: pointer; }
+
+.tempo-rate-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tempo-rate-control span {
+  min-width: 58px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.tempo-rate-control input:checked + span {
+  background: var(--accent-blue);
+  color: #fff;
+}
+
+.tempo-rate-control input:focus-visible + span {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
 /* ---- Navbar ----------------------------------------------------------- */
 
 .navbar {
