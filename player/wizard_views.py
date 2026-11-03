@@ -22,7 +22,7 @@ from .models import SiteSettings, SongWizard, StemSeparationJob
 from .wizard_services import (
     lookup_tempo_key, youtube_search, start_youtube_download,
     start_beat_detection, generate_waveform_peaks, get_audio_duration,
-    start_quantize, is_demucs_available, search_lyrics,
+    start_quantize, get_quantization_timing, is_demucs_available, search_lyrics,
     start_queue_worker,
 )
 
@@ -471,9 +471,13 @@ def step_quantize(request, wiz):
                 errors['quantize'] = 'Run quantization first.'
 
     has_click = staging and ((staging / 'Click.wav').exists() or (staging / 'Click.ogg').exists()) if staging else False
+    timing = get_quantization_timing(
+        wiz.adjusted_beats or wiz.detected_beats or [], wiz.tempo or 120)
     return render(request, 'player/wizard/quantize.html', _wizard_context(wiz, 'quantize', {
         'errors': errors,
         'has_click': has_click,
+        'duration_protection_active': timing['interval_multiplier'] != 1.0,
+        'audio_quantize_bpm': round(timing['audio_bpm']),
     }))
 
 

@@ -44,6 +44,37 @@ class WizardNavigationTests(TestCase):
         )
 
 
+class QuantizationTimingTests(TestCase):
+    def test_double_tempo_preserves_audio_beat_interval(self):
+        from .wizard_services import get_quantization_timing
+
+        timing = get_quantization_timing([0.5, 1.0, 1.5, 2.0], 240)
+
+        self.assertEqual(timing['interval_multiplier'], 2.0)
+        self.assertAlmostEqual(timing['audio_interval'], 0.5)
+        self.assertAlmostEqual(timing['audio_bpm'], 120)
+        self.assertAlmostEqual(timing['click_interval'], 0.25)
+
+    def test_half_tempo_preserves_audio_beat_interval(self):
+        from .wizard_services import get_quantization_timing
+
+        timing = get_quantization_timing([0.5, 1.0, 1.5, 2.0], 60)
+
+        self.assertEqual(timing['interval_multiplier'], 0.5)
+        self.assertAlmostEqual(timing['audio_interval'], 0.5)
+        self.assertAlmostEqual(timing['audio_bpm'], 120)
+        self.assertAlmostEqual(timing['click_interval'], 1.0)
+
+    def test_normal_tempo_adjustment_is_not_overridden(self):
+        from .wizard_services import get_quantization_timing
+
+        timing = get_quantization_timing([0.0, 0.6, 1.2, 1.8], 120)
+
+        self.assertEqual(timing['interval_multiplier'], 1.0)
+        self.assertAlmostEqual(timing['audio_interval'], 0.5)
+        self.assertAlmostEqual(timing['audio_bpm'], 120)
+
+
 class AudioJobQueueTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(

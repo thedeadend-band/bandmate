@@ -8,9 +8,18 @@
 <div class="wiz-content">
   <h1 class="page-title">Quantize + Click Intro</h1>
   <p class="wiz-step-desc">
-    Quantize all audio to {{ wizard.tempo|default:"120" }} BPM with a 2-bar click intro.
-    This will time-stretch each beat segment and generate a click track.
+    Quantize the audio timing and generate a {{ wizard.tempo|default:"120" }} BPM click track
+    with a 2-bar intro.
   </p>
+
+  {% if duration_protection_active %}
+  <div class="wiz-notice">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+    </svg>
+    Half-time/double-time tempo detected. Audio will use a {{ audio_quantize_bpm }} BPM beat grid to preserve the song length; the click track and MIDI tempo will remain {{ wizard.tempo|default:"120" }} BPM.
+  </div>
+  {% endif %}
 
   {% if errors.quantize %}
   <div class="error-message">{{ errors.quantize }}</div>

@@ -546,6 +546,49 @@ def get_audio_duration(audio_path: str) -> float:
 # Quantization + click track generation
 # ---------------------------------------------------------------------------
 
+def _tempo_octave_multiplier(span_ratio: float) -> float:
+    if 0.4 <= span_ratio <= 0.65:
+        return 2.0
+    if 1.55 <= span_ratio <= 2.5:
+        return 0.5
+    return 1.0
+
+
+def get_quantization_timing(beat_times: list[float], target_bpm: int) -> dict:
+    """Resolve octave-tempo ambiguity without changing the click tempo."""
+    if target_bpm <= 0:
+        raise ValueError('Target tempo must be greater than zero')
+
+    click_interval = 60.0 / target_bpm
+    timing = {
+        'click_interval': click_interval,
+        'audio_interval': click_interval,
+        'audio_bpm': float(target_bpm),
+        'interval_multiplier': 1.0,
+        'projected_span_ratio': 1.0,
+    }
+    if len(beat_times) < 2:
+        return timing
+
+    beats = [float(value) for value in beat_times]
+    detected_span = beats[-1] - beats[0]
+    if detected_span <= 0:
+        return timing
+
+    projected_span = (len(beats) - 1) * click_interval
+    span_ratio = projected_span / detected_span
+    timing['projected_span_ratio'] = span_ratio
+
+    # Metadata services and beat detectors commonly disagree by one tempo
+    # octave. Protect the audio duration while retaining the chosen click BPM.
+    multiplier = _tempo_octave_multiplier(span_ratio)
+
+    timing['interval_multiplier'] = multiplier
+    timing['audio_interval'] = click_interval * multiplier
+    timing['audio_bpm'] = 60.0 / timing['audio_interval']
+    return timing
+
+
 def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
                    time_sig_num: int = 4, intro_bars: int = 2,
                    wizard_model=None) -> str:
@@ -572,14 +615,22 @@ def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
             y = y[np.newaxis, :]
         channels = y.shape[0]
 
-        target_interval = 60.0 / target_bpm
+        timing = get_quantization_timing(beat_times, target_bpm)
+        click_interval = timing['click_interval']
+        target_interval = timing['audio_interval']
         intro_beats = time_sig_num * intro_bars
-        intro_duration = intro_beats * target_interval
+        intro_duration = intro_beats * click_interval
         intro_samples = int(intro_duration * sr)
 
         if wizard_model:
             wizard_model.bg_task_progress = 20
-            wizard_model.bg_task_message = 'Quantizing segments...'
+            if timing['interval_multiplier'] != 1.0:
+                wizard_model.bg_task_message = (
+                    f'Protecting song length: audio grid '
+                    f'{timing["audio_bpm"]:.0f} BPM, click {target_bpm} BPM...'
+                )
+            else:
+                wizard_model.bg_task_message = 'Quantizing segments...'
             wizard_model.save(update_fields=['bg_task_progress', 'bg_task_message'])
 
         segments = []
@@ -623,6 +674,16 @@ def quantize_audio(audio_path: str, beat_times: list[float], target_bpm: int,
             quantized = np.concatenate([intro_silence, pre_audio] + segments, axis=1)
         else:
             quantized = np.concatenate([intro_silence] + segments, axis=1)
+
+        source_duration = y.shape[1] / sr
+        musical_duration = (quantized.shape[1] - intro_samples) / sr
+        duration_ratio = musical_duration / source_duration
+        if _tempo_octave_multiplier(duration_ratio) != 1.0:
+            raise ValueError(
+                'Quantization stopped because the output would be '
+                f'{duration_ratio:.0%} of the original song length. '
+                'Review the detected beats and tempo before retrying.'
+            )
 
         if channels == 1:
             quantized = quantized[0]
