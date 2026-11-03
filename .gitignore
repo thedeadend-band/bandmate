@@ -13,3 +13,4 @@ build/
 /songs
 /.audio_cache
 /models
+media/group-logos/*
