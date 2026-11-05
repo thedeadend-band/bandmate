@@ -57,33 +57,45 @@ def _fit_frames(audio: np.ndarray, frame_count: int) -> np.ndarray:
     return audio
 
 
-def _write_variant_track(source: Path, destination: Path, semitones: int) -> None:
+def _write_variant_track(source: Path, destination: Path, semitones: int,
+                         tempo_rate: float = 1.0) -> None:
     audio, sample_rate = sf.read(str(source), dtype='float32', always_2d=True)
     original_frames = audio.shape[0]
+    expected_frames = max(1, round(original_frames / tempo_rate))
+    pitch_steps = 0 if _is_unshifted_track(source) else semitones
 
-    if _is_unshifted_track(source):
-        processed = audio
-    else:
+    if tempo_rate != 1.0 or pitch_steps:
         import pyrubberband as pyrb
-        processed = pyrb.pitch_shift(
-            audio, sample_rate, semitones,
-            rbargs={'--formant': ''},
-        )
+        if tempo_rate != 1.0:
+            rbargs = {}
+            if pitch_steps:
+                rbargs.update({'--pitch': pitch_steps, '--formant': ''})
+            processed = pyrb.time_stretch(
+                audio, sample_rate, tempo_rate, rbargs=rbargs)
+        else:
+            processed = pyrb.pitch_shift(
+                audio, sample_rate, pitch_steps,
+                rbargs={'--formant': ''},
+            )
         if processed.ndim == 1:
             processed = processed[:, np.newaxis]
+    else:
+        processed = audio
 
-    processed = _fit_frames(np.asarray(processed, dtype=np.float32), original_frames)
+    processed = _fit_frames(
+        np.asarray(processed, dtype=np.float32), expected_frames)
     sf.write(
         str(destination), processed, sample_rate,
         format='FLAC', subtype='PCM_24',
     )
 
     written = sf.info(str(destination))
-    if written.frames != original_frames or written.samplerate != sample_rate:
+    if written.frames != expected_frames or written.samplerate != sample_rate:
         raise RuntimeError(f'Generated track failed duration validation: {source.name}')
 
 
-def _build_master(track_paths: list[Path], original_master: Path, destination: Path) -> None:
+def _build_master(track_paths: list[Path], original_master: Path,
+                  destination: Path, expected_frames: int) -> None:
     if not track_paths:
         raise RuntimeError('No stems are available to build the shifted master')
 
@@ -103,7 +115,7 @@ def _build_master(track_paths: list[Path], original_master: Path, destination: P
     mixed, sample_rate = sf.read(str(destination), dtype='float32', always_2d=True)
     if sample_rate != original_info.samplerate:
         raise RuntimeError('Shifted master sample rate does not match the original')
-    mixed = _fit_frames(mixed, original_info.frames)
+    mixed = _fit_frames(mixed, expected_frames)
     sf.write(
         str(destination), mixed, sample_rate,
         format='FLAC', subtype='PCM_24',
@@ -130,10 +142,25 @@ def _process_job(job) -> None:
     if not stems:
         raise RuntimeError('The song has no stems to transpose')
 
+    info_path = song_dir / 'info.json'
+    try:
+        info = json.loads(info_path.read_text(encoding='utf-8')) if info_path.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        info = {}
+    source_tempo = info.get('tempo')
+    if not isinstance(source_tempo, int) or source_tempo <= 0:
+        source_tempo = None
+    target_tempo = job.tempo_bpm or source_tempo
+    if target_tempo and not source_tempo:
+        raise RuntimeError('The song has no original tempo for tempo adjustment')
+    tempo_rate = target_tempo / source_tempo if source_tempo else 1.0
+    original_frames = sf.info(str(original_master)).frames
+    expected_frames = max(1, round(original_frames / tempo_rate))
+
     variants_root = song_dir / PITCH_VARIANTS_DIR
     variants_root.mkdir(exist_ok=True)
     building = variants_root / f'.building-{uuid.uuid4().hex}'
-    final_dir = variants_root / f'{job.semitones:+d}'
+    final_dir = variants_root / 'active'
     building.mkdir()
 
     try:
@@ -143,24 +170,37 @@ def _process_job(job) -> None:
         for index, source in enumerate(stems, start=1):
             output_name = f'{index:02d}-{source.stem}.flac'
             destination = building / output_name
-            action = 'Keeping original pitch' if _is_unshifted_track(source) else 'Transposing'
+            changes = []
+            if job.semitones and not _is_unshifted_track(source):
+                changes.append('pitch')
+            if tempo_rate != 1.0:
+                changes.append('tempo')
+            action = (
+                f'Adjusting {" and ".join(changes)}'
+                if changes else 'Copying original'
+            )
             _update_job(
                 job,
                 progress=int((index - 1) / total_steps * 90),
                 message=f'{action}: {source.stem}',
             )
-            _write_variant_track(source, destination, job.semitones)
+            _write_variant_track(
+                source, destination, job.semitones, tempo_rate)
             track_map[source.name] = output_name
             generated_stems.append(destination)
 
-        _update_job(job, progress=90, message='Building shifted master')
+        _update_job(job, progress=90, message='Building playback master')
         master_output = building / 'Master.flac'
-        _build_master(generated_stems, original_master, master_output)
+        _build_master(
+            generated_stems, original_master, master_output, expected_frames)
         track_map[original_master.name] = master_output.name
 
         manifest = {
-            'version': 1,
+            'version': 2,
             'semitones': job.semitones,
+            'source_tempo_bpm': source_tempo,
+            'tempo_bpm': target_tempo,
+            'tempo_rate': tempo_rate,
             'tracks': track_map,
         }
         (building / PITCH_MANIFEST).write_text(
@@ -170,12 +210,14 @@ def _process_job(job) -> None:
             shutil.rmtree(final_dir)
         building.rename(final_dir)
 
-        info_path = song_dir / 'info.json'
-        try:
-            info = json.loads(info_path.read_text(encoding='utf-8')) if info_path.exists() else {}
-        except (json.JSONDecodeError, OSError):
-            info = {}
-        info['pitch_shift_semitones'] = job.semitones
+        if job.semitones:
+            info['pitch_shift_semitones'] = job.semitones
+        else:
+            info.pop('pitch_shift_semitones', None)
+        if target_tempo and target_tempo != source_tempo:
+            info['tempo_shift_bpm'] = target_tempo
+        else:
+            info.pop('tempo_shift_bpm', None)
         info_path.write_text(json.dumps(info, indent=2), encoding='utf-8')
 
         for path in variants_root.iterdir():
@@ -184,7 +226,7 @@ def _process_job(job) -> None:
 
         _update_job(
             job,
-            status='done', progress=100, message='Pitch variant ready',
+            status='done', progress=100, message='Playback variant ready',
             completed_at=timezone.now(),
         )
     except Exception:
@@ -237,5 +279,6 @@ def reset_pitch_variant(song_name: str) -> None:
     except (json.JSONDecodeError, OSError):
         info = {}
     info.pop('pitch_shift_semitones', None)
+    info.pop('tempo_shift_bpm', None)
     info_path.write_text(json.dumps(info, indent=2), encoding='utf-8')
     shutil.rmtree(song_dir / PITCH_VARIANTS_DIR, ignore_errors=True)

@@ -284,6 +284,7 @@ class PitchShiftJob(models.Model):
     ]
     song_name = models.CharField(max_length=500, unique=True)
     semitones = models.SmallIntegerField()
+    tempo_bpm = models.PositiveSmallIntegerField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -300,7 +301,11 @@ class PitchShiftJob(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.song_name}: {self.semitones:+d} ({self.get_status_display()})'
+        tempo = f', {self.tempo_bpm} BPM' if self.tempo_bpm else ''
+        return (
+            f'{self.song_name}: {self.semitones:+d}{tempo} '
+            f'({self.get_status_display()})'
+        )
 
 
 class PlaybackPreference(models.Model):

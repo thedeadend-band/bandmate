@@ -35,7 +35,7 @@ def queue_list(request):
     pitch_jobs = list(PitchShiftJob.objects.select_related('created_by'))
     for job in pitch_jobs:
         job.queue_kind = 'pitch'
-        job.queue_type = 'Pitch Change'
+        job.queue_type = 'Playback Change'
         job.song_page_url = reverse(
             'song_player', kwargs={'song_name': job.song_name})
         job.status_url = reverse(

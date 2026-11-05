@@ -20,7 +20,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.models import User
-from django.db.models import F
+from django.db.models import Count, F
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -136,18 +136,56 @@ def _playback_categories(user, group) -> list[str]:
     return [value for value in selected if value in TRACK_CATEGORY_ORDER] or ['master']
 
 
-def _active_pitch_manifest(song_path: Path) -> tuple[Path, dict] | None:
-    info = _load_song_info(song_path) or {}
-    semitones = info.get('pitch_shift_semitones')
-    if not isinstance(semitones, int) or semitones == 0:
+def _read_song_info(song_path: Path) -> dict | None:
+    info_path = song_path / 'info.json'
+    if not info_path.is_file():
         return None
-    variant_dir = song_path / 'pitch-variants' / f'{semitones:+d}'
+    try:
+        return json.loads(info_path.read_text(encoding='utf-8'))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _tempo_variant_rate(info: dict) -> float:
+    source = info.get('tempo')
+    target = info.get('tempo_shift_bpm')
+    if (
+        isinstance(source, int) and source > 0
+        and isinstance(target, int) and target > 0
+    ):
+        return target / source
+    return 1.0
+
+
+def _active_pitch_manifest(song_path: Path) -> tuple[Path, dict] | None:
+    info = _read_song_info(song_path) or {}
+    semitones = info.get('pitch_shift_semitones', 0)
+    target_tempo = info.get('tempo_shift_bpm')
+    original_tempo = info.get('tempo')
+    has_pitch_shift = isinstance(semitones, int) and semitones != 0
+    has_tempo_shift = (
+        isinstance(target_tempo, int)
+        and target_tempo > 0
+        and target_tempo != original_tempo
+    )
+    if not has_pitch_shift and not has_tempo_shift:
+        return None
+
+    variants_root = song_path / 'pitch-variants'
+    variant_dir = variants_root / 'active'
+    if not variant_dir.is_dir() and has_pitch_shift and not has_tempo_shift:
+        # Backward compatibility for variants generated before tempo changes.
+        variant_dir = variants_root / f'{semitones:+d}'
     manifest_path = variant_dir / 'manifest.json'
     try:
         manifest = json.loads(manifest_path.read_text())
     except (OSError, json.JSONDecodeError):
         return None
-    if manifest.get('semitones') != semitones or not isinstance(manifest.get('tracks'), dict):
+    if manifest.get('semitones') != semitones:
+        return None
+    if has_tempo_shift and manifest.get('tempo_bpm') != target_tempo:
+        return None
+    if not isinstance(manifest.get('tracks'), dict):
         return None
     return variant_dir, manifest
 
@@ -215,11 +253,11 @@ def _transpose_key_label(key: str, semitones: int) -> str:
 
 def _load_song_info(song_path: Path):
     """Read info.json from a song directory. Returns dict or None."""
-    info_path = song_path / 'info.json'
-    if not info_path.is_file():
+    data = _read_song_info(song_path)
+    if data is None:
         return None
     try:
-        data = json.loads(info_path.read_text(encoding='utf-8'))
+        tempo_rate = _tempo_variant_rate(data)
         if data.get('lyric_offset'):
             offset = data['lyric_offset']
             if isinstance(offset, (int, float)):
@@ -228,10 +266,16 @@ def _load_song_info(song_path: Path):
                 data['lyric_offset_secs'] = _parse_lrc_time(str(offset))
         else:
             data['lyric_offset_secs'] = 0
+        data['lyric_offset_secs'] = round(
+            data['lyric_offset_secs'] / tempo_rate, 3)
         semitones = data.get('pitch_shift_semitones', 0)
         if isinstance(semitones, int) and semitones and data.get('key'):
             data['original_key'] = data['key']
             data['key'] = _transpose_key_label(str(data['key']), semitones)
+        target_tempo = data.get('tempo_shift_bpm')
+        if isinstance(target_tempo, int) and target_tempo > 0:
+            data['original_tempo'] = data.get('tempo')
+            data['tempo'] = target_tempo
         # Normalize optional nested keys to avoid template lookup noise.
         guitars = data.get('guitars')
         if isinstance(guitars, dict):
@@ -260,13 +304,14 @@ def _load_lyrics(song_path: Path):
         lines = lrc_path.read_text(encoding='utf-8').splitlines()
     except OSError:
         return None
+    tempo_rate = _tempo_variant_rate(_read_song_info(song_path) or {})
     result = []
     pattern = re.compile(r'^\[(\d+:\d+\.\d+)\]\s?(.*)')
     for line in lines:
         m = pattern.match(line.strip())
         if m:
             result.append({
-                'time': round(_parse_lrc_time(m.group(1)), 3),
+                'time': round(_parse_lrc_time(m.group(1)) / tempo_rate, 3),
                 'text': m.group(2),
             })
     return result if result else None
@@ -543,6 +588,17 @@ def group_logo(request, group_id: int):
 def song_list(request):
     group_songs = list(GroupSong.objects.filter(group=request.active_group))
     catalog_names = {item.song_name: item for item in group_songs}
+    member_ids = list(GroupMembership.objects.filter(
+        group=request.active_group, user__is_staff=False,
+    ).values_list('user_id', flat=True))
+    ready_counts = {
+        row['group_song_id']: row['ready_count']
+        for row in SongReadiness.objects.filter(
+            group_song__in=group_songs,
+            user_id__in=member_ids,
+            is_ready=True,
+        ).values('group_song_id').annotate(ready_count=Count('user_id'))
+    }
     songs = [
         song for song in _get_available_songs() if song['name'] in catalog_names
     ]
@@ -555,13 +611,21 @@ def song_list(request):
         song['catalog_id'] = catalog_item.pk
         song['status'] = catalog_item.status
         song['status_label'] = catalog_item.get_status_display()
-        song['ready_date'] = catalog_item.ready_date
+        song['ready_date'] = (
+            catalog_item.ready_date if catalog_item.status == 'active' else None)
+        if catalog_item.status == 'on_deck':
+            ready_count = ready_counts.get(catalog_item.pk, 0)
+            song['readiness_percent'] = (
+                round(ready_count * 100 / len(member_ids)) if member_ids else 0)
+        else:
+            song['readiness_percent'] = 100
         pitch_job = active_pitch_jobs.get(song['name'])
         song['pitch_active'] = pitch_job is not None
         if pitch_job:
             song['pitch_status'] = pitch_job.status
             song['pitch_progress'] = pitch_job.progress
             song['pitch_semitones'] = pitch_job.semitones
+            song['pitch_tempo_bpm'] = pitch_job.tempo_bpm
             song['pitch_status_url'] = reverse(
                 'song_pitch_status', kwargs={'song_name': song['name']})
 
@@ -592,6 +656,13 @@ def song_list(request):
             ),
             reverse=reverse,
         )
+    elif sort_by == 'readiness':
+        readiness_direction = -1 if direction == 'desc' else 1
+        songs.sort(key=lambda song: (
+            readiness_direction * song['readiness_percent'],
+            song['artist'].lower(),
+            song['title'].lower(),
+        ))
     elif sort_by == 'title':
         songs.sort(key=lambda song: song['title'].lower(), reverse=reverse)
     else:
@@ -625,6 +696,9 @@ def song_player(request, song_name: str):
     current_pitch = (song_info or {}).get('pitch_shift_semitones', 0)
     if not isinstance(current_pitch, int):
         current_pitch = 0
+    original_tempo = (song_info or {}).get(
+        'original_tempo', (song_info or {}).get('tempo'))
+    current_tempo = (song_info or {}).get('tempo_shift_bpm') or original_tempo
     return render(request, 'player/song_player.html', {
         'song_name': song_name,
         'tracks': tracks,
@@ -633,6 +707,8 @@ def song_player(request, song_name: str):
         'pitch_job': PitchShiftJob.objects.filter(song_name=song_name).first(),
         'pitch_options': range(-6, 7),
         'current_pitch': current_pitch,
+        'original_tempo': original_tempo,
+        'current_tempo': current_tempo,
         'instrument_categories': _available_categories(tracks),
         'selected_instruments': _playback_categories(request.user, request.active_group),
         'group_song': group_song,
@@ -2193,7 +2269,7 @@ def song_info_api(request, song_name: str):
 @require_POST
 def song_pitch_update(request, song_name: str):
     _require_group_song(request, song_name)
-    _safe_song_path(song_name)
+    song_path = _safe_song_path(song_name)
     try:
         semitones = int(request.POST.get('semitones', '0'))
     except ValueError:
@@ -2201,13 +2277,33 @@ def song_pitch_update(request, song_name: str):
     if semitones < -6 or semitones > 6:
         return JsonResponse({'error': 'Pitch must be between -6 and +6 semitones'}, status=400)
 
+    info = _read_song_info(song_path) or {}
+    original_tempo = info.get('tempo')
+    if not isinstance(original_tempo, int) or original_tempo <= 0:
+        original_tempo = None
+    tempo_value = request.POST.get('tempo_bpm', '').strip()
+    if tempo_value:
+        try:
+            tempo_bpm = int(tempo_value)
+        except ValueError:
+            return JsonResponse({'error': 'Invalid tempo value'}, status=400)
+        if not original_tempo:
+            return JsonResponse(
+                {'error': 'The song needs an original tempo before its speed can be changed.'},
+                status=400,
+            )
+        if tempo_bpm < 20 or tempo_bpm > 300:
+            return JsonResponse({'error': 'Tempo must be between 20 and 300 BPM'}, status=400)
+    else:
+        tempo_bpm = original_tempo
+
     active = PitchShiftJob.objects.filter(
         song_name=song_name, status__in=('queued', 'processing'),
     ).first()
     if active:
         return redirect('song_list')
 
-    if semitones == 0:
+    if semitones == 0 and tempo_bpm == original_tempo:
         from .pitch_services import reset_pitch_variant
         reset_pitch_variant(song_name)
         PitchShiftJob.objects.filter(song_name=song_name).delete()
@@ -2217,10 +2313,12 @@ def song_pitch_update(request, song_name: str):
         song_name=song_name,
         defaults={
             'semitones': semitones,
+            'tempo_bpm': tempo_bpm,
             'created_by': request.user,
             'status': 'queued',
             'progress': 0,
             'message': 'Queued',
+            'created_at': timezone.now(),
             'completed_at': None,
             'updated_at': timezone.now(),
         },
@@ -2242,6 +2340,7 @@ def song_pitch_status(request, song_name: str):
         'progress': job.progress,
         'message': job.message,
         'semitones': job.semitones,
+        'tempo_bpm': job.tempo_bpm,
     })
 
 
@@ -2397,7 +2496,7 @@ def catalog_song_remove(request, song_name: str):
         song_name=song_name, status__in=('queued', 'processing'),
     ).exists():
         return JsonResponse(
-            {'error': 'Cannot remove while pitch generation is running.'},
+            {'error': 'Cannot remove while playback variant generation is running.'},
             status=400,
         )
 
@@ -2424,7 +2523,7 @@ def song_delete(request, song_name: str):
         song_name=song_name, status__in=('queued', 'processing'),
     ).exists():
         return JsonResponse(
-            {'error': 'Cannot delete while pitch generation is running.'},
+            {'error': 'Cannot delete while playback variant generation is running.'},
             status=400,
         )
 

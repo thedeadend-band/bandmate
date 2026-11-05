@@ -1,8 +1,12 @@
-from unittest.mock import Mock, patch
+import json
+import tempfile
 from datetime import date
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
-from django.test import Client, RequestFactory, TestCase
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from .context_processors import group_context
@@ -142,6 +146,218 @@ class QuantizationTimingTests(TestCase):
         )
 
         self.assertAlmostEqual(mido.tempo2bpm(tempo_message.tempo), 198, places=2)
+
+
+class PlaybackVariantTests(TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.settings_override = override_settings(SONGS_DIR=self.temp_dir.name)
+        self.settings_override.enable()
+        self.user = User.objects.create_user(
+            username='variant-user', password='test')
+        self.group = Group.objects.create(name='Variant Band')
+        GroupMembership.objects.create(group=self.group, user=self.user)
+        self.song_name = 'Test Artist - Tempo Song'
+        self.song_dir = Path(self.temp_dir.name) / self.song_name
+        self.song_dir.mkdir()
+        (self.song_dir / 'Master.wav').write_bytes(b'audio')
+        (self.song_dir / 'info.json').write_text(json.dumps({
+            'artist': 'Test Artist',
+            'title': 'Tempo Song',
+            'tempo': 100,
+            'key': 'A',
+        }))
+        GroupSong.objects.create(group=self.group, song_name=self.song_name)
+        self.client.force_login(self.user)
+        session = self.client.session
+        session['active_group_id'] = self.group.pk
+        session.save()
+
+    def tearDown(self):
+        self.settings_override.disable()
+        self.temp_dir.cleanup()
+
+    @patch('player.pitch_services.start_pitch_worker')
+    def test_tempo_only_change_is_enqueued(self, start_worker):
+        response = self.client.post(
+            reverse('song_pitch_update', args=[self.song_name]),
+            {'semitones': '0', 'tempo_bpm': '112'},
+        )
+
+        job = PitchShiftJob.objects.get(song_name=self.song_name)
+        self.assertEqual(job.semitones, 0)
+        self.assertEqual(job.tempo_bpm, 112)
+        self.assertEqual(job.status, 'queued')
+        start_worker.assert_called_once()
+        self.assertRedirects(
+            response, reverse('song_list'), fetch_redirect_response=False)
+
+    def test_song_page_shows_combined_pitch_and_tempo_controls(self):
+        response = self.client.get(
+            reverse('song_player', args=[self.song_name]))
+
+        self.assertContains(response, 'Playback pitch &amp; tempo')
+        self.assertContains(response, 'name="tempo_bpm"')
+        self.assertContains(response, 'value="100"')
+
+    def test_songs_page_uses_add_to_catalog_label(self):
+        available = Path(self.temp_dir.name) / 'Test Artist - Available Song'
+        available.mkdir()
+        (available / 'Master.wav').write_bytes(b'audio')
+        (available / 'info.json').write_text(json.dumps({
+            'artist': 'Test Artist', 'title': 'Available Song', 'tempo': 100,
+        }))
+
+        response = self.client.get(reverse('group_songs'))
+
+        self.assertContains(response, 'Add to Catalog')
+
+    def test_returning_to_original_removes_combined_variant(self):
+        info_path = self.song_dir / 'info.json'
+        info = json.loads(info_path.read_text())
+        info.update({'pitch_shift_semitones': -1, 'tempo_shift_bpm': 112})
+        info_path.write_text(json.dumps(info))
+        variant_dir = self.song_dir / 'pitch-variants' / 'active'
+        variant_dir.mkdir(parents=True)
+        PitchShiftJob.objects.create(
+            song_name=self.song_name, semitones=-1, tempo_bpm=112,
+            created_by=self.user, status='done')
+
+        response = self.client.post(
+            reverse('song_pitch_update', args=[self.song_name]),
+            {'semitones': '0', 'tempo_bpm': '100'},
+        )
+
+        saved_info = json.loads(info_path.read_text())
+        self.assertNotIn('pitch_shift_semitones', saved_info)
+        self.assertNotIn('tempo_shift_bpm', saved_info)
+        self.assertFalse((self.song_dir / 'pitch-variants').exists())
+        self.assertFalse(PitchShiftJob.objects.filter(song_name=self.song_name).exists())
+        self.assertRedirects(
+            response,
+            reverse('song_player', args=[self.song_name]),
+            fetch_redirect_response=False,
+        )
+
+    def test_combined_processing_uses_one_rubberband_pass(self):
+        import numpy as np
+        from .pitch_services import _write_variant_track
+
+        source = Path('Guitar.wav')
+        destination = Path('Guitar-variant.flac')
+        audio = np.zeros((1000, 2), dtype=np.float32)
+        processed = np.zeros((800, 2), dtype=np.float32)
+
+        with (
+            patch('player.pitch_services.sf.read', return_value=(audio, 48000)),
+            patch('player.pitch_services.sf.write') as write_audio,
+            patch(
+                'player.pitch_services.sf.info',
+                return_value=SimpleNamespace(frames=800, samplerate=48000),
+            ),
+            patch('pyrubberband.time_stretch', return_value=processed) as stretch,
+        ):
+            _write_variant_track(source, destination, 2, 1.25)
+
+        stretch.assert_called_once()
+        self.assertEqual(stretch.call_args.args[2], 1.25)
+        self.assertEqual(
+            stretch.call_args.kwargs['rbargs'],
+            {'--pitch': 2, '--formant': ''},
+        )
+        self.assertEqual(write_audio.call_args.args[1].shape, (800, 2))
+
+    def test_tempo_change_does_not_pitch_shift_drums(self):
+        import numpy as np
+        from .pitch_services import _write_variant_track
+
+        audio = np.zeros((1000, 2), dtype=np.float32)
+        with (
+            patch('player.pitch_services.sf.read', return_value=(audio, 48000)),
+            patch('player.pitch_services.sf.write'),
+            patch(
+                'player.pitch_services.sf.info',
+                return_value=SimpleNamespace(frames=800, samplerate=48000),
+            ),
+            patch(
+                'pyrubberband.time_stretch',
+                return_value=np.zeros((800, 2), dtype=np.float32),
+            ) as stretch,
+        ):
+            _write_variant_track(
+                Path('Drums.wav'), Path('Drums-variant.flac'), 3, 1.25)
+
+        self.assertEqual(stretch.call_args.kwargs['rbargs'], {})
+
+    def test_tempo_variant_scales_lyrics_and_offset(self):
+        from .views import _load_lyrics, _load_song_info
+
+        info_path = self.song_dir / 'info.json'
+        info = json.loads(info_path.read_text())
+        info.update({'tempo_shift_bpm': 125, 'lyric_offset': 2.5})
+        info_path.write_text(json.dumps(info))
+        (self.song_dir / 'lyrics.lrc').write_text(
+            '[00:10.00]First line\n[00:20.00]Second line\n')
+
+        loaded_info = _load_song_info(self.song_dir)
+        lyrics = _load_lyrics(self.song_dir)
+
+        self.assertEqual(loaded_info['original_tempo'], 100)
+        self.assertEqual(loaded_info['tempo'], 125)
+        self.assertEqual(loaded_info['lyric_offset_secs'], 2.0)
+        self.assertEqual([line['time'] for line in lyrics], [8.0, 16.0])
+
+    def test_processing_replaces_the_single_active_variant(self):
+        from .pitch_services import _process_job
+
+        for filename in ('Master.wav', 'Guitar.wav', 'Drums.wav'):
+            (self.song_dir / filename).write_bytes(b'audio')
+        old_variant = self.song_dir / 'pitch-variants' / '+1'
+        old_variant.mkdir(parents=True)
+        (old_variant / 'old.flac').write_bytes(b'old')
+        job = PitchShiftJob.objects.create(
+            song_name=self.song_name, semitones=2, tempo_bpm=125,
+            created_by=self.user)
+
+        def write_track(source, destination, semitones, tempo_rate):
+            destination.write_bytes(b'variant')
+
+        def build_master(track_paths, original_master, destination, expected_frames):
+            destination.write_bytes(b'master')
+
+        with (
+            patch('player.audio_tools.require_rubberband'),
+            patch(
+                'player.pitch_services.sf.info',
+                return_value=SimpleNamespace(frames=1000, samplerate=48000),
+            ),
+            patch(
+                'player.pitch_services._write_variant_track',
+                side_effect=write_track,
+            ) as write_variant,
+            patch(
+                'player.pitch_services._build_master',
+                side_effect=build_master,
+            ),
+        ):
+            _process_job(job)
+
+        active_dir = self.song_dir / 'pitch-variants' / 'active'
+        manifest = json.loads((active_dir / 'manifest.json').read_text())
+        saved_info = json.loads((self.song_dir / 'info.json').read_text())
+        self.assertTrue(active_dir.is_dir())
+        self.assertFalse(old_variant.exists())
+        self.assertEqual(manifest['semitones'], 2)
+        self.assertEqual(manifest['source_tempo_bpm'], 100)
+        self.assertEqual(manifest['tempo_bpm'], 125)
+        self.assertEqual(manifest['tempo_rate'], 1.25)
+        self.assertEqual(saved_info['tempo'], 100)
+        self.assertEqual(saved_info['pitch_shift_semitones'], 2)
+        self.assertEqual(saved_info['tempo_shift_bpm'], 125)
+        self.assertTrue(all(
+            call.args[3] == 1.25 for call in write_variant.call_args_list))
+        job.refresh_from_db()
+        self.assertEqual(job.status, 'done')
 
 
 class AudioJobQueueTests(TestCase):
@@ -365,6 +581,94 @@ class GroupCatalogTests(TestCase):
             ['Deck Song'],
         )
         self.assertEqual(response.context['status_filter'], 'on_deck')
+
+    @patch('player.views._get_available_songs')
+    def test_on_deck_catalog_card_hides_historical_ready_date(
+        self, available_songs_mock,
+    ):
+        available_songs_mock.return_value = [{
+            'name': 'Learning Song', 'artist': 'Artist',
+            'title': 'Learning Song', 'track_count': 4,
+            'spotify_track_url': '', 'youtube_video_url': '',
+        }]
+        historical_date = date(2026, 10, 15)
+        group_song = GroupSong.objects.create(
+            group=self.primary,
+            song_name='Learning Song',
+            status='on_deck',
+            ready_date=historical_date,
+        )
+        self.client.force_login(self.alice)
+        self.select_group(self.client, self.primary)
+
+        response = self.client.get(reverse('song_list'))
+
+        self.assertIsNone(response.context['songs'][0]['ready_date'])
+        self.assertNotContains(response, 'Ready Oct 15, 2026')
+        group_song.refresh_from_db()
+        self.assertEqual(group_song.ready_date, historical_date)
+
+    @patch('player.views._get_available_songs')
+    def test_catalog_displays_and_sorts_by_readiness(self, available_songs_mock):
+        charlie = User.objects.create_user(username='charlie', password='test')
+        dana = User.objects.create_user(username='dana', password='test')
+        GroupMembership.objects.create(group=self.primary, user=charlie)
+        GroupMembership.objects.create(group=self.primary, user=dana)
+        song_data = [
+            ('Quarter Ready', 'Delta'),
+            ('Three Quarters Ready', 'Charlie'),
+            ('Ready Song', 'Alpha'),
+            ('Retired Song', 'Bravo'),
+        ]
+        available_songs_mock.side_effect = lambda: [{
+            'name': name, 'artist': artist, 'title': name, 'track_count': 4,
+            'spotify_track_url': '', 'youtube_video_url': '',
+        } for name, artist in song_data]
+        quarter = GroupSong.objects.create(
+            group=self.primary, song_name='Quarter Ready', status='on_deck')
+        three_quarters = GroupSong.objects.create(
+            group=self.primary,
+            song_name='Three Quarters Ready',
+            status='on_deck',
+        )
+        GroupSong.objects.create(
+            group=self.primary, song_name='Ready Song', status='active')
+        GroupSong.objects.create(
+            group=self.primary, song_name='Retired Song', status='retired')
+        SongReadiness.objects.create(
+            group_song=quarter, user=self.alice, is_ready=True)
+        for user in (self.alice, self.bob, charlie):
+            SongReadiness.objects.create(
+                group_song=three_quarters, user=user, is_ready=True)
+        self.client.force_login(self.alice)
+        self.select_group(self.client, self.primary)
+
+        ascending = self.client.get(
+            reverse('song_list'), {'sort': 'readiness', 'direction': 'asc'})
+        descending = self.client.get(
+            reverse('song_list'), {'sort': 'readiness', 'direction': 'desc'})
+
+        self.assertEqual(
+            [song['name'] for song in ascending.context['songs']],
+            ['Quarter Ready', 'Three Quarters Ready', 'Ready Song', 'Retired Song'],
+        )
+        self.assertEqual(
+            [song['name'] for song in descending.context['songs']],
+            ['Ready Song', 'Retired Song', 'Three Quarters Ready', 'Quarter Ready'],
+        )
+        readiness = {
+            song['name']: song['readiness_percent']
+            for song in ascending.context['songs']
+        }
+        self.assertEqual(readiness, {
+            'Quarter Ready': 25,
+            'Three Quarters Ready': 75,
+            'Ready Song': 100,
+            'Retired Song': 100,
+        })
+        self.assertContains(ascending, '75% Ready')
+        self.assertContains(ascending, 'On-Deck')
+        self.assertContains(ascending, '4 tracks')
 
     @patch('player.views._song_duration_seconds')
     def test_setlist_card_shows_total_song_duration(self, duration_mock):

@@ -9,6 +9,7 @@
       <span class="catalog-sort-label">Sort</span>
       <select name="sort" class="form-input" aria-label="Sort catalog" onchange="this.form.submit()">
         <option value="ready_date"{% if sort_by == 'ready_date' %} selected{% endif %}>Ready Date</option>
+        <option value="readiness"{% if sort_by == 'readiness' %} selected{% endif %}>Readiness</option>
         <option value="artist"{% if sort_by == 'artist' %} selected{% endif %}>Artist</option>
         <option value="title"{% if sort_by == 'title' %} selected{% endif %}>Title</option>
       </select>
@@ -53,9 +54,9 @@
         <h3>{{ song.name }}</h3>
         {% endif %}
         {% if song.pitch_active %}
-        <span class="track-count">Transposing {{ song.pitch_semitones|stringformat:"+d" }} semitones &middot; {{ song.pitch_progress }}%</span>
+        <span class="track-count">Generating {% if song.pitch_semitones %}{{ song.pitch_semitones|stringformat:"+d" }} semitone{% if song.pitch_semitones != 1 and song.pitch_semitones != -1 %}s{% endif %}{% else %}original pitch{% endif %}{% if song.pitch_tempo_bpm %} &middot; {{ song.pitch_tempo_bpm }} BPM{% endif %} &middot; {{ song.pitch_progress }}%</span>
         {% else %}
-        <span class="track-count"><span class="catalog-status status-{{ song.status }}">{{ song.status_label }}</span> &middot; {{ song.track_count }} track{{ song.track_count|pluralize }}{% if song.ready_date %} &middot; Ready {{ song.ready_date|date:"M j, Y" }}{% endif %}</span>
+        <span class="track-count"><span class="catalog-status status-{{ song.status }}">{{ song.status_label }}</span>{% if song.status == 'on_deck' %} &middot; {{ song.readiness_percent }}% Ready{% endif %} &middot; {{ song.track_count }} track{{ song.track_count|pluralize }}{% if song.ready_date %} &middot; Ready {{ song.ready_date|date:"M j, Y" }}{% endif %}</span>
         {% endif %}
       </div>
       {% if not song.pitch_active %}
@@ -134,7 +135,9 @@
             const detail = card.querySelector('.track-count');
             if (detail) {
               const shift = data.semitones > 0 ? `+${data.semitones}` : String(data.semitones);
-              detail.textContent = `Transposing ${shift} semitones \u00b7 ${data.progress}%`;
+              const pitch = data.semitones ? `${shift} semitone${Math.abs(data.semitones) === 1 ? '' : 's'}` : 'original pitch';
+              const tempo = data.tempo_bpm ? ` \u00b7 ${data.tempo_bpm} BPM` : '';
+              detail.textContent = `Generating ${pitch}${tempo} \u00b7 ${data.progress}%`;
             }
           })
           .catch(() => {});

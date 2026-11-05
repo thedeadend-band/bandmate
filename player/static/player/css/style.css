@@ -1211,8 +1211,37 @@ textarea {
 
 .pitch-control-form {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.playback-variant-field {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.tempo-input-wrap {
+  position: relative;
+  display: block;
+}
+
+.tempo-input-wrap small {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  pointer-events: none;
+}
+
+.tempo-input {
+  width: 94px;
+  padding-right: 36px;
 }
 
 .pitch-select {
@@ -1248,9 +1277,14 @@ textarea {
     align-items: stretch;
   }
 
+  .playback-variant-field,
   .pitch-select {
     min-width: 0;
     flex: 1;
+  }
+
+  .tempo-input {
+    width: 100%;
   }
 }
 

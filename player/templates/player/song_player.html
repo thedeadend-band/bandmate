@@ -51,7 +51,7 @@
 {% endif %}
 
 <section class="readiness-panel">
-  <div><strong>{{ group_song.get_status_display }}</strong>{% if group_song.ready_date %}<span>Ready since {{ group_song.ready_date|date:"F j, Y" }}</span>{% endif %}</div>
+  <div><strong>{{ group_song.get_status_display }}</strong>{% if group_song.status == 'active' and group_song.ready_date %}<span>Ready since {{ group_song.ready_date|date:"F j, Y" }}</span>{% endif %}</div>
   {% if not user.is_staff %}
   <form method="post" action="{% url 'song_readiness_update' song_name %}">{% csrf_token %}
     <label class="checkbox-label"><input type="checkbox" name="is_ready" value="1"{% if user_ready %} checked{% endif %} onchange="this.form.submit()"> I have learned my part</label>
@@ -84,24 +84,41 @@
 
 <section class="pitch-control" aria-labelledby="pitch-control-title">
   <div class="pitch-control-copy">
-    <strong id="pitch-control-title">Playback pitch</strong>
-    <span>Tempo remains unchanged. Drums and click tracks stay at their original pitch.</span>
+    <strong id="pitch-control-title">Playback pitch &amp; tempo</strong>
+    <span>Generated from the original tracks. Tempo changes preserve pitch; drums and click tracks are not pitch-shifted.</span>
   </div>
   <form method="post" action="{% url 'song_pitch_update' song_name %}" class="pitch-control-form"
         data-current-pitch="{{ current_pitch }}"
+        data-original-tempo="{{ original_tempo|default:'' }}"
+        data-current-tempo="{{ current_tempo|default:'' }}"
         onsubmit="return confirmPitchChange(this);">
     {% csrf_token %}
-    <select name="semitones" class="pitch-select" aria-label="Pitch adjustment in semitones"
-            {% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}disabled{% endif %}>
-      {% for value in pitch_options %}
-      <option value="{{ value }}" {% if value == current_pitch %}selected{% endif %}>
-        {% if value == 0 %}Original{% elif value > 0 %}+{{ value }} semitone{% if value != 1 %}s{% endif %}{% else %}{{ value }} semitone{% if value != -1 %}s{% endif %}{% endif %}
-      </option>
-      {% endfor %}
-    </select>
+    <label class="playback-variant-field">
+      <span>Pitch</span>
+      <select name="semitones" class="pitch-select" aria-label="Pitch adjustment in semitones"
+              {% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}disabled{% endif %}>
+        {% for value in pitch_options %}
+        <option value="{{ value }}" {% if value == current_pitch %}selected{% endif %}>
+          {% if value == 0 %}Original{% elif value > 0 %}+{{ value }} semitone{% if value != 1 %}s{% endif %}{% else %}{{ value }} semitone{% if value != -1 %}s{% endif %}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if original_tempo %}
+    <label class="playback-variant-field">
+      <span>Tempo</span>
+      <span class="tempo-input-wrap">
+        <input type="number" name="tempo_bpm" class="pitch-select tempo-input"
+               value="{{ current_tempo }}" min="20" max="300" required
+               aria-label="Playback tempo in BPM"
+               {% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}disabled{% endif %}>
+        <small>BPM</small>
+      </span>
+    </label>
+    {% endif %}
     <button type="submit" class="btn btn-secondary pitch-apply-btn"
             {% if pitch_job.status == 'queued' or pitch_job.status == 'processing' %}disabled{% endif %}>
-      {% if current_pitch %}Change pitch{% else %}Generate{% endif %}
+      {% if current_pitch or current_tempo != original_tempo %}Update{% else %}Generate{% endif %}
     </button>
   </form>
   <div class="pitch-job-status{% if pitch_job.status == 'failed' %} pitch-job-error{% endif %}"
@@ -112,8 +129,10 @@
       {{ pitch_job.message }} ({{ pitch_job.progress }}%)
     {% elif pitch_job.status == 'failed' %}
       {{ pitch_job.message }}
-    {% elif current_pitch %}
-      Active: {{ current_pitch|stringformat:"+d" }} semitone{% if current_pitch != 1 and current_pitch != -1 %}s{% endif %}
+    {% elif current_pitch or current_tempo != original_tempo %}
+      Active:
+      {% if current_pitch %}{{ current_pitch|stringformat:"+d" }} semitone{% if current_pitch != 1 and current_pitch != -1 %}s{% endif %}{% else %}original pitch{% endif %}
+      {% if current_tempo %}&middot; {{ current_tempo }} BPM{% endif %}
     {% endif %}
   </div>
 </section>
@@ -121,12 +140,20 @@
 <script>
 function confirmPitchChange(form) {
   var semitones = Number(form.elements.semitones.value);
-  if (semitones === 0) {
-    if (Number(form.dataset.currentPitch) === 0) return true;
-    return confirm('Return this song to its original pitch? The generated pitch-shifted tracks will be deleted.');
+  var originalTempo = Number(form.dataset.originalTempo) || 0;
+  var tempo = form.elements.tempo_bpm ? Number(form.elements.tempo_bpm.value) : originalTempo;
+  var currentlyModified = Number(form.dataset.currentPitch) !== 0 ||
+    (originalTempo && Number(form.dataset.currentTempo) !== originalTempo);
+  if (semitones === 0 && (!originalTempo || tempo === originalTempo)) {
+    if (!currentlyModified) return true;
+    return confirm('Return this song to its original pitch and tempo? The generated playback tracks will be deleted.');
   }
-  var direction = semitones > 0 ? '+' + semitones : String(semitones);
-  return confirm('Add a ' + direction + ' semitone pitch change to the job queue? The song will be unavailable until processing finishes.');
+  var changes = [];
+  if (semitones) {
+    changes.push((semitones > 0 ? '+' : '') + semitones + ' semitone' + (Math.abs(semitones) === 1 ? '' : 's'));
+  }
+  if (originalTempo && tempo !== originalTempo) changes.push(tempo + ' BPM');
+  return confirm('Add this playback change (' + changes.join(', ') + ') to the job queue? The song will be unavailable until processing finishes.');
 }
 </script>
 
@@ -487,7 +514,7 @@ function confirmPitchChange(form) {
         }
         if (job.status === 'failed') {
           status.classList.add('pitch-job-error');
-          document.querySelectorAll('.pitch-control-form select, .pitch-control-form button')
+          document.querySelectorAll('.pitch-control-form select, .pitch-control-form input, .pitch-control-form button')
             .forEach(function(control) { control.disabled = false; });
           return;
         }

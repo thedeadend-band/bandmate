@@ -54,7 +54,8 @@
         {% else %}
         <h3>{{ job.song_name }}</h3>
         <span class="queue-detail">
-          {{ job.get_status_display }} &mdash; {{ job.semitones|stringformat:"+d" }} semitones{% if job.message %} &mdash; {{ job.message }}{% endif %}
+          {{ job.get_status_display }} &mdash;
+          {% if job.semitones %}{{ job.semitones|stringformat:"+d" }} semitone{% if job.semitones != 1 and job.semitones != -1 %}s{% endif %}{% else %}Original pitch{% endif %}{% if job.tempo_bpm %} &middot; {{ job.tempo_bpm }} BPM{% endif %}{% if job.message %} &mdash; {{ job.message }}{% endif %}
         </span>
         {% endif %}
         <span class="queue-time">{{ job.queue_type }} | Queued by {{ job.created_by|display_name }}</span>
@@ -100,7 +101,7 @@
 {% else %}
 <div class="empty-state">
   <h3>Queue is empty</h3>
-  <p>Stem separation and pitch change jobs will appear here.</p>
+  <p>Song Wizard and playback change jobs will appear here.</p>
 </div>
 {% endif %}
 
@@ -151,7 +152,9 @@
           if (!detail) return;
           var shift = data.semitones > 0 ? '+' + data.semitones : String(data.semitones);
           var status = data.status.charAt(0).toUpperCase() + data.status.slice(1);
-          detail.textContent = status + ' \u2014 ' + shift + ' semitones' +
+          var pitch = data.semitones ? shift + ' semitone' + (Math.abs(data.semitones) === 1 ? '' : 's') : 'Original pitch';
+          var tempo = data.tempo_bpm ? ' \u00b7 ' + data.tempo_bpm + ' BPM' : '';
+          detail.textContent = status + ' \u2014 ' + pitch + tempo +
             (data.message ? ' \u2014 ' + data.message : '') +
             (data.status === 'processing' ? ' (' + data.progress + '%)' : '');
         })
