@@ -583,6 +583,45 @@ class GroupCatalogTests(TestCase):
         self.assertEqual(response.context['status_filter'], 'on_deck')
 
     @patch('player.views._get_available_songs')
+    def test_catalog_preferences_persist_after_navigating_away(
+        self, available_songs_mock,
+    ):
+        available_songs_mock.return_value = [
+            {
+                'name': 'Ready Song', 'artist': 'Alpha',
+                'title': 'Ready Song', 'track_count': 4,
+                'spotify_track_url': '', 'youtube_video_url': '',
+            },
+            {
+                'name': 'Deck Song', 'artist': 'Beta',
+                'title': 'Deck Song', 'track_count': 4,
+                'spotify_track_url': '', 'youtube_video_url': '',
+            },
+        ]
+        GroupSong.objects.create(
+            group=self.primary, song_name='Ready Song', status='active')
+        GroupSong.objects.create(
+            group=self.primary, song_name='Deck Song', status='on_deck')
+        self.client.force_login(self.alice)
+        self.select_group(self.client, self.primary)
+
+        self.client.get(reverse('song_list'), {
+            'status': 'on_deck',
+            'sort': 'readiness',
+            'direction': 'desc',
+        })
+        self.client.get(reverse('setlist_list'))
+        response = self.client.get(reverse('song_list'))
+
+        self.assertEqual(response.context['status_filter'], 'on_deck')
+        self.assertEqual(response.context['sort_by'], 'readiness')
+        self.assertEqual(response.context['sort_direction'], 'desc')
+        self.assertEqual(
+            [song['name'] for song in response.context['songs']],
+            ['Deck Song'],
+        )
+
+    @patch('player.views._get_available_songs')
     def test_on_deck_catalog_card_hides_historical_ready_date(
         self, available_songs_mock,
     ):

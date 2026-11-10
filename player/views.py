@@ -586,6 +586,32 @@ def group_logo(request, group_id: int):
 @login_required
 @ensure_csrf_cookie
 def song_list(request):
+    preference_key = f'catalog_view_preferences_{request.active_group.pk}'
+    saved_preferences = request.session.get(preference_key, {})
+    valid_statuses = {value for value, _ in GroupSong.STATUS_CHOICES}
+    valid_sorts = {'ready_date', 'readiness', 'artist', 'title'}
+
+    status_filter = request.GET.get(
+        'status', saved_preferences.get('status', ''))
+    sort_by = request.GET.get('sort', saved_preferences.get('sort', 'artist'))
+    direction = request.GET.get(
+        'direction', saved_preferences.get('direction', 'asc'))
+
+    if status_filter not in valid_statuses:
+        status_filter = ''
+    if sort_by not in valid_sorts:
+        sort_by = 'artist'
+    if direction not in {'asc', 'desc'}:
+        direction = 'asc'
+
+    preferences = {
+        'status': status_filter,
+        'sort': sort_by,
+        'direction': direction,
+    }
+    if saved_preferences != preferences:
+        request.session[preference_key] = preferences
+
     group_songs = list(GroupSong.objects.filter(group=request.active_group))
     catalog_names = {item.song_name: item for item in group_songs}
     member_ids = list(GroupMembership.objects.filter(
@@ -638,15 +664,9 @@ def song_list(request):
         for s in songs:
             s['in_setlist'] = s['name'] in used_songs
 
-    status_filter = request.GET.get('status', '')
-    valid_statuses = {value for value, _ in GroupSong.STATUS_CHOICES}
     if status_filter in valid_statuses:
         songs = [song for song in songs if song['status'] == status_filter]
-    else:
-        status_filter = ''
 
-    sort_by = request.GET.get('sort', 'artist')
-    direction = request.GET.get('direction', 'asc')
     reverse = direction == 'desc'
     if sort_by == 'ready_date':
         songs.sort(
@@ -666,7 +686,6 @@ def song_list(request):
     elif sort_by == 'title':
         songs.sort(key=lambda song: song['title'].lower(), reverse=reverse)
     else:
-        sort_by = 'artist'
         songs.sort(key=lambda song: (song['artist'].lower(), song['title'].lower()), reverse=reverse)
     return render(request, 'player/song_list.html', {
         'songs': songs,
