@@ -20,6 +20,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'player',
+    'booking',
+    'calendar_integrations',
 ]
 
 MIDDLEWARE = [
@@ -49,6 +51,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'player.context_processors.group_context',
+                'booking.context_processors.booking_context',
             ],
         },
     },

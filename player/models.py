@@ -37,6 +37,22 @@ class GroupMembership(models.Model):
         return f'{self.user} in {self.group}'
 
 
+class GroupAccessAudit(models.Model):
+    """Non-secret feature/role/policy changes; no generic metadata payload."""
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True,
+                              on_delete=models.SET_NULL)
+    action = models.CharField(max_length=80)
+    target = models.CharField(max_length=120, blank=True)
+    previous_value = models.CharField(max_length=80, blank=True)
+    new_value = models.CharField(max_length=80, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,

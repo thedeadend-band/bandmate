@@ -2,6 +2,13 @@
    BandMate – Mobile-first with light / dark theme
    ======================================================================== */
 
+/* Booking and independent Calendar configuration. */
+.feature-content > p { margin: 12px 0 20px; line-height: 1.6; }
+.feature-content > h2 { margin-top: 28px; margin-bottom: 12px; }
+.feature-content .wiz-form > label { display: block; margin-bottom: 8px; }
+.feature-content .wiz-form > select { margin-bottom: 12px; }
+.feature-content .form-group .checkbox-label { display: flex; align-items: center; }
+
 *,
 *::before,
 *::after {

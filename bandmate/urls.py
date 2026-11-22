@@ -5,6 +5,8 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('booking/', include('booking.urls')),
+    path('calendar/manage/', include('calendar_integrations.urls')),
     path('', include('player.urls')),
 ]
 

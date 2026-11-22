@@ -5,6 +5,7 @@
 <a href="{% url 'admin_home' %}#groups" class="back-link">Back to Settings</a>
 <div class="wiz-content"><h1 class="page-title">{% if group %}Edit {{ group.name }}{% else %}Add Group{% endif %}</h1>
 {% if error %}<div class="error-message">{{ error }}</div>{% endif %}
+{% if group %}<p><a href="{% url 'admin_group_features' group.pk %}" class="btn btn-secondary">Booking and Calendar permissions</a></p>{% endif %}
 <form method="post" enctype="multipart/form-data" class="wiz-form">{% csrf_token %}
   <div class="form-group"><label for="group-name">Name</label><input id="group-name" class="form-input" name="name" value="{{ group.name|default:'' }}" required></div>
   <div class="form-group"><label for="group-logo">Logo</label><input id="group-logo" type="file" name="logo" accept="image/*" class="form-input"></div>

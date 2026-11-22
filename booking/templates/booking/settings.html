@@ -1,0 +1,10 @@
+{% extends "player/base.html" %}
+{% block title %}Booking Setup – BandMate{% endblock %}
+{% block content %}
+<a href="{% url 'booking:overview' %}" class="back-link">Back to Booking</a>
+<div class="wiz-content feature-content"><h1 class="page-title">Booking setup · {{ active_group.name }}</h1>
+<form method="post" class="wiz-form">{% csrf_token %}{% include "player/feature_form_fields.html" %}
+<button class="btn btn-add" type="submit">Save preferences</button></form>
+<h2>Connections</h2><p>OpenAI and Gmail connection setup is not available yet. Please do not enter API keys in these fields.</p>
+</div>
+{% endblock %}

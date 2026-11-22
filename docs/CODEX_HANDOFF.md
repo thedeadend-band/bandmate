@@ -5,6 +5,16 @@ It focuses on the current architecture, high-impact files, and known pitfalls.
 
 ## 1) Current Product Scope
 
+Booking and editable Calendar development starts on `codex/booking-editable-calendars`.
+The current increment is **Phase 0 only**: default-off Booking, membership-bound
+roles, independent Calendar source policies and inert service commands. See
+[architecture](booking/ARCHITECTURE.md), [implementation plan](booking/IMPLEMENTATION_PLAN.md)
+and [acceptance report](booking/PHASE_0_ACCEPTANCE.md). New routes are `/booking/`,
+`/calendar/manage/` and the group admin feature panel. ICS tables and audio jobs
+remain separate. Google/local event CRUD, OAuth, AI, discovery and sending are
+still future phases. Use the backup-aware pinned updater described in
+[installation](booking/INSTALL_UPDATE.md), not the previous failure-tolerant script.
+
 BandMate is a Django app for:
 
 - Multi-track song playback (mute/solo/pan, waveform seeking, synced lyrics)

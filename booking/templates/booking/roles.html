@@ -1,0 +1,13 @@
+{% extends "player/base.html" %}
+{% block title %}Booking Roles – BandMate{% endblock %}
+{% block content %}
+<a href="{% url 'booking:overview' %}" class="back-link">Back to Booking</a>
+<div class="wiz-content feature-content"><h1 class="page-title">Booking roles · {{ active_group.name }}</h1>
+{% if error %}<p class="error-message">{{ error }}</p>{% endif %}
+{% for member in members %}<form method="post" class="wiz-form">{% csrf_token %}
+<input type="hidden" name="membership" value="{{ member.pk }}">
+<label for="role-{{ member.pk }}">{{ member.user.username }}</label>
+<select id="role-{{ member.pk }}" name="role" class="form-input"><option value="">No Booking access</option>
+{% for value,label in role_choices %}<option value="{{ value }}"{% if member.booking_role.role == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+<button type="submit" class="btn btn-secondary">Save role</button></form>{% endfor %}
+</div>{% endblock %}

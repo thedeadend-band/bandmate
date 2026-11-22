@@ -10,7 +10,11 @@ def group_context(request):
         .exclude(celebration_dismissals__user=request.user)
         .order_by('-ready_date', 'song_name')[:5]
     )
+    from calendar_integrations.models import GroupCalendarRole
+    from .group_permissions import role_for
     return {
         'active_group': group,
         'ready_celebrations': celebrations,
+        'can_manage_calendar_integrations': role_for(
+            GroupCalendarRole, request.user, group) == GroupCalendarRole.Role.MANAGER,
     }

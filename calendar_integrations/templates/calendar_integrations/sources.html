@@ -1,0 +1,19 @@
+{% extends "player/base.html" %}
+{% block title %}Calendar Settings – BandMate{% endblock %}
+{% block content %}
+<a href="{% url 'calendar_sources' %}" class="back-link">Back to Calendar Sources</a>
+<div class="wiz-content feature-content"><h1 class="page-title">Calendar settings · {{ active_group.name }}</h1>
+<p><a href="{% url 'calendar_integrations:roles' %}" class="btn btn-secondary">Calendar roles</a></p>
+<p>Local calendar setup is available now. Event editing and Google connections are not available yet. These settings work independently of Booking.</p>
+<h2>BandMate local calendars</h2>
+{% for calendar in local_calendars %}
+<form method="post" action="{% url 'calendar_integrations:write_mode' 'local' calendar.pk %}">{% csrf_token %}
+<p>{{ calendar.name }} · {{ calendar.timezone }} · {% if calendar.write_enabled %}Editing enabled{% else %}View only{% endif %}
+<input type="hidden" name="write_enabled" value="{% if calendar.write_enabled %}false{% else %}true{% endif %}">
+<button type="submit" class="btn btn-secondary">{% if calendar.write_enabled %}Disable{% else %}Allow{% endif %} editing</button></p></form>
+{% empty %}<p>No local calendars yet.</p>{% endfor %}
+<h2>Create a local calendar</h2><form method="post" class="wiz-form">{% csrf_token %}{% include "player/feature_form_fields.html" %}<button type="submit" class="btn btn-add">Create calendar</button></form>
+<h2>Google calendars</h2><p>Google connection setup is not available yet. New connections will start in view-only mode.</p>
+{% for calendar in google_calendars %}<p>{{ calendar.name }} · {% if calendar.write_enabled %}Editing enabled{% else %}View only{% endif %}</p>
+{% if calendar.write_enabled %}<form method="post" action="{% url 'calendar_integrations:write_mode' 'google' calendar.pk %}">{% csrf_token %}<input type="hidden" name="write_enabled" value="false"><button type="submit" class="btn btn-secondary">Disable editing</button></form>{% endif %}{% endfor %}
+</div>{% endblock %}

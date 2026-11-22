@@ -1,0 +1,15 @@
+{% extends "player/base.html" %}
+{% block title %}Booking – BandMate{% endblock %}
+{% block content %}
+<div class="wiz-content feature-content">
+<h1 class="page-title">Booking · {{ active_group.name }}</h1>
+  <h2>Setup required</h2>
+  <p>Start with your band's search location, radius and genres.</p>
+  {% if is_booking_manager %}
+  <p><a class="btn btn-add" href="{% url 'booking:settings' %}">Set up Booking</a>
+     <a class="btn btn-secondary" href="{% url 'booking:roles' %}">Booking roles</a></p>
+  {% else %}<p>Your booking manager can configure this band.</p>{% endif %}
+  <p>Gmail connections, opportunity research and email drafts are not available yet. No external integrations are active.</p>
+  <p><a href="{% url 'calendar' %}">Open Calendar</a> — Calendar is available independently of Booking.</p>
+</div>
+{% endblock %}

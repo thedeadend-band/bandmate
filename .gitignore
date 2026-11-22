@@ -9,6 +9,7 @@ staticfiles/
 dist/
 build/
 .env
+/.booking-worker.lock
 .DS_Store
 /songs
 /.audio_cache

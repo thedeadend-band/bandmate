@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=21">
+  <link rel="stylesheet" href="{% static 'player/css/style.css' %}?v=22">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -103,6 +103,12 @@
         </svg>
         Calendar
       </a>
+      {% if can_view_booking %}
+      <a href="{% url 'booking:overview' %}" class="sidebar-nav-item{% if nav_active == 'booking' %} active{% endif %}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 5V3h8v2M3 11h18M10 11v3h4v-3"/></svg>
+        Booking
+      </a>
+      {% endif %}
       <a href="{% url 'queue_list' %}" class="sidebar-nav-item{% if nav_active == 'queue' %} active{% endif %}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>

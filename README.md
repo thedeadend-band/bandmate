@@ -226,3 +226,12 @@ For a home-server deployment behind a reverse proxy (nginx, Caddy, etc.):
    pip install gunicorn
    gunicorn bandmate.wsgi:application --bind 0.0.0.0:8000
    ```
+## Booking and Calendar development
+
+The Phase 0 foundation adds optional per-band Booking setup and explicit Booking
+and Calendar roles. Booking starts disabled; site staff designate initial managers
+through the group's feature panel. Calendar permissions work independently.
+Local-calendar source setup is available, while event editing, Google/Gmail OAuth,
+AI research and email sending are planned for later phases. Existing ICS stays
+read-only. See [implementation status](docs/booking/IMPLEMENTATION_PLAN.md) and
+[installation/update instructions](docs/booking/INSTALL_UPDATE.md).

@@ -1,0 +1,10 @@
+{% extends "player/base.html" %}
+{% block title %}Group Features – BandMate{% endblock %}
+{% block content %}
+<a href="{% url 'admin_group_edit' group.pk %}" class="back-link">Back to Group</a>
+<div class="wiz-content feature-content"><h1 class="page-title">Features · {{ group.name }}</h1>
+<p>Booking starts disabled. Enabling it retains independent Calendar access and does not activate external services.</p>
+<p>Designate a current member as the first manager of each feature. Once assigned, that manager controls its roles. Site staff have no automatic access to private Booking data or calendar editing.</p>
+<form method="post" class="wiz-form">{% csrf_token %}{% include "player/feature_form_fields.html" %}<button type="submit" class="btn btn-add">Save features</button></form>
+<p>Disabling Booking preserves its settings and roles for later reactivation.</p>
+</div>{% endblock %}

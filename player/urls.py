@@ -3,6 +3,7 @@ from django.urls import path
 from . import views
 from . import wizard_views
 from . import queue_views
+from .group_feature_views import group_features
 
 urlpatterns = [
     path('', views.song_list, name='song_list'),
@@ -85,6 +86,7 @@ urlpatterns = [
     path('admin-console/groups/', views.admin_groups, name='admin_groups'),
     path('admin-console/groups/new/', views.admin_group_edit, name='admin_group_add'),
     path('admin-console/groups/<int:group_id>/', views.admin_group_edit, name='admin_group_edit'),
+    path('admin-console/groups/<int:group_id>/features/', group_features, name='admin_group_features'),
     path('admin-console/add/', views.admin_user_add, name='admin_user_add'),
     path('admin-console/<int:user_id>/edit/', views.admin_user_edit, name='admin_user_edit'),
     path('admin-console/<int:user_id>/delete/', views.admin_user_delete, name='admin_user_delete'),

@@ -22,6 +22,12 @@ if [[ "$(id -u)" -ne 0 ]]; then
     exit 1
 fi
 
+# Existing installations must use the backup-aware updater. Never replace .env.
+if [[ -e /srv/bandmate/.env || -e /srv/bandmate/db.sqlite3 || -d /srv/bandmate/.git ]]; then
+    red "Existing BandMate installation found. Use update-service.sh with a reviewed commit SHA."
+    exit 1
+fi
+
 # ---------- gather configuration --------------------------------------------
 bold "=== BandMate Service Deployer ==="
 echo ""
@@ -145,14 +151,16 @@ fi
 cat > /srv/bandmate/.env << ENVEOF
 ${ENV_CONTENT}
 ENVEOF
+chmod 600 /srv/bandmate/.env
 
 # ---------- initialise database and static files ----------------------------
 bold "[4/${TOTAL_STEPS}] Running migrations, collecting static files, creating admin..."
 cd /srv/bandmate
 set -a && source .env && set +a
 mkdir -p songs .waveform_cache .audio_cache
-.venv/bin/python manage.py migrate --noinput -q
-.venv/bin/python manage.py collectstatic --noinput -q
+.venv/bin/python manage.py check
+.venv/bin/python manage.py migrate --noinput --verbosity 0
+.venv/bin/python manage.py collectstatic --noinput --verbosity 0
 .venv/bin/python manage.py shell -c "
 from django.contrib.auth.models import User
 if not User.objects.filter(username='${ADMIN_USER}').exists():
@@ -220,6 +228,9 @@ TIMEREOF
 
 systemctl daemon-reload
 systemctl enable --now bandmate-calendar-sync.timer
+
+# Booking/Google foundation units are opt-in and need a verified service user.
+# See docs/booking/INSTALL_UPDATE.md; never start integrations on installation.
 
 # ---------- install Cloudflare Tunnel if enabled ----------------------------
 if [[ "${ENABLE_TUNNEL,,}" == "y" ]]; then

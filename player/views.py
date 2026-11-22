@@ -21,6 +21,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth.models import User
 from django.db.models import Count, F
+from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -1302,6 +1303,7 @@ def admin_groups(request):
 
 
 @_staff_required
+@transaction.atomic
 def admin_group_edit(request, group_id=None):
     group = get_object_or_404(Group, pk=group_id) if group_id else None
     error = None
@@ -1331,6 +1333,9 @@ def admin_group_edit(request, group_id=None):
                 .exclude(user_id__in=selected_ids)
                 .values_list('user_id', flat=True)
             )
+            from .group_permissions import audit
+            for removed_id in removed_ids:
+                audit(group, request.user, 'membership.removed', f'user:{removed_id}')
             GroupMembership.objects.filter(
                 group=group, user_id__in=removed_ids).delete()
             SongReadiness.objects.filter(
