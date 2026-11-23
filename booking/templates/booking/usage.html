@@ -1,0 +1,11 @@
+{% extends "player/base.html" %}
+{% block title %}Booking usage – BandMate{% endblock %}
+{% block content %}
+<a class="back-link" href="{% url 'booking:overview' %}">Back to Booking</a>
+<div class="wiz-content feature-content"><h1 class="page-title">AI usage · {{ active_group.name }}</h1>
+<p>These are application estimates, not an OpenAI invoice. Connection checks use no inference tokens. Costs from other applications or shared OpenAI projects are not included.</p>
+<div class="feature-table-scroll"><table class="feature-table"><thead><tr><th>Period</th><th>Job attempts</th><th>Input tokens</th><th>Output tokens</th><th>Estimated USD</th></tr></thead>
+<tbody>{% for window in windows %}<tr><td>{{ window.label }}</td><td>{{ window.requests }}</td><td>{{ window.input_tokens|default:0 }}</td><td>{{ window.output_tokens|default:0 }}</td><td>${{ window.cost|default:0|floatformat:4 }}</td></tr>{% endfor %}</tbody></table></div>
+<p>Outstanding reservations: ${{ reserved|floatformat:4 }}. Uncertain inference attempts retain their reservation until reconciled.</p>
+<h2>Recent activity</h2><ul>{% for entry in entries %}<li>{{ entry.created_at }} · {{ entry.task_type }} · {{ entry.model|default:"Model list" }} · {{ entry.result }} · ${{ entry.estimated_usd|floatformat:4 }}</li>{% empty %}<li>No recorded usage.</li>{% endfor %}</ul></div>
+{% endblock %}

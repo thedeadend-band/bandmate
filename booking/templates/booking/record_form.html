@@ -1,0 +1,6 @@
+{% extends "player/base.html" %}
+{% block title %}{{ title }} – Booking{% endblock %}
+{% block content %}{% include "booking/record_nav.html" %}<div class="wiz-content feature-content">
+<h1 class="page-title">{{ title|capfirst }} · {{ active_group.name }}</h1>
+<form method="post" class="wiz-form">{% csrf_token %}{% include "player/feature_form_fields.html" %}
+<button class="btn btn-add" type="submit">Save record</button></form></div>{% endblock %}

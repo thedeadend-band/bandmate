@@ -7,6 +7,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('booking/', include('booking.urls')),
     path('calendar/manage/', include('calendar_integrations.urls')),
+    path('calendar/events/', include('calendar_integrations.event_urls')),
     path('', include('player.urls')),
 ]
 

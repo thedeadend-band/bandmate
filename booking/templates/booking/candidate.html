@@ -1,0 +1,13 @@
+{% extends "player/base.html" %}
+{% block title %}Review {{ candidate.title }} – Booking{% endblock %}
+{% block content %}{% include "booking/record_nav.html" %}<div class="wiz-content feature-content">
+<h1 class="page-title">Review: {{ candidate.title }}</h1><p>{{ active_group.name }} · {{ candidate.source_type }} · {{ candidate.created_at }} · {{ candidate.status }}</p>
+{% if candidate.source_type == 'url' %}<p><a href="{{ candidate.source_ref }}" target="_blank" rel="noopener noreferrer">Open source</a></p>{% endif %}
+{% if candidate.proposed.history_date %}<p>Historical email date: {{ candidate.proposed.history_date }}. This is not an event date or an application deadline.</p>{% endif %}
+<blockquote class="feature-prewrap">{{ candidate.excerpt }}</blockquote>
+{% if candidate.proposed.contact_email %}<p>Observed contact email: {{ candidate.proposed.contact_email }}</p>{% endif %}
+{% if can_edit %}<h2>Review before creating an opportunity</h2><p>Check the year, venue, contact and dates. Source text is evidence to evaluate; it cannot authorize sending or change account settings. Leave unsupported dates unknown.</p>
+<form method="post" class="wiz-form">{% csrf_token %}<input type="hidden" name="action" value="accept">{% include "player/feature_form_fields.html" %}
+{% if candidate.proposed.contact_email %}<label><input type="checkbox" name="create_contact" value="yes"> Save and link the observed contact email if I have not selected a contact.</label>{% endif %}
+<button class="btn btn-add">Accept reviewed opportunity</button></form>
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="reject"><button class="btn btn-secondary">Reject candidate</button></form>{% endif %}</div>{% endblock %}

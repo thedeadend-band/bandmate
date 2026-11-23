@@ -1,0 +1,10 @@
+{% extends "player/base.html" %}
+{% block title %}Calendar Change – BandMate{% endblock %}
+{% block content %}<a href="{% url 'calendar' %}" class="back-link">Back to Calendar</a>
+<div class="wiz-content feature-content"><h1 class="page-title">Calendar change: {{ operation.get_status_display }}</h1>
+{% if operation.status == 'pending' or operation.status == 'processing' %}<p>Your reviewed change is queued. It will appear after Google confirms it during synchronization. Refresh this page to check its status.</p>
+{% elif operation.status == 'ambiguous' %}<p>Google's result could not be confirmed. No further write will be attempted automatically. Check Google before making another change.</p>
+{% elif operation.status == 'conflict' %}<p>The event changed in Google. Reload the event and compare before submitting a new change.</p>
+{% elif operation.status == 'succeeded' %}<p>Your calendar change was confirmed.</p>
+{% else %}<p>The change was not applied. Check your calendar connection and permissions, then reload the event.</p>{% endif %}
+{% if operation.error_code %}<p>Status: {{ operation.error_code }}</p>{% endif %}</div>{% endblock %}

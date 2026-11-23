@@ -1,25 +1,53 @@
-# Gmail connection contract
+# Gmail onboarding
 
-**Status: planned for Phase 2; no Gmail OAuth or sending is implemented.**
+Phase 2 implements separate read-only Gmail authorization and explicit connection
+checks. Phase 3 adds explicitly approved targeted imports. There is no send endpoint.
 
-Use a separate grant and callback from Calendar. Request `gmail.readonly` for
-explicitly authorized history import and `gmail.send` only for reviewed sending.
-Do not request broad mailbox access or modify permission by default. Google's
-verification requirements are a production launch gate, not something satisfied
-by a personal test client. [Official scope reference](https://developers.google.com/workspace/gmail/api/auth/scopes).
+Configure `GMAIL_OAUTH_CLIENT_ID`, `GMAIL_OAUTH_CLIENT_SECRET` and an exact registered
+HTTPS `GMAIL_OAUTH_REDIRECT_URI` ending in `/booking/gmail/callback/`. These settings
+never fall back to the Calendar OAuth client. A Booking manager acknowledges the
+read-only connection on the Connections page before consent starts.
 
-Initial policy: one mailbox per band, normalized identity checked at connection
-and send time; reject accidental mailbox reuse across bands. Encrypt refresh
-tokens under the band's connection with the shared versioned vault. State must
-bind authenticated user, Group, nonce, expiry, callback and intended scopes;
-recheck manager role and consume state exactly once, even if the active band
-changed while consent was open. No user-wide or site-global token fallback.
+The grant requests only `https://www.googleapis.com/auth/gmail.readonly`. State is
+bound to user, session, Group, connection generation and a ten-minute expiry;
+PKCE verifiers are encrypted and erased after consumption. Changed band/role,
+expired/replayed consent and disconnect/reconnect races fail closed. The callback
+checks the authenticated mailbox with `users/me/profile`, normalizes it to lower
+case and enforces one mailbox per band through a unique DB constraint. A collision
+never discloses the other band's identity.
+[Profile API](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users/getProfile).
 
-Import targeted date ranges/queries and minimal relevant excerpts with provenance,
-review, consent, retention and deletion controls. Never forward an entire mailbox
-to AI by default. Provider errors and revoked grants must block work visibly.
+Refresh tokens are encrypted with the band's `gmail-refresh` purpose. Explicit
+profile tests run in the Booking worker, with fresh feature/role/generation checks,
+bounded retries and visible sanitized errors. A revoked grant disconnects only
+its own band. No page load scans mail. No email content is sent to OpenAI.
 
-Phase 4 adds manager-reviewed sending with exact recipients/content, suppression
-checks, CSRF, durable idempotency and reconciliation of ambiguous results. Gmail
-read authorization alone never permits sending. No external integration tests or
-Google approval have been performed in Phase 0.
+Disconnect removes the current mailbox address, encrypted token and history cursor
+and invalidates pending consent. Connection audit records remain; secured backups
+follow operator retention. Users may revoke Google-side authorization separately.
+Existing imported data follows its approved retention period or can be removed
+from Research & review; disconnect does not erase reviewed records or excerpts.
+
+Managers preview an inclusive UTC date range, simple keywords, message cap and
+retention duration, then approve that exact scope. Preview alone makes no Gmail
+request. The worker searches matching messages and reads only selected headers
+and Gmail snippets (up to 1,000 retained characters), never full bodies/attachments.
+Candidates are suggestions; correspondence dates are never event dates/deadlines.
+There is no AI processing or automatic scheduled mailbox import.
+
+Successful complete runs retain a scope-bound history checkpoint. Subsequent
+identical scopes use history deltas intersected with the approved search; expired
+history falls back to that targeted search, never an unrestricted mailbox scan.
+Deleted messages observed in history clear retained content. Expiry, export and
+manager removal operate only within the current band. Content-free tombstones
+prevent re-import; human-reviewed records and notes remain separate.
+See [limits and recovery](RESEARCH_AND_RECORDS.md),
+[metadata reads](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/get),
+[history](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.history/list)
+and [synchronization](https://developers.google.com/workspace/gmail/api/guides/sync).
+
+`gmail.readonly` is restricted. Production multi-band availability requires the
+applicable Google verification/security-assessment gates; mocked tests do not
+satisfy them. Phase 4 adds separately consented `gmail.send` and exact-content,
+manager-reviewed, idempotent sends only.
+[Google scope requirements](https://developers.google.com/workspace/gmail/api/auth/scopes).

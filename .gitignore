@@ -10,6 +10,7 @@ dist/
 build/
 .env
 /.booking-worker.lock
+/.google-calendar-sync.lock
 .DS_Store
 /songs
 /.audio_cache

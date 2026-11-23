@@ -14,3 +14,4 @@ pyrubberband>=0.3.0
 audio-separator>=0.44.0
 onnxruntime-gpu>=1.16.0
 # For GPU acceleration, also install: pip install -r requirements-gpu.txt
+cryptography>=44,<47

@@ -12,8 +12,8 @@
 <div class="admin-header">
   <h1 class="page-title">Calendar Sources</h1>
 </div>
-{% if can_manage_calendar_integrations %}<p><a href="{% url 'calendar_integrations:sources' %}" class="btn btn-secondary">Local calendars and Calendar roles</a></p>{% endif %}
-<p>iCal subscriptions are read-only. To edit Google events, a separate Google connection will be available in a future update.</p>
+{% if can_manage_calendar_integrations %}<p><a href="{% url 'calendar_integrations:sources' %}" class="btn btn-secondary">Local and Google calendars / Calendar roles</a></p>{% endif %}
+<p>iCal subscriptions are read-only. To edit Google events, use a separate Google connection with explicit edit permission.</p>
 
 {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
 

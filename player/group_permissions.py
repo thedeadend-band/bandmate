@@ -10,13 +10,13 @@ from .models import GroupAccessAudit, GroupMembership
 
 def member_of(user, group):
     return bool(user.is_authenticated and user.is_active and group and
-                GroupMembership.objects.filter(group=group, user=user).exists())
+                GroupMembership.objects.filter(group=group, user=user, user__is_active=True).exists())
 
 
 def role_for(model, user, group):
     if not user.is_authenticated or not user.is_active or not group:
         return None
-    return model.objects.filter(membership__group=group, membership__user=user
+    return model.objects.filter(membership__group=group, membership__user=user, membership__user__is_active=True
                                 ).values_list('role', flat=True).first()
 
 

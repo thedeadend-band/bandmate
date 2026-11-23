@@ -1,15 +1,12 @@
 {% extends "player/base.html" %}
 {% block title %}Booking – BandMate{% endblock %}
-{% block content %}
-<div class="wiz-content feature-content">
-<h1 class="page-title">Booking · {{ active_group.name }}</h1>
-  <h2>Setup required</h2>
-  <p>Start with your band's search location, radius and genres.</p>
-  {% if is_booking_manager %}
-  <p><a class="btn btn-add" href="{% url 'booking:settings' %}">Set up Booking</a>
-     <a class="btn btn-secondary" href="{% url 'booking:roles' %}">Booking roles</a></p>
-  {% else %}<p>Your booking manager can configure this band.</p>{% endif %}
-  <p>Gmail connections, opportunity research and email drafts are not available yet. No external integrations are active.</p>
-  <p><a href="{% url 'calendar' %}">Open Calendar</a> — Calendar is available independently of Booking.</p>
-</div>
-{% endblock %}
+{% block content %}{% include "booking/record_nav.html" %}
+<div class="feature-content"><h1 class="page-title">Booking · {{ active_group.name }}</h1>
+<p>{{ opportunity_count }} visible opportunit{{ opportunity_count|pluralize:"y,ies" }}. Track deadlines, review leads and keep follow-up reminders in one place.</p>
+<div class="feature-actions">{% if can_edit %}<a class="btn btn-add" href="{% url 'booking:record_new' 'opportunities' %}">Add opportunity</a>{% endif %}
+<a class="btn btn-secondary" href="{% url 'booking:research' %}">Research &amp; review</a><a href="{% url 'calendar' %}">Calendar</a><a href="{% url 'booking:usage' %}">Usage and estimated costs</a></div>
+{% if is_booking_manager %}<div class="feature-actions"><a href="{% url 'booking:settings' %}">Band preferences</a><a href="{% url 'booking:connections' %}">OpenAI and Gmail connections</a><a href="{% url 'booking:roles' %}">Booking roles</a><a href="{% url 'booking:suppressions' %}">Blacklist &amp; opt-outs</a></div>{% endif %}
+<h2>Verified deadlines · next 60 days</h2><ul class="feature-record-list">{% for opportunity in deadlines %}<li><a href="{% url 'booking:record_detail' 'opportunities' opportunity.pk %}">{{ opportunity.name }}</a> · {{ opportunity.verified_deadline }} · {{ opportunity.event_year }} cycle</li>{% empty %}<li>No upcoming verified deadlines.</li>{% endfor %}</ul>
+<h2>Predicted windows to check</h2><p>These are forecasts, not published application deadlines.</p><ul class="feature-record-list">{% for opportunity in predictions %}<li><a href="{% url 'booking:record_detail' 'opportunities' opportunity.pk %}">{{ opportunity.name }}</a> · {{ opportunity.predicted_window_start }} – {{ opportunity.predicted_window_end }}</li>{% empty %}<li>No upcoming predictions.</li>{% endfor %}</ul>
+<h2>Follow-ups · due or within 14 days</h2><p>Reminders never send email automatically.</p><ul class="feature-record-list">{% for reminder in followups %}<li><a href="{% url 'booking:record_detail' 'opportunities' reminder.opportunity_id %}">{{ reminder.opportunity.name }}</a> · {{ reminder.due_date }} · {{ reminder.note }}</li>{% empty %}<li>No follow-ups due.</li>{% endfor %}</ul>
+</div>{% endblock %}

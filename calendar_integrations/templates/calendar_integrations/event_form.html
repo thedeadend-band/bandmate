@@ -1,0 +1,24 @@
+{% extends "player/base.html" %}
+{% block title %}Calendar Event – BandMate{% endblock %}
+{% block content %}<a href="{% url 'calendar' %}" class="back-link">Back to Calendar</a>
+<div class="wiz-content feature-content"><h1 class="page-title">{% if creating %}New event{% else %}Edit event{% endif %} · {{ active_group.name }}</h1>
+{% if creating and not calendars %}<p>No editable calendars are available. Ask a Calendar manager to enable editing for a source.</p>{% else %}
+<form method="post" class="wiz-form">{% csrf_token %}
+{% if creating %}<div class="form-group"><label for="target">Calendar</label><select id="target" name="target" required><option value="">Choose a calendar</option>{% for target in targets %}<option value="{{ target.value }}"{% if selected == target.value %} selected{% endif %}>{{ target.name }} ({{ target.timezone }})</option>{% endfor %}</select></div>{% endif %}
+{% include "player/feature_form_fields.html" %}
+<p class="form-hint">For all-day events, use the date fields; otherwise use start and end times. Google changes are queued for synchronization and remain pending until confirmed. No invitations are sent.</p>
+<button type="submit" class="btn btn-add">Save event</button></form>
+<script>
+(function () {
+  var allDay = document.getElementById('id_is_all_day');
+  function showDates() {
+    ['start', 'end', 'start_date', 'end_date'].forEach(function (name) {
+      var input = document.getElementById('id_' + name);
+      input.closest('.form-group').hidden = name.endsWith('_date') !== allDay.checked;
+    });
+  }
+  allDay.addEventListener('change', showDates);
+  showDates();
+})();
+</script>
+{% endif %}</div>{% endblock %}

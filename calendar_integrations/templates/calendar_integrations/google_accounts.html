@@ -1,0 +1,14 @@
+{% extends "player/base.html" %}
+{% block title %}Google Calendars – BandMate{% endblock %}
+{% block content %}<a href="{% url 'calendar_integrations:sources' %}" class="back-link">Back to Calendar Settings</a>
+<div class="wiz-content feature-content"><h1 class="page-title">Google calendars · {{ active_group.name }}</h1>
+<p>Connect a Calendar-only account. Selected calendars start in view-only mode. Editing requires separate consent and a per-calendar switch.</p>
+{% if oauth_configured %}<form method="post" action="{% url 'calendar_integrations:google_connect' %}">{% csrf_token %}<button type="submit" class="btn btn-add">Connect Google (view only)</button></form>{% else %}<p>The operator must configure the Calendar OAuth client, HTTPS callback and encryption vault first.</p>{% endif %}
+{% for account in accounts %}<h2>{{ account.email }}</h2><p>{% if account.is_connected %}Connected{% else %}Disconnected — reconnect to resume{% endif %}{% if account.calendar_list_requested %} · Calendar list refresh pending{% endif %}{% if account.last_error_code %} · {{ account.last_error_code }}{% endif %}</p>
+{% if account.is_connected %}
+<form method="post" action="{% url 'calendar_integrations:google_select' account.pk %}" class="wiz-form">{% csrf_token %}
+<div class="form-group"><label for="calendar-{{ account.pk }}">Select calendar</label><select id="calendar-{{ account.pk }}" name="external_id" required>{% for calendar in account.calendar_list %}<option value="{{ calendar.id }}">{{ calendar.summary }} · {{ calendar.accessRole }}</option>{% endfor %}</select></div>
+<div class="form-group"><label class="checkbox-label"><input type="checkbox" name="acknowledge_shared" value="yes" required> I understand changes to this shared Google calendar can be visible to its other users and bands.</label></div><button type="submit" class="btn btn-secondary">Add selected calendar (view only)</button></form>
+<form method="post" action="{% url 'calendar_integrations:google_refresh' account.pk %}">{% csrf_token %}<button type="submit" class="btn btn-secondary">Refresh calendar list</button></form>
+<form method="post" action="{% url 'calendar_integrations:google_disconnect' account.pk %}">{% csrf_token %}<p>Disconnect stops local access and removes stored credentials. Remote events remain. You can also revoke the app in your Google account.</p><button type="submit" class="btn btn-secondary">Disconnect Calendar account</button></form>
+{% endif %}{% empty %}<p>No Google Calendar accounts connected.</p>{% endfor %}</div>{% endblock %}

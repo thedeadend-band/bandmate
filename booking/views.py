@@ -14,8 +14,22 @@ from .permissions import require_booking
 @require_http_methods(['GET'])
 def overview(request):
     role = require_booking(request.user, request.active_group)
+    from .models import BookingOpportunity, BookingFollowUp, BookingCandidate
+    from .services.records import SuppressionIndex, EDIT_ROLES
+    from django.utils import timezone
+    from datetime import timedelta
+    index = SuppressionIndex(request.active_group)
+    today = timezone.now().date()
+    opportunities = [row for row in BookingOpportunity.objects.filter(group=request.active_group, is_archived=False).select_related(
+        'organization', 'venue', 'contact', 'series').order_by('-priority', 'name') if not index.blocked(row)]
+    visible_ids = [row.pk for row in opportunities]
     return render(request, 'booking/overview.html', {
         'nav_active': 'booking', 'is_booking_manager': role == BookingMembershipRole.Role.MANAGER,
+        'can_edit': role in EDIT_ROLES, 'opportunity_count': len(opportunities),
+        'deadlines': [row for row in opportunities if row.verified_deadline and today <= row.verified_deadline <= today + timedelta(days=60)],
+        'predictions': [row for row in opportunities if row.predicted_window_start and row.predicted_window_end >= today and row.predicted_window_start <= today + timedelta(days=60)],
+        'followups': BookingFollowUp.objects.filter(group=request.active_group, opportunity_id__in=visible_ids,
+            completed=False, due_date__lte=today + timedelta(days=14)).select_related('opportunity').order_by('due_date')[:30],
     })
 
 
@@ -29,7 +43,8 @@ def settings_view(request):
     if request.method == 'POST' and form.is_valid():
         with transaction.atomic():
             require_booking(request.user, group, [BookingMembershipRole.Role.MANAGER])
-            form.save()
+            BookingSettings.objects.filter(pk=config.pk).update(**{
+                field: form.cleaned_data[field] for field in form.Meta.fields})
             audit(group, request.user, 'booking.profile.updated')
         return redirect('booking:settings')
     return render(request, 'booking/settings.html', {'form': form, 'nav_active': 'booking'})

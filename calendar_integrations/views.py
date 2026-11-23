@@ -1,3 +1,5 @@
+import uuid
+import hashlib
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -7,8 +9,8 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from player.group_permissions import audit, change_role
 from .forms import LocalCalendarForm
-from .models import BandmateLocalCalendar, ConnectedCalendar, GroupCalendarRole
-from .permissions import require_calendar_manager
+from .models import BandmateLocalCalendar, ConnectedCalendar, GroupCalendarRole, CalendarWriteOperation
+from .permissions import require_calendar_manager, GOOGLE_EVENT_WRITE_SCOPE
 
 
 @login_required
@@ -48,13 +50,21 @@ def write_mode(request, kind, source_id):
         elif kind == 'google':
             source = get_object_or_404(ConnectedCalendar, pk=source_id, account__group=group)
             if value == 'true':
-                audit(group, request.user, 'calendar.google.write_enable_blocked', source.pk)
-                return HttpResponseBadRequest('Google consent and live permission verification are not available yet.')
+                account = source.account
+                if not account.is_connected or not account.refresh_ciphertext or GOOGLE_EVENT_WRITE_SCOPE not in account.granted_scopes:
+                    audit(group, request.user, 'calendar.google.write_enable_blocked', source.pk)
+                    return HttpResponseBadRequest('Authorize event editing for this Google account first.')
+                key = uuid.uuid4()
+                operation = CalendarWriteOperation.objects.create(group=group, actor=request.user, key=key,
+                    fingerprint=hashlib.sha256(str(key).encode()).hexdigest(), google_calendar=source,
+                    action='enable', expected_version=str(source.policy_version))
+                return redirect('calendar_events:operation', operation_id=operation.pk)
         else:
             raise Http404
         old = source.write_enabled
         source.write_enabled = value == 'true'
-        source.save(update_fields=['write_enabled', 'updated_at'])
+        source.policy_version += 1
+        source.save(update_fields=['write_enabled', 'policy_version', 'updated_at'])
         if old != source.write_enabled:
             audit(group, request.user, f'calendar.{kind}.write_mode', source.pk,
                   old, source.write_enabled)

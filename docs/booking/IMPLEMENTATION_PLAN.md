@@ -1,6 +1,11 @@
 # Implementation plan
 
-## Phase 0 — current increment
+There are **six phases, numbered 0–5**. Phase 0 is committed on
+`codex/booking-editable-calendars` (`bba18cc`); work continues on its child branch
+`codex/ai-booking-agent`. See [Phase 1–2 acceptance](PHASE_1_2_ACCEPTANCE.md)
+and [current Phase 3 acceptance](PHASE_3_ACCEPTANCE.md).
+
+## Phase 0 — committed foundation
 
 - [x] Inspect exact HEAD, memberships, calendar, templates, tests, scripts and working tree.
 - [x] Create `codex/booking-editable-calendars` from clean `18dc9fb`.
@@ -15,7 +20,7 @@
 
 See [PHASE_0_ACCEPTANCE.md](PHASE_0_ACCEPTANCE.md) for executed checks.
 
-## Phase 1 — next, core Calendar editing
+## Phase 1 — implemented, awaiting live-provider acceptance
 
 1. Add local event model and audited CRUD with timezone/all-day validation; combine
    ICS/local/Google events and filters on existing `/calendar/`. Add accessible
@@ -33,20 +38,47 @@ See [PHASE_0_ACCEPTANCE.md](PHASE_0_ACCEPTANCE.md) for executed checks.
 5. Verify Booking-OFF editing, independent accounts with opposite write policies,
    stale permissions, revocation, conflicts, recurrence, DST/all-day and retries.
 
-## Phase 2 — credentials and Gmail
+## Phase 2 — credential onboarding and budget foundation implemented
 
-Per-band OpenAI vault/key test/rotation, model allowlist, budget reservations and
-estimated usage ledger; no fallback. Separate Gmail OAuth/grants, mailbox identity
-and duplicate-mailbox policy, scoped import interfaces and consent/retention UI.
-No send endpoint yet. Test two independent keys/accounts and log/HTML redaction.
+Encrypted per-band OpenAI key save/replace/remove, background model-list tests,
+operator model allowlist, token/request/cost settings, atomic budget reservation
+and preflight services, per-attempt estimated usage ledger and usage page. Separate
+Gmail OAuth, mailbox identity/uniqueness, PKCE, connection checks and disconnect.
+No provider fallback, paid inference or send endpoint. Mocked tests
+cover two bands, role/feature revocation, stale generations, log/HTML redaction,
+rotation, backoff and simultaneous budget reservations.
 
-## Phase 3 — discovery
+Phase 3 now supplies message import preview/consent, retention/export/deletion.
+Actual inference handlers must use budget state and token caps before any paid
+call. Charts/category breakdowns remain later dashboard work. Live credentials,
+OAuth/billing and Google verification remain operator gates.
 
-Tenant-scoped contact/venue/series/opportunity/evidence models; historical Gmail
-and delta imports; dedup/aliases, persistent blacklist and opt-out suppression;
-bounded safe source fetch/search/geocoding adapters; verified versus predicted
-deadlines; Booking overlays. Replace stubs with durable SQLite-safe jobs, leases,
-quotas, backoff, scheduling and per-band enablement checks before external calls.
+## Phase 3 — records/import/source review implemented; discovery extensions remain
+
+- [x] Band-scoped organizations, venues, contacts, series, annual opportunities,
+  source evidence, optimistic editing, manual merges and stable identity exports.
+- [x] Targeted Gmail preview/approval, bounded metadata/snippet import, progressive
+  checkpoints, history deltas/404 recovery, deletion tombstones and retention.
+- [x] Explicit public-URL research using robots-aware, DNS-pinned HTTPS fetching;
+  JSON-LD event extraction and manual review before creating records.
+- [x] Durable aliases, blacklists and opt-outs that survive rename/merge/research;
+  restoring visibility does not clear contact restrictions.
+- [x] Published application dates require evidence; predicted windows stay separate;
+  next-year editions never inherit last year's dates.
+- [x] Manual coordinates, straight-line radius/excluded-city filtering and explained
+  priority/distance/deadline scores; unknown locations remain visible.
+- [x] Dashboard, reminders and read-only overlays on the existing Calendar.
+- [x] Worker quotas, cancellation/revocation checks, explicit weekly public-source
+  revisits and local retention cleanup, including while Booking is OFF.
+- [ ] Select/configure licensed search and geocoding implementations. Current
+  interfaces are extension points, not working search/geocoding services.
+- [ ] Broader nearby-artist gig research and genre/history/responsiveness scoring.
+- [ ] Evidence-grounded AI extraction with per-run consent, budget reservation and
+  token bounds; no Gmail content is sent to AI in this increment.
+- [ ] Live-provider and staging LXC acceptance; current tests use mocked providers.
+
+See [research behavior and limits](RESEARCH_AND_RECORDS.md). Discovery currently
+starts with a manager-supplied public URL; it does not autonomously search the web.
 
 ## Phase 4 — reviewed outreach
 
@@ -84,4 +116,4 @@ confirms that staff can select any Group, member roles were absent, ICS sync
 deletes/recreates events and ran synchronously on page loads. The updater
 continued after failures, and the fresh deployer could overwrite `.env` on an
 existing install. The new updater/fresh-install guard address the latter two.
-The legacy ICS behavior is intentionally deferred to the core Calendar phase.
+Phase 1 removed ICS sync-on-render/source-save; its independent timer now owns refresh.

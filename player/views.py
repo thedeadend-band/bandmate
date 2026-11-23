@@ -1384,12 +1384,6 @@ def admin_settings(request):
 def calendar_view(request):
     sources = list(CalendarSource.objects.filter(
         group=request.active_group, is_enabled=True).order_by('name'))
-    if sources:
-        try:
-            from .calendar_sync import sync_due_calendar_sources
-            sync_due_calendar_sources()
-        except Exception:
-            pass
     now = timezone.localtime()
     range_start = now - timedelta(days=90)
     range_end = now + timedelta(days=540)
@@ -1403,7 +1397,8 @@ def calendar_view(request):
 
     source_data = [
         {
-            'id': source.pk,
+            'id': f'ics:{source.pk}',
+            'kind': 'ics', 'mode': 'Read-only',
             'name': source.name,
             'color': source.color,
             'last_synced_at': (
@@ -1416,8 +1411,8 @@ def calendar_view(request):
     ]
     event_data = [
         {
-            'id': event.pk,
-            'source_id': event.source_id,
+            'id': f'ics:{event.pk}',
+            'source_id': f'ics:{event.source_id}',
             'source_name': event.source.name,
             'color': event.source.color,
             'title': event.title,
@@ -1426,11 +1421,24 @@ def calendar_view(request):
             'all_day': event.is_all_day,
             'location': event.location,
             'description': event.description,
-            'url': event.event_url,
+            'url': reverse('calendar_events:detail', args=['ics', event.pk]),
         }
         for event in events
     ]
+    from calendar_integrations.presentation import calendar_data
+    extra_sources, extra_events, can_create = calendar_data(request.user, request.active_group, range_start, range_end)
+    from booking.presentation import milestones
+    booking_sources, booking_events = milestones(request.user, request.active_group, range_start, range_end)
+    extra_sources += booking_sources
+    extra_events += booking_events
+    source_data.extend(extra_sources)
+    event_data.extend(extra_events)
+    from calendar_integrations.models import CalendarWriteOperation
+    from .group_permissions import member_of
+    recent_changes = CalendarWriteOperation.objects.filter(group=request.active_group).order_by('-created_at')[:10] if member_of(request.user, request.active_group) else []
     return render(request, 'player/calendar.html', {
+        'can_create_events': can_create,
+        'recent_calendar_changes': recent_changes,
         'calendar_sources': source_data,
         'calendar_events': event_data,
         'can_manage_calendars': GroupMembership.objects.filter(
@@ -1475,12 +1483,7 @@ def calendar_sources(request):
 
         CalendarSource.objects.filter(group=request.active_group).exclude(
             pk__in=saved_ids).delete()
-        try:
-            from .calendar_sync import sync_due_calendar_sources
-            sync_due_calendar_sources(force=True)
-        except Exception:
-            pass
-        success = 'Calendar sources saved.'
+        success = 'Calendar sources saved. Events will refresh on the next scheduled sync.'
 
     return render(request, 'player/calendar_sources.html', {
         'calendar_entries': CalendarSource.objects.filter(

@@ -1,4 +1,4 @@
-# Installing the Phase 0 foundation
+# Installing Booking and editable Calendar
 
 These are operator instructions for the **existing** LXC, not commands executed
 by development. Verify host/container, service identity and backup destinations
@@ -15,7 +15,9 @@ before using them. No new VM, Docker deployment, port or tunnel is required.
 ```
 
 Migrations: `player/0023_groupaccessaudit`, `booking/0001_initial`,
-`calendar_integrations/0001_initial`. They are additive. Existing groups receive
+`calendar_integrations/0001_initial`, `calendar_integrations/0002_editable_calendars`,
+`booking/0002_credentials_and_budgets` and `booking/0003_research_records_and_imports`.
+They are additive. Existing groups receive
 no roles or enabled feature automatically. Database changes apply only when the
 operator runs `migrate`; development validation uses disposable databases.
 
@@ -23,7 +25,9 @@ In Settings → Edit Group → **Booking and Calendar permissions**, designate
 initial managers from existing members. A Booking manager can configure location
 and roles. A Calendar manager can create local sources and choose write policy
 through Calendar → Manage Calendars → **Local calendars and Calendar roles**.
-Event editing and external connections remain unavailable in Phase 0.
+Local event CRUD works without credentials. Google/Gmail connections require the
+separate HTTPS clients and vault described in the integration documents. OpenAI
+keys are entered only in the band manager Connections form, never in chat.
 
 ## Existing LXC update
 
@@ -56,10 +60,12 @@ environment, media, database, remote URL or master-key file is replaced. Unit
 upgrades are explicit so customized production units are never silently replaced.
 `deploy-service.sh` now rejects an existing installation before doing any work.
 
-## Optional foundation units
+## Optional integration units
 
-Stubs can stay uninstalled until real adapters are ready. They never contact
-providers, enqueue work or send mail. Verify an existing **unprivileged** runtime
+Keep units uninstalled until their configuration has been reviewed. Google sync
+and explicitly queued Booking connection/research jobs now contact providers;
+the scheduler enqueues approved public-source revisits and clears expired mail
+content. Verify an existing **unprivileged** runtime
 user can read `.env`, run the venv, and write the database directory/worker lock.
 Do not recursively change ownership of the existing installation without review.
 

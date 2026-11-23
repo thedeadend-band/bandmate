@@ -1,0 +1,11 @@
+{% extends "player/base.html" %}
+{% load tz %}
+{% block title %}{{ event.title }} – Calendar{% endblock %}
+{% block content %}<a href="{% url 'calendar' %}" class="back-link">Back to Calendar</a>
+<div class="wiz-content feature-content"><h1 class="page-title">{{ event.title }}</h1>
+<p>{{ source_name }} · {% if event.is_all_day %}All day · {% endif %}{% timezone event.timezone|default:'UTC' %}{% if event.is_all_day %}{{ event.starts_at|date:'DATE_FORMAT' }} – {{ event.ends_at|date:'DATE_FORMAT' }} (end exclusive){% else %}{{ event.starts_at|date:'Y-m-d H:i:s T' }} – {{ event.ends_at|date:'Y-m-d H:i:s T' }}{% endif %}{% endtimezone %}{% if event.timezone %} · Event timezone: {{ event.timezone }}{% endif %}</p>
+{% if event.location %}<p>{{ event.location }}</p>{% endif %}<p>{{ event.description|linebreaksbr }}</p>
+{% if event.html_link %}<p><a href="{{ event.html_link }}" target="_blank" rel="noopener noreferrer">Open in Google Calendar</a></p>{% endif %}
+{% if editable %}<p><a class="btn btn-add" href="{% url 'calendar_events:edit' kind event.pk %}">Edit</a> <a class="btn btn-secondary" href="{% url 'calendar_events:delete' kind event.pk %}">Delete</a></p>
+{% else %}<p>View only. Source permissions, event privacy, recurrence or provider restrictions may prevent editing.</p>{% endif %}
+</div>{% endblock %}

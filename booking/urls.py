@@ -1,9 +1,36 @@
 from django.urls import path
-from . import views
+from . import views, connection_views, gmail_views, record_views, research_views
 
 app_name = 'booking'
 urlpatterns = [
     path('', views.overview, name='overview'),
     path('settings/', views.settings_view, name='settings'),
     path('roles/', views.roles, name='roles'),
+    path('connections/', connection_views.connections, name='connections'),
+    path('connections/openai/remove/', connection_views.remove_key, name='remove_key'),
+    path('connections/<str:provider>/test/', connection_views.test_connection, name='test_connection'),
+    path('usage/', connection_views.usage, name='usage'),
+    path('gmail/connect/', gmail_views.connect, name='gmail_connect'),
+    path('gmail/callback/', gmail_views.callback, name='gmail_callback'),
+    path('gmail/disconnect/', gmail_views.disconnect, name='gmail_disconnect'),
+    path('records/export/', record_views.export_records, name='export_records'),
+    path('records/<str:kind>/', record_views.directory, name='directory'),
+    path('records/<str:kind>/new/', record_views.edit_record, name='record_new'),
+    path('records/<str:kind>/<int:record_id>/', record_views.record_detail, name='record_detail'),
+    path('records/<str:kind>/<int:record_id>/edit/', record_views.edit_record, name='record_edit'),
+    path('records/<str:kind>/<int:record_id>/merge/', record_views.merge, name='record_merge'),
+    path('opportunities/<int:record_id>/reminders/', record_views.followup, name='followup'),
+    path('reminders/<int:reminder_id>/complete/', record_views.complete_followup, name='complete_followup'),
+    path('blacklist/', record_views.suppressions, name='suppressions'),
+    path('blacklist/<int:suppression_id>/restore/', record_views.restore_suppression, name='restore_suppression'),
+    path('blacklist/<int:suppression_id>/resolve/', record_views.resolve_opt_out, name='resolve_opt_out'),
+    path('research/', research_views.research, name='research'),
+    path('research/new/<str:kind>/', research_views.preview, name='research_preview'),
+    path('research/runs/<int:run_id>/', research_views.run_detail, name='research_run'),
+    path('research/runs/<int:run_id>/confirm/', research_views.confirm, name='research_confirm'),
+    path('research/runs/<int:run_id>/cancel/', research_views.cancel, name='research_cancel'),
+    path('research/runs/<int:run_id>/schedule/', research_views.schedule_source, name='research_schedule'),
+    path('research/candidates/<int:candidate_id>/', research_views.review, name='candidate'),
+    path('research/mail/export/', research_views.export_mail, name='export_mail'),
+    path('research/mail/purge/', research_views.purge_mail, name='purge_mail'),
 ]

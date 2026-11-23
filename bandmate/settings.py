@@ -164,3 +164,23 @@ LOGGING = {
         },
     },
 }
+
+# Independent Calendar OAuth client; no per-band secrets in environment variables.
+BANDMATE_SECRET_KEY_FILE = os.environ.get('BANDMATE_SECRET_KEY_FILE', '')
+GOOGLE_CALENDAR_CLIENT_ID = os.environ.get('GOOGLE_CALENDAR_CLIENT_ID', '')
+GOOGLE_CALENDAR_CLIENT_SECRET = os.environ.get('GOOGLE_CALENDAR_CLIENT_SECRET', '')
+GOOGLE_CALENDAR_REDIRECT_URI = os.environ.get('GOOGLE_CALENDAR_REDIRECT_URI', '')
+# Fixed limits bound each timer run and provider request.
+GOOGLE_CALENDAR_MAX_PAGES = 40
+GOOGLE_CALENDAR_BATCH_SIZE = 25
+# Gmail has its own registration and grant; never fall back to Calendar settings.
+GMAIL_OAUTH_CLIENT_ID = os.environ.get('GMAIL_OAUTH_CLIENT_ID', '')
+GMAIL_OAUTH_CLIENT_SECRET = os.environ.get('GMAIL_OAUTH_CLIENT_SECRET', '')
+GMAIL_OAUTH_REDIRECT_URI = os.environ.get('GMAIL_OAUTH_REDIRECT_URI', '')
+BOOKING_OPENAI_MODELS = tuple(value.strip() for value in os.environ.get('BOOKING_OPENAI_MODELS', '').split(',') if value.strip())
+BOOKING_JOB_BATCH_SIZE = 10
+# SQL parameters can contain tenant-private data; never inherit root DEBUG.
+LOGGING['loggers']['django.db.backends'] = {'handlers': ['console'], 'level': 'WARNING', 'propagate': False}
+LOGGING['filters'] = {'oauth_query': {'()': 'bandmate.log_filters.OAuthQueryRedactor'}}
+LOGGING['handlers']['console']['filters'] = ['oauth_query']
+LOGGING['loggers']['django.server'] = {'handlers': ['console'], 'level': 'INFO', 'propagate': False}

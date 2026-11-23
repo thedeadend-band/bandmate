@@ -1,5 +1,5 @@
 [Unit]
-Description=BandMate Booking Scheduler (foundation)
+Description=BandMate Booking Research Scheduler and Retention Cleanup
 After=network-online.target
 
 [Service]

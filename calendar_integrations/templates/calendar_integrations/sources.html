@@ -4,7 +4,7 @@
 <a href="{% url 'calendar_sources' %}" class="back-link">Back to Calendar Sources</a>
 <div class="wiz-content feature-content"><h1 class="page-title">Calendar settings · {{ active_group.name }}</h1>
 <p><a href="{% url 'calendar_integrations:roles' %}" class="btn btn-secondary">Calendar roles</a></p>
-<p>Local calendar setup is available now. Event editing and Google connections are not available yet. These settings work independently of Booking.</p>
+<p>Create local calendars and manage connections here. Edit eligible events from Calendar. These settings work independently of Booking.</p>
 <h2>BandMate local calendars</h2>
 {% for calendar in local_calendars %}
 <form method="post" action="{% url 'calendar_integrations:write_mode' 'local' calendar.pk %}">{% csrf_token %}
@@ -13,7 +13,8 @@
 <button type="submit" class="btn btn-secondary">{% if calendar.write_enabled %}Disable{% else %}Allow{% endif %} editing</button></p></form>
 {% empty %}<p>No local calendars yet.</p>{% endfor %}
 <h2>Create a local calendar</h2><form method="post" class="wiz-form">{% csrf_token %}{% include "player/feature_form_fields.html" %}<button type="submit" class="btn btn-add">Create calendar</button></form>
-<h2>Google calendars</h2><p>Google connection setup is not available yet. New connections will start in view-only mode.</p>
-{% for calendar in google_calendars %}<p>{{ calendar.name }} · {% if calendar.write_enabled %}Editing enabled{% else %}View only{% endif %}</p>
-{% if calendar.write_enabled %}<form method="post" action="{% url 'calendar_integrations:write_mode' 'google' calendar.pk %}">{% csrf_token %}<input type="hidden" name="write_enabled" value="false"><button type="submit" class="btn btn-secondary">Disable editing</button></form>{% endif %}{% endfor %}
+<h2>Google calendars</h2><p><a href="{% url 'calendar_integrations:google_accounts' %}" class="btn btn-secondary">Connect or select Google calendars</a></p>
+{% for calendar in google_calendars %}<p>{{ calendar.name }} · {% if calendar.write_enabled %}Editing enabled{% else %}View only{% endif %}{% if calendar.last_error_code %} · {{ calendar.last_error_code }}{% endif %}</p>
+{% if not calendar.write_enabled %}<form method="post" action="{% url 'calendar_integrations:google_connect' %}">{% csrf_token %}<input type="hidden" name="calendar" value="{{ calendar.pk }}"><button type="submit" class="btn btn-secondary">Authorize Google event editing</button></form>{% endif %}
+<form method="post" action="{% url 'calendar_integrations:write_mode' 'google' calendar.pk %}">{% csrf_token %}<input type="hidden" name="write_enabled" value="{% if calendar.write_enabled %}false{% else %}true{% endif %}"><button type="submit" class="btn btn-secondary">{% if calendar.write_enabled %}Disable editing{% else %}Verify permissions and enable editing{% endif %}</button></form>{% endfor %}
 </div>{% endblock %}

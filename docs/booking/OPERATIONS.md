@@ -2,15 +2,50 @@
 
 ## Current status
 
-Phase 0 has no external providers or executable jobs. `booking_check` reports
-enabled-band count and the limitation. `booking_enqueue_due` and
-`sync_google_calendars` report zero work. `booking_worker --once` checks startup
-and singleton locking; without `--once` it idles until SIGTERM/SIGINT.
+The Booking worker processes explicitly queued OpenAI model-list/Gmail-profile
+checks and approved Gmail/public-URL research. `booking_worker --once` processes one bounded batch; the long-running worker
+checks every 30 seconds. `booking_check` is read-only and prints no secrets.
+`booking_enqueue_due` enqueues explicitly approved weekly public-URL revisits and
+purges expired email content, including for Booking-disabled bands. It makes no
+provider calls. No recurring source is enabled by default; Gmail requires fresh
+preview/approval per run. See [research limits/recovery](RESEARCH_AND_RECORDS.md).
 
-Do not interpret zero work as a successful Gmail/OpenAI/Google integration test.
-No feature toggle triggers external authorization or processing. Feature/role
-changes and source policies are auditable in `player.GroupAccessAudit`; no audit
-UI/export or private event content exists yet.
+`sync_google_calendars` now executes real sync and explicitly queued event writes.
+It has an independent lock/timer and works while Booking is OFF. Account-list
+refreshes are explicit; selected enabled calendars sync on the timer. Ordinary
+pages do not sync Google or ICS. Keep the existing ICS timer enabled for ICS.
+
+Do not enable provider jobs with production accounts until the release gates below
+are met. Mocked success is not live provider acceptance. Feature changes and
+connection lifecycle events use `GroupAccessAudit`; event changes also have
+`CalendarMutationAudit` and durable operation status. No email sends are available.
+
+## Vault provisioning and rotation
+
+Set `BANDMATE_SECRET_KEY_FILE` to a service-readable file outside Git and the DB,
+mode 0600 (parent directory protected). It contains one or more newline-separated
+Fernet keys; the first encrypts new data, all listed keys can decrypt older data.
+Generate keys with the installed `cryptography.fernet.Fernet.generate_key()` into
+the protected file, never into chat or command-line arguments. The application
+refuses a group/world-readable key file. No key file was created for production.
+
+For rotation, back up DB and old key ring separately; prepend a new key, then run:
+
+```sh
+.venv/bin/python manage.py rotate_calendar_credentials
+.venv/bin/python manage.py rotate_booking_credentials
+```
+
+Commands compare original ciphertext before updating, so they do not overwrite a
+concurrent reconnect. They are safe to retry if a failure leaves a mixed-key DB.
+Keep all old keys until every active record and retained backup has a tested
+recovery path. Never discard a key merely because a rotation command succeeded.
+Both expired OAuth state stores are pruned on subsequent connect attempts.
+
+Configure separate Calendar/Gmail client settings using [.env.example](../../.env.example).
+Disable DEBUG in production. Proxy/access logs must omit callback query strings
+on `/calendar/manage/google/callback/` and `/booking/gmail/callback/`; the app
+redacts its own configured logs but cannot alter proxy logs.
 
 ## Safe backup
 
@@ -22,9 +57,9 @@ umask 077
 The helper opens the source read-only, checks integrity, creates a new destination
 exclusively with mode 0600, uses SQLite's online backup API and checks the result.
 It never overwrites a backup or creates an absent source. Keep DB/media snapshots,
-release SHA and migration state together. Back up `.env` and future master-key
+release SHA and migration state together. Back up `.env` and master-key
 versions separately with restricted access/encrypted off-host storage; losing a
-master key will make future encrypted credentials unrecoverable. Test restore on
+master key will make encrypted credentials unrecoverable. Test restore on
 a staging clone before relying on any recovery procedure.
 
 ## Update failure / rollback
@@ -62,7 +97,15 @@ Do not remove a live lock file to start another worker. Stop the existing proces
 
 ## Remaining release gates
 
-Staging LXC install/upgrade/restore and systemd hardening verification; encrypted
-vault/key rotation; real OAuth accounts and Google verification; provider sync,
-event concurrency/recurrence and reviewed email sending. Do not provision live
-credentials into Phase 0 metadata records.
+Staging LXC install/upgrade/restore and service identity/hardening verification;
+operator-held vault backup/recovery; real read-only OAuth test accounts and Google
+verification; then explicitly authorized isolated Google CRUD/ETag/revocation tests.
+No paid OpenAI inference or email test has been run. Phase 3 import/data-retention
+controls have passed mocked/local acceptance; live mailbox and staging retention
+checks remain. Phase 4 reviewed sending remains unimplemented.
+
+Pending Google writes are visible on Calendar and operation pages. Conflicts require
+reloading the current event; ambiguous results require inspecting Google before a
+new user action. Never manually reset ambiguous rows to pending to force a replay.
+Connection-check errors appear on Booking → Connections; revoked credentials need
+reconnection, and queued tests will not use a replacement generation silently.

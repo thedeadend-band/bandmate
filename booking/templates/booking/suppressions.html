@@ -1,0 +1,8 @@
+{% extends "player/base.html" %}
+{% block title %}Blacklist – Booking{% endblock %}
+{% block content %}{% include "booking/record_nav.html" %}<div class="wiz-content feature-content"><h1 class="page-title">Blacklist &amp; opt-outs · {{ active_group.name }}</h1>
+<p>Matches apply only to this band. Restoring an entry makes it visible again; a do-not-contact restriction remains in force.</p>
+<form method="post" class="wiz-form">{% csrf_token %}{% include "player/feature_form_fields.html" %}<button class="btn btn-add">Add suppression</button></form>
+<h2>Saved restrictions</h2><ul>{% for entry in entries %}<li>{{ entry.get_kind_display }}: {{ entry.value }} · {{ entry.reason }}<br>{% if entry.active %}Blacklisted{% else %}Visibility restored{% endif %}{% if entry.do_not_contact %} · Do not contact{% endif %}
+{% if entry.active %}<form method="post" action="{% url 'booking:restore_suppression' entry.pk %}">{% csrf_token %}<button class="btn btn-secondary">Restore visibility only</button></form>{% endif %}
+{% if entry.do_not_contact %}<details><summary>Resolve an opt-out after renewed permission</summary><form method="post" action="{% url 'booking:resolve_opt_out' entry.pk %}" class="wiz-form">{% csrf_token %}<label>Evidence of renewed contact permission <input name="reason" maxlength="500" required class="form-input"></label><label><input type="checkbox" name="confirm" value="renewed_permission" required> I verified renewed permission and explicitly resolve this contact restriction.</label><button class="btn btn-secondary">Resolve contact restriction</button></form></details>{% endif %}</li>{% empty %}<li>No restrictions saved.</li>{% endfor %}</ul></div>{% endblock %}

@@ -202,10 +202,11 @@ class BookingFoundationTests(TestCase):
 
     def test_background_stubs_never_call_network(self):
         with tempfile.TemporaryDirectory() as directory, patch('socket.socket.connect', side_effect=AssertionError('Network forbidden')):
-            for command in ['booking_check', 'booking_enqueue_due', 'sync_google_calendars']:
+            for command in ['booking_check', 'booking_enqueue_due']:
                 output = StringIO()
                 call_command(command, stdout=output)
-                self.assertIn('Phase 0', output.getvalue())
+                self.assertTrue(output.getvalue())
+            call_command('sync_google_calendars', lock_file=directory + '/google.lock', stdout=StringIO())
             call_command('booking_worker', once=True, lock_file=directory + '/worker.lock', stdout=StringIO())
 
     def test_worker_singleton(self):
