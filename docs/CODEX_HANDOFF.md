@@ -11,15 +11,17 @@ branch `codex/ai-booking-agent` adds Phase 1 local/Google Calendar editing and
 Phase 2 per-band OpenAI/Gmail onboarding plus budget services, and Phase 3 records,
 targeted Gmail import, public-source review, suppression and reminders. See
 [architecture](booking/ARCHITECTURE.md), [six-phase plan](booking/IMPLEMENTATION_PLAN.md)
-and [current acceptance](booking/PHASE_3_ACCEPTANCE.md). New routes include
+and [current acceptance](booking/PHASE_3_DISCOVERY_ACCEPTANCE.md). New routes include
 `/booking/connections/`, `/booking/usage/`, `/booking/records/opportunities/`,
 `/booking/research/`, `/booking/blacklist/`, `/calendar/manage/` and `/calendar/events/`.
 ICS rendering no longer performs synchronous sync; retain its existing timer.
 Google sync and Booking research/checks use separate workers/locks from audio.
 The scheduler now enqueues opt-in public-URL revisits and purges expired email.
-Licensed web search/geocoding, broad nearby-artist discovery, AI extraction and
-reviewed outreach remain. Current discovery uses supplied public URLs and manual
-review. No paid inference or email sending is implemented yet.
+Optional Brave Search/OpenCage adapters, reviewed public artist gigs, explained
+genre/history ranking and separately consented budgeted AI extraction are implemented.
+See [provider configuration](booking/DISCOVERY_PROVIDERS.md); adapters default off.
+The next implementation phase is Phase 4 reviewed outreach. Email sending remains
+unimplemented; no paid inference or live provider calls were made in development.
 No production migration/deployment or live-provider acceptance has been performed.
 Use the backup-aware pinned updater described in [installation](booking/INSTALL_UPDATE.md).
 

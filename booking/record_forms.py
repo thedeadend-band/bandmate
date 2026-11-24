@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from .models import (BookingOrganization, BookingVenue, BookingContact, BookingEventSeries,
-                     BookingOpportunity, BookingFollowUp, BookingSuppression)
+                     BookingOpportunity, BookingFollowUp, BookingSuppression, BookingArtistReference, BookingArtistGig)
 from .services.records import canonical_url, normalized
 
 
@@ -39,7 +39,7 @@ class OrganizationForm(RecordForm):
 class VenueForm(RecordForm):
     class Meta:
         model = BookingVenue
-        fields = COMMON + ['organization', 'address', 'latitude', 'longitude']
+        fields = COMMON + ['organization', 'address', 'latitude', 'longitude', 'location_evidence']
 
 
 class ContactForm(RecordForm):
@@ -55,11 +55,19 @@ class SeriesForm(RecordForm):
 
 
 class OpportunityForm(RecordForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['response_status'].required = False
+
+    def clean_response_status(self):
+        return self.cleaned_data.get('response_status') or 'unknown'
+
     class Meta:
         model = BookingOpportunity
         fields = COMMON + ['organization', 'venue', 'contact', 'series', 'event_year', 'category', 'stage',
             'priority', 'event_date', 'application_open_date', 'verified_deadline', 'deadline_source',
-            'deadline_excerpt', 'predicted_window_start', 'predicted_window_end', 'prediction_reason', 'assigned_to']
+            'deadline_excerpt', 'predicted_window_start', 'predicted_window_end', 'prediction_reason', 'assigned_to',
+            'genres', 'prior_booking', 'response_status', 'history_evidence', 'expected_fee', 'fee_evidence']
         labels = {'deadline_source': 'Application dates source', 'deadline_excerpt': 'Application dates excerpt'}
         help_texts = {'verified_deadline': 'Use only a published deadline for this event cycle. Previous-year dates belong in a predicted window.',
             'application_open_date': 'Use only a published opening date, with source evidence below.',
@@ -67,8 +75,20 @@ class OpportunityForm(RecordForm):
             'predicted_window_start': 'A forecast only; never shown as an official deadline.'}
 
 
+class ArtistForm(RecordForm):
+    class Meta:
+        model = BookingArtistReference
+        fields = COMMON + ['genres']
+
+
+class ArtistGigForm(RecordForm):
+    class Meta:
+        model = BookingArtistGig
+        fields = COMMON + ['artist', 'venue', 'event_date', 'source_excerpt']
+
+
 FORMS = {'organizations': OrganizationForm, 'venues': VenueForm, 'contacts': ContactForm,
-         'series': SeriesForm, 'opportunities': OpportunityForm}
+         'series': SeriesForm, 'opportunities': OpportunityForm, 'artists': ArtistForm, 'artist_gigs': ArtistGigForm}
 
 
 class FollowUpForm(forms.ModelForm):

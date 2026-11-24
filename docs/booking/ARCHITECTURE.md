@@ -50,14 +50,15 @@ and explicitly queue connection checks. `BookingJob` has idempotency, bounded
 batches, leases, attempt fencing and backoff. Its dedicated worker executes
 connection checks and explicitly approved Gmail/public-source research. Ordinary
 page loads never call providers. Each OpenAI check attempt has a metadata-only
-usage record; no model inference or sending handler exists yet.
+usage record. Separately consented candidate extraction uses Responses with this
+band's key; no sending handler exists yet.
 
 Budget reservations take a write lock before reading allowance totals (including
 on SQLite), then atomically reserve the maximum estimated request cost. `begin`
 rechecks current feature/AI/model/credential/budget state immediately before a
-future handler may call a provider. Started uncertain requests retain their charge;
+handler may call a provider. Started uncertain requests retain their charge;
 settlement records observed estimated cost once. UTC day/month rollover requires
-a fresh reservation. Future handlers must also recheck the initiating actor and
+a fresh reservation. Handlers also recheck the initiating actor and
 bound input/output tokens; no budget method itself makes a remote request.
 
 ## Records and research
@@ -75,7 +76,17 @@ Both produce `BookingCandidate` rows for human review. Retention clears Gmail
 references, candidate excerpts and copied evidence while retaining content-free
 dedupe hashes. No remote source can trigger account changes, writes or emails.
 
-Only explicit successful public-source runs can be scheduled for weekly revisits.
+Brave Search supplies unverified leads, with a separate approval before fetching
+each source. OpenCage matches require review before coordinate changes. Persisted
+provider gates enforce global/per-band quotas and shared request spacing. Public
+artist gigs have their own reviewed records and never imply bookings by this band.
+AI extraction binds consent to an exact candidate excerpt/model/pricing/token scope,
+checks supporting quotes and saves unverified suggestions without record promotion.
+Gmail expiry/removal also clears derived AI analysis. See
+[provider configuration](DISCOVERY_PROVIDERS.md).
+
+Only explicit successful public-source runs can be scheduled for daily, weekly or
+30-day revisits. AI extraction and Gmail imports cannot be scheduled.
 The scheduler enqueues local work and purges expired email; it does not contact
 providers. Calendar overlays are generated from visible same-band records and
 never create Google write operations. See [research details](RESEARCH_AND_RECORDS.md).

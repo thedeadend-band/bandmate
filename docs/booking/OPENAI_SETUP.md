@@ -25,14 +25,26 @@ does not prove inference entitlement, quota, rate limits or billing readiness.
 
 The worker records every check attempt (including retry/error) without prompts or
 secrets. Usage shows 24-hour, 7-day, 30-day and UTC-month totals. Costs are labeled
-estimated. Paid inference is not implemented or tested in this increment.
+estimated. Phase 3 implements separately approved, per-candidate evidence extraction.
+Provider tests are mocked; no paid inference was performed during development.
 
-Budget service contract for future handlers: reserve the worst-case priced input
-and output allowance at enqueue; call `begin` again immediately before inference;
-recheck the actor and exact credential generation; enforce token bounds in the
-provider request; settle observed estimated usage with a pricing-version label.
-Never release a started request with an unknown outcome. A request crossing UTC
-midnight must release its unstarted reservation and obtain a fresh job/reservation.
-Budget pauses must become visible job states when inference handlers are added.
+Configure `BOOKING_AI_PRICING` with reviewed positive input/output USD-per-million
+rates and a pricing version for each supported model. The model must support
+Responses structured outputs and input-token counting. Missing pricing fails closed.
+See [provider configuration and consent](DISCOVERY_PROVIDERS.md).
+
+A manager previews the exact excerpt, model, caps and maximum estimate, then
+explicitly approves disclosure to OpenAI, including token counting. Gmail import
+consent alone never authorizes AI. The worker reserves the worst-case input/output
+estimate before counting input, rejects counts over the approved cap and calls
+`begin` immediately before inference. It rechecks the actor, evidence, policy and
+credential generation, enforces output bounds, and settles observed estimated
+usage with the pricing version. Suggestions remain unverified and require review.
+
+Never release a started request with an unknown outcome or reset it for replay.
+Uncertain requests retain the full reservation until operator reconciliation with
+provider usage. A request crossing UTC midnight must release its unstarted
+reservation and obtain a fresh job/reservation. AI runs are never automatically
+retried; a new approved run is a separate request and may incur another charge.
 Model/category breakdowns, charts, export and provider billing reconciliation are
 later dashboard work, not implemented controls.

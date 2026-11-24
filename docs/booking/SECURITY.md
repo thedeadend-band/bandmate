@@ -18,14 +18,19 @@ Implemented and tested locally:
 - Group-only OpenAI factories, no global fallback, atomic budget reservation and
   preflight, bounded read-only connection jobs with leases and attempt fencing.
 - Explicit, expiring import scopes; metadata/snippets only; no full mail bodies,
-  attachments or AI disclosure. Progressive checkpoints and content-free deletion
+  attachments or automatic AI disclosure. Progressive checkpoints and content-free deletion
   tombstones; manager export/removal and automatic expiry of retained evidence.
 - Public fetching validates every DNS address and redirect, pins the connection IP
   with original-host TLS verification, disallows private/reserved addresses and
   cross-origin redirects, checks robots and bounds response bytes/time.
 - Persistent aliases and suppression prevent rename/merge/import from silently
   reactivating blacklisted identities. Opt-out resolution requires manager reason.
-- No inference, autonomous outreach or send endpoint exists.
+- Separate per-candidate AI consent binds exact evidence, credential generation,
+  model, pricing and token caps. Started uncertain calls retain their reservation
+  and cannot be replayed automatically. Gmail expiry/removal clears derived analysis.
+- Search/geocoding use fixed provider endpoints, explicit query consent and global/
+  per-band quotas. Coordinate results require review before changing locations.
+- No autonomous outreach or send endpoint exists.
 
 Before live use, operators must configure HTTPS, application client registration,
 separately secured key recovery, proxy log redaction and Google verification.
@@ -33,9 +38,10 @@ Reverse proxies/access log collectors must omit query strings on both callback
 paths; Django's filter cannot redact logs outside the application. Keep production
 DEBUG off and limit database/backup access to the service and authorized operators.
 
-Research text is untrusted evidence, never instructions. Current extraction is
-deterministic and enters a human review queue. Before adding AI extraction, require
-explicit scope/AI consent and wire every call into budget/token controls.
+Research text is untrusted evidence, never instructions. Deterministic extraction
+and separately approved AI suggestions enter human review. AI has no tools and
+cannot promote facts into records. Exact supporting quotes establish textual
+support, not truth or semantic correctness. Every suggestion remains unverified.
 Before Phase 4 sending:
 exact approved recipients/content, opt-out/blacklist checks, CSRF, immutable approval,
 identity recheck and idempotent ambiguous-outcome reconciliation.

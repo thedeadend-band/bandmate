@@ -3,7 +3,7 @@
 There are **six phases, numbered 0–5**. Phase 0 is committed on
 `codex/booking-editable-calendars` (`bba18cc`); work continues on its child branch
 `codex/ai-booking-agent`. See [Phase 1–2 acceptance](PHASE_1_2_ACCEPTANCE.md)
-and [current Phase 3 acceptance](PHASE_3_ACCEPTANCE.md).
+and [current Phase 3 acceptance](PHASE_3_DISCOVERY_ACCEPTANCE.md).
 
 ## Phase 0 — committed foundation
 
@@ -44,16 +44,16 @@ Encrypted per-band OpenAI key save/replace/remove, background model-list tests,
 operator model allowlist, token/request/cost settings, atomic budget reservation
 and preflight services, per-attempt estimated usage ledger and usage page. Separate
 Gmail OAuth, mailbox identity/uniqueness, PKCE, connection checks and disconnect.
-No provider fallback, paid inference or send endpoint. Mocked tests
+No provider fallback or send endpoint. Paid inference is added in Phase 3. Mocked tests
 cover two bands, role/feature revocation, stale generations, log/HTML redaction,
 rotation, backoff and simultaneous budget reservations.
 
 Phase 3 now supplies message import preview/consent, retention/export/deletion.
-Actual inference handlers must use budget state and token caps before any paid
-call. Charts/category breakdowns remain later dashboard work. Live credentials,
+Phase 3 extraction uses budget state and token caps before any paid call.
+Charts/category breakdowns remain later dashboard work. Live credentials,
 OAuth/billing and Google verification remain operator gates.
 
-## Phase 3 — records/import/source review implemented; discovery extensions remain
+## Phase 3 — implemented, awaiting live-provider and staging acceptance
 
 - [x] Band-scoped organizations, venues, contacts, series, annual opportunities,
   source evidence, optimistic editing, manual merges and stable identity exports.
@@ -68,17 +68,19 @@ OAuth/billing and Google verification remain operator gates.
 - [x] Manual coordinates, straight-line radius/excluded-city filtering and explained
   priority/distance/deadline scores; unknown locations remain visible.
 - [x] Dashboard, reminders and read-only overlays on the existing Calendar.
-- [x] Worker quotas, cancellation/revocation checks, explicit weekly public-source
+- [x] Worker quotas, cancellation/revocation checks, explicit periodic public-source
   revisits and local retention cleanup, including while Booking is OFF.
-- [ ] Select/configure licensed search and geocoding implementations. Current
-  interfaces are extension points, not working search/geocoding services.
-- [ ] Broader nearby-artist gig research and genre/history/responsiveness scoring.
-- [ ] Evidence-grounded AI extraction with per-run consent, budget reservation and
-  token bounds; no Gmail content is sent to AI in this increment.
+- [x] Optional Brave Search and OpenCage adapters with explicit query approval,
+  global/per-band quotas, reviewed coordinates and provider provenance.
+- [x] Public artist gig research and separate reviewed artist/gig records;
+  saved-genre and documented booking-history/responsiveness scoring.
+- [x] Evidence-grounded AI extraction with separate per-candidate consent,
+  versioned pricing, budget reservation, token bounds and uncertain-call accounting.
 - [ ] Live-provider and staging LXC acceptance; current tests use mocked providers.
 
-See [research behavior and limits](RESEARCH_AND_RECORDS.md). Discovery currently
-starts with a manager-supplied public URL; it does not autonomously search the web.
+See [research behavior and limits](RESEARCH_AND_RECORDS.md) and
+[discovery provider setup](DISCOVERY_PROVIDERS.md). Search, source fetching,
+coordinate changes and AI disclosure each require their own reviewed approval.
 
 ## Phase 4 — reviewed outreach
 

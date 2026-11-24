@@ -1,9 +1,9 @@
 # Records and reviewed research
 
-Phase 3 core is available on `codex/ai-booking-agent`, with no live provider calls
-performed during development. Full licensed search, geocoding and AI extraction
-remain extension work; the current workflow starts from a supplied public URL or
-an explicitly scoped Gmail import.
+Phase 3 is implemented on `codex/ai-booking-agent`, with no live provider calls
+performed during development. It includes optional Brave Search/OpenCage adapters,
+reviewed public artist gigs and separately consented AI extraction. See
+[provider setup and limits](DISCOVERY_PROVIDERS.md).
 
 ## Human-maintained records
 
@@ -21,11 +21,13 @@ the preceding calendar year; the event date must match its event year. Predictio
 have their own dates/reason and always appear as predictions. Editing unrelated
 notes does not silently refresh a date's verification timestamp.
 
-Venue coordinates and the band's center coordinates are entered manually. Radius
+Venue coordinates and the band's center coordinates are entered manually or saved
+from an explicitly reviewed geocoder match. Radius
 is straight-line miles, never driving distance. Missing coordinates stay visible
 as unverified. Scores explain saved priority, known distance and verified deadlines
 within 60 days; excluded cities are penalized and optionally filtered. This does
-not yet infer genre fit, booking history or contact responsiveness.
+not infer undocumented history. Saved genre matches and documented prior bookings,
+replies/declines and application status contribute explained ranking weights.
 
 ## Research lifecycle and limits
 
@@ -47,7 +49,8 @@ Repeated messages and previously removed messages do not create new candidates.
 Only selected headers, correspondent addresses, thread/message references and up
 to 1,000 characters of Gmail's snippet are stored. No full body/attachments are
 requested. All results enter review; email dates never become application/event
-dates. Imported snippets are not disclosed to OpenAI. Changed import scope causes
+dates. Import approval does not authorize disclosure to OpenAI; AI extraction
+requires a separate per-candidate preview and consent. Changed import scope causes
 a fresh targeted search rather than reusing an unrelated history checkpoint.
 
 Public sources must use HTTPS on port 443. Every DNS address must be public; the
@@ -79,7 +82,7 @@ reason documenting renewed permission; it does not clear an active blacklist.
 
 The scheduler purges expired imported email even when Booking is OFF. Email/evidence
 views and exports also enforce expiry before displaying retained content. Removal
-clears references, candidate content and copied Gmail evidence and keeps only
+clears references, candidate content/AI analysis and copied Gmail evidence and keeps only
 content-free dedupe hashes. Observed Gmail history deletions use the same cleanup.
 Manager removal cancels pending imports. Human-reviewed contact/opportunity fields
 and notes remain separate, as disclosed before removal. Backups follow the operator's
@@ -96,12 +99,12 @@ as read-only Booking overlays in the existing Calendar. Completed reminders drop
 out of Calendar. Booking-disabled/non-role users cannot see private overlays.
 No overlay creates a Google Calendar mutation or modifies an ICS row.
 
-A successful public-source run can be explicitly enabled for weekly revisits of
-that exact URL. Scheduled sources remain linked from Research & review even when
+A successful public-source run can be explicitly enabled for daily, weekly or
+30-day revisits of that exact URL. Scheduled sources remain linked from Research & review even when
 their original run falls outside the recent-run list. Disabling a schedule prevents
 future enqueues; cancel any already-queued run separately. Losing manager access
 or disabling Booking disables its schedule when next due; re-enable deliberately
-after restoring access. There is no automatic recurring Gmail import.
+after restoring access. There is no automatic recurring Gmail import or AI call.
 
 ```sh
 .venv/bin/python manage.py booking_enqueue_due
@@ -110,16 +113,21 @@ after restoring access. There is no automatic recurring Gmail import.
 
 The first command only enqueues/cleans locally; the second can contact providers
 for approved work. Run against staging only after configuring authorized accounts.
-Retryable transport/429/5xx failures back off, with at most four consecutive failed
-slices. UI errors are sanitized codes. Cancellation/revocation cannot undo a remote
+Retryable public-source/import transport/429/5xx failures back off, with at most
+four consecutive failed slices. AI calls are not automatically retried. UI errors
+are sanitized codes. Cancellation/revocation cannot undo a remote
 read already in flight, but results cannot be stored after the final gate fails.
 
-## Remaining provider work
+## Provider boundaries and remaining acceptance
 
-`SearchProvider`, `Geocoder`, `PublicEventSource` and `AiExtractor` describe extension
-boundaries. Only public-page fetching and deterministic event extraction currently
-have working implementations. Select licensed search/geocoding providers and their
-quotas before adding discovery across unknown URLs. AI extraction requires explicit
-data-sharing consent, band-specific key/model/budget checks, bounded tokens and
-per-attempt usage accounting. Broader nearby-artist research and advanced scoring
-remain in Phase 3; reviewed drafts/sending/publication belong to Phase 4.
+Search returns unverified leads; following a result requires a separate approved
+public-source fetch. Coordinates require review before they affect location data.
+Public artist gigs remain separate from the band's own opportunities. AI facts
+require exact supporting quotes and remain unverified suggestions; nothing is
+automatically promoted into records, contacts or deadlines.
+
+Operators must configure provider accounts, quotas and reviewed model prices,
+verify provider plan/storage terms, and complete live-provider and staging LXC
+acceptance. See [discovery providers](DISCOVERY_PROVIDERS.md) and
+[current acceptance](PHASE_3_DISCOVERY_ACCEPTANCE.md). Reviewed drafts, sending,
+reply threading and explicit calendar publication belong to Phase 4.

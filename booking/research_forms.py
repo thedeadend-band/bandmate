@@ -38,3 +38,25 @@ class DiscoveryForm(forms.Form):
         if not url.startswith('https://'):
             raise forms.ValidationError('Use a public HTTPS URL.')
         return url
+
+
+class SearchForm(forms.Form):
+    query = forms.CharField(max_length=500, help_text='Public places, event categories or artists only. Do not include private correspondence.')
+    category = forms.ChoiceField(choices=[('opportunities', 'Venues and opportunities'), ('artists', 'Public artist gig pages')])
+    limit = forms.IntegerField(min_value=1, max_value=10, initial=5)
+
+    def clean_query(self):
+        value = ' '.join(self.cleaned_data['query'].split())
+        if len(value.split()) > 60:
+            raise forms.ValidationError('Use at most 60 words.')
+        return value
+
+
+class GeocodeForm(forms.Form):
+    query = forms.CharField(max_length=400, label='Public venue address or search center')
+    venue = forms.ModelChoiceField(queryset=None, required=False, help_text='Optionally attach reviewed coordinates to an existing venue.')
+
+    def __init__(self, *args, group, **kwargs):
+        super().__init__(*args, **kwargs)
+        from .models import BookingVenue
+        self.fields['venue'].queryset = BookingVenue.objects.filter(group=group, is_archived=False)

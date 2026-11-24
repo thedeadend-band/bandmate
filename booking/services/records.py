@@ -10,10 +10,12 @@ from django.utils import timezone
 from player.group_permissions import audit
 from booking.permissions import require_booking
 from booking.models import (BookingSettings, BookingMembershipRole, BookingOrganization, BookingVenue,
-    BookingContact, BookingEventSeries, BookingOpportunity, BookingIdentityAlias, BookingSuppression, BookingEvidence)
+    BookingContact, BookingEventSeries, BookingOpportunity, BookingIdentityAlias, BookingSuppression, BookingEvidence,
+    BookingArtistReference, BookingArtistGig)
 
 RECORDS = {'organizations': BookingOrganization, 'venues': BookingVenue, 'contacts': BookingContact,
-           'series': BookingEventSeries, 'opportunities': BookingOpportunity}
+           'series': BookingEventSeries, 'opportunities': BookingOpportunity,
+           'artists': BookingArtistReference, 'artist_gigs': BookingArtistGig}
 EDIT_ROLES = [BookingMembershipRole.Role.MANAGER, BookingMembershipRole.Role.EDITOR]
 
 
@@ -70,7 +72,7 @@ class SuppressionIndex:
 
     def record_keys(self, record):
         keys = direct_keys(record) | self.aliases.get(record.identity, set())
-        for field in ['organization', 'venue', 'contact', 'series']:
+        for field in ['organization', 'venue', 'contact', 'series', 'artist']:
             if getattr(record, field + '_id', None):
                 related = getattr(record, field)
                 if related.group_id != self.group.pk:
@@ -95,6 +97,14 @@ class SuppressionIndex:
             if {key for key in keys & aliases if key[0] != 'domain'}:
                 keys |= aliases | {('identity', str(identity))}
         return bool(keys & self.contact)
+
+    def blocks_proposal(self, proposed, *, title=''):
+        if self.blocks_source(url=proposed.get('website', ''),
+                emails=[proposed['contact_email']] if proposed.get('contact_email') else [],
+                name=proposed.get('name') or title, city=proposed.get('city', '')):
+            return True
+        return any(self.blocks_source(name=proposed[field], city=proposed.get('city', ''))
+            for field in ('venue_name', 'artist_name', 'organization_name', 'series_name') if proposed.get(field))
 
 
 def lock_band(group):

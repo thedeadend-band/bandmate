@@ -1,0 +1,10 @@
+{% extends "player/base.html" %}
+{% block title %}Review location – Booking{% endblock %}
+{% block content %}{% include "booking/record_nav.html" %}<div class="wiz-content feature-content">
+<h1 class="page-title">Review location: {{ candidate.title }}</h1>
+<p>Destination: {% if candidate.proposed.venue_id %}{{ target_venue.name|default:"Venue no longer available" }}{% else %}Band search center{% endif %}</p>
+<p>{{ active_group.name }} · {{ candidate.status }}</p><p>Latitude: {{ candidate.proposed.latitude }}<br>Longitude: {{ candidate.proposed.longitude }}<br>Precision: {{ candidate.proposed.precision }}/10</p>
+<p>Precision describes place size, not certainty that this is the correct match. Check the city/address before using these coordinates for straight-line radius calculations.</p>
+<p>Geocoding by <a href="https://opencagedata.com/" rel="noopener noreferrer" target="_blank">OpenCage</a>, using <a href="https://opencagedata.com/credits" rel="noopener noreferrer" target="_blank">credited open data sources</a>.</p>
+{% if can_apply %}<form method="post" action="{% url 'booking:apply_location' candidate.pk %}">{% csrf_token %}<label><input type="checkbox" name="confirm" value="reviewed_location" required> I reviewed this place and want to update {% if candidate.proposed.venue_id %}the selected venue{% else %}this band's search center{% endif %}.</label><button class="btn btn-add">Use these coordinates</button></form>{% endif %}
+</div>{% endblock %}

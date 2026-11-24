@@ -179,6 +179,20 @@ GMAIL_OAUTH_CLIENT_SECRET = os.environ.get('GMAIL_OAUTH_CLIENT_SECRET', '')
 GMAIL_OAUTH_REDIRECT_URI = os.environ.get('GMAIL_OAUTH_REDIRECT_URI', '')
 BOOKING_OPENAI_MODELS = tuple(value.strip() for value in os.environ.get('BOOKING_OPENAI_MODELS', '').split(',') if value.strip())
 BOOKING_JOB_BATCH_SIZE = 10
+# Optional public-data providers. Keys are operator infrastructure, never band
+# Gmail/OpenAI credentials. Zero quota or an empty key disables the provider.
+BOOKING_SEARCH_PROVIDER = os.environ.get('BOOKING_SEARCH_PROVIDER', '')
+BOOKING_BRAVE_KEY = os.environ.get('BOOKING_BRAVE_KEY', '')
+BOOKING_GEOCODER = os.environ.get('BOOKING_GEOCODER', '')
+BOOKING_OPENCAGE_KEY = os.environ.get('BOOKING_OPENCAGE_KEY', '')
+BOOKING_PROVIDER_DAILY_LIMIT = int(os.environ.get('BOOKING_PROVIDER_DAILY_LIMIT', '0'))
+BOOKING_PROVIDER_BAND_DAILY_LIMIT = int(os.environ.get('BOOKING_PROVIDER_BAND_DAILY_LIMIT', '0'))
+BOOKING_PROVIDER_MIN_INTERVAL = max(1, int(os.environ.get('BOOKING_PROVIDER_MIN_INTERVAL', '2')))
+# JSON mapping of allowlisted model -> input/output USD per million, version.
+# No guessed price defaults; inference fails closed without reviewed pricing.
+import json as _booking_json
+BOOKING_AI_PRICING = _booking_json.loads(os.environ.get('BOOKING_AI_PRICING', '{}'))
+BOOKING_AI_MAX_INPUT_TOKENS = 8192
 # SQL parameters can contain tenant-private data; never inherit root DEBUG.
 LOGGING['loggers']['django.db.backends'] = {'handlers': ['console'], 'level': 'WARNING', 'propagate': False}
 LOGGING['filters'] = {'oauth_query': {'()': 'bandmate.log_filters.OAuthQueryRedactor'}}

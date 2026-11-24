@@ -190,6 +190,6 @@ def purge_messages(group, *, expired_only=False, source_keys=None):
     # resurrecting deleted mail. Human-reviewed records remain separate.
     rows.update(message_id='', thread_id='', subject='', excerpt='', correspondents=[], sent_at=None, purged=True)
     BookingCandidate.objects.filter(group=group, source_type='gmail', source_key__in=keys).update(
-        title='Removed email evidence', source_ref='', excerpt='', proposed={}, status='purged', content_hash='')
+        title='Removed email evidence', source_ref='', excerpt='', proposed={}, analysis={}, status='purged', content_hash='')
     BookingEvidence.objects.filter(group=group, source_type='gmail', source_ref__in=keys).update(excerpt='', source_ref='', content_hash='')
     return len(keys)

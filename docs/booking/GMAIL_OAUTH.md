@@ -20,7 +20,8 @@ never discloses the other band's identity.
 Refresh tokens are encrypted with the band's `gmail-refresh` purpose. Explicit
 profile tests run in the Booking worker, with fresh feature/role/generation checks,
 bounded retries and visible sanitized errors. A revoked grant disconnects only
-its own band. No page load scans mail. No email content is sent to OpenAI.
+its own band. No page load scans mail. Import approval does not send email content
+to OpenAI; subsequent AI extraction needs separate per-candidate disclosure consent.
 
 Disconnect removes the current mailbox address, encrypted token and history cursor
 and invalidates pending consent. Connection audit records remain; secured backups
@@ -33,12 +34,14 @@ retention duration, then approve that exact scope. Preview alone makes no Gmail
 request. The worker searches matching messages and reads only selected headers
 and Gmail snippets (up to 1,000 retained characters), never full bodies/attachments.
 Candidates are suggestions; correspondence dates are never event dates/deadlines.
-There is no AI processing or automatic scheduled mailbox import.
+There is no automatic AI processing or scheduled mailbox import. See
+[separate AI consent and retention](DISCOVERY_PROVIDERS.md).
 
 Successful complete runs retain a scope-bound history checkpoint. Subsequent
 identical scopes use history deltas intersected with the approved search; expired
 history falls back to that targeted search, never an unrestricted mailbox scan.
-Deleted messages observed in history clear retained content. Expiry, export and
+Deleted messages observed in history clear retained content and derived candidate
+AI analysis. Expiry, export and
 manager removal operate only within the current band. Content-free tombstones
 prevent re-import; human-reviewed records and notes remain separate.
 See [limits and recovery](RESEARCH_AND_RECORDS.md),

@@ -13,7 +13,7 @@ from .connections import authorized
 from .imports import import_page, purge_messages
 from .discovery import discover
 
-RESEARCH_KINDS = ('gmail_import', 'web_discovery')
+RESEARCH_KINDS = ('gmail_import', 'web_discovery', 'web_search', 'geocode', 'ai_extract')
 
 
 def new_preview(group, actor, kind, scope):
@@ -21,6 +21,14 @@ def new_preview(group, actor, kind, scope):
     if kind not in RESEARCH_KINDS:
         raise ProviderError('unsupported_research')
     generation, mailbox_hash = 0, ''
+    if kind in ('web_search', 'geocode'):
+        from .providers import configured
+        configured('brave' if kind == 'web_search' else 'opencage')
+    if kind == 'ai_extract':
+        from .extraction import extraction_scope
+        # Build scope from server-side evidence and policy, never posted prices.
+        scope = extraction_scope(group, scope['candidate_id'])
+        generation = scope['credential_generation']
     if kind == 'gmail_import':
         connection = BookingGmailConnection.objects.filter(group=group, is_connected=True).first()
         if not connection:
@@ -40,6 +48,10 @@ def confirm_preview(group, actor, run_id):
         return run
     if run.status != 'preview' or run.expires_at <= timezone.now():
         raise ProviderError('preview_expired')
+    if run.kind == 'ai_extract':
+        from .extraction import extraction_scope
+        if extraction_scope(group, run.scope['candidate_id']) != run.scope:
+            raise ProviderError('ai_scope_changed')
     if run.kind == 'gmail_import' and not BookingGmailConnection.objects.filter(group=group,
             is_connected=True, generation=run.credential_generation).exists():
         raise ProviderError('credential_changed')
@@ -68,12 +80,18 @@ def process_research_job(job):
                 raise ProviderError('research_cancelled_or_expired')
         if job.kind == 'gmail_import':
             result = import_page(job)
-        else:
+        elif job.kind == 'web_discovery':
             result = discover(job)
+        elif job.kind in ('web_search', 'geocode'):
+            from .providers import research_public
+            result = research_public(job)
+        elif job.kind == 'ai_extract':
+            from .extraction import extract
+            result = extract(job)
         authorized(job)
     except ProviderError as exc:
         error = exc.code
-        retry = (exc.status in (429, 500, 502, 503, 504) or exc.code.endswith('_transport')) and run.failures < 3
+        retry = job.kind != 'ai_extract' and (exc.status in (429, 500, 502, 503, 504) or exc.code.endswith('_transport')) and run.failures < 3
     except VaultUnavailable:
         error = 'vault_unavailable'
     except Exception:

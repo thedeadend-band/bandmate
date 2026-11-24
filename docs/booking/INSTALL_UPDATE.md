@@ -16,7 +16,8 @@ before using them. No new VM, Docker deployment, port or tunnel is required.
 
 Migrations: `player/0023_groupaccessaudit`, `booking/0001_initial`,
 `calendar_integrations/0001_initial`, `calendar_integrations/0002_editable_calendars`,
-`booking/0002_credentials_and_budgets` and `booking/0003_research_records_and_imports`.
+`booking/0002_credentials_and_budgets`, `booking/0003_research_records_and_imports`
+and `booking/0004_discovery_providers_and_artist_research`.
 They are additive. Existing groups receive
 no roles or enabled feature automatically. Database changes apply only when the
 operator runs `migrate`; development validation uses disposable databases.
@@ -28,6 +29,8 @@ through Calendar → Manage Calendars → **Local calendars and Calendar roles**
 Local event CRUD works without credentials. Google/Gmail connections require the
 separate HTTPS clients and vault described in the integration documents. OpenAI
 keys are entered only in the band manager Connections form, never in chat.
+Optional search/geocoding adapters and AI pricing require separate operator setup;
+see [discovery providers](DISCOVERY_PROVIDERS.md).
 
 ## Existing LXC update
 

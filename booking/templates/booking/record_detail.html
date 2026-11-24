@@ -9,6 +9,12 @@
 {% if record.website %}<p><a href="{{ record.website }}" target="_blank" rel="noopener noreferrer">View source website</a></p>{% endif %}
 {% for label,value in related %}<p>{{ label }}: {{ value }}</p>{% endfor %}
 {% if record.email %}<p>Email: {{ record.email }}</p>{% endif %}{% if record.phone %}<p>Phone: {{ record.phone }}</p>{% endif %}
+{% if record.location_evidence %}<p>{{ record.location_evidence }}</p>{% endif %}
+{% if record.latitude != None and record.longitude != None %}<p>Coordinates: {{ record.latitude }}, {{ record.longitude }}</p>{% endif %}
+{% if record.genres %}<p>Saved genres: {{ record.genres }}</p>{% endif %}
+{% if record.history_evidence %}<p>Previous booking: {{ record.prior_booking|yesno:"Yes,No" }} · {{ record.get_response_status_display }}</p><blockquote>{{ record.history_evidence }}</blockquote>{% endif %}
+{% if record.fee_evidence %}<p>Expected fee: {{ record.expected_fee }} · {{ record.fee_evidence }}</p>{% endif %}
+{% if kind == 'artist_gigs' %}<p>Public artist gig date: {{ record.event_date }}. This is not a booking by your band.</p><blockquote>{{ record.source_excerpt }}</blockquote>{% endif %}
 {% if kind == 'opportunities' %}<p>{{ record.event_year }} · {{ record.get_stage_display }} · {{ record.get_priority_display }} priority</p>
 {% if can_edit %}<p><a href="{% url 'booking:record_new' 'opportunities' %}?from={{ record.pk }}">Start next year's edition</a> — dates must be reviewed for the new cycle.</p>{% endif %}
 <p>Event date: {{ record.event_date|default:"Unknown" }}<br>Applications open: {{ record.application_open_date|default:"Unknown" }}<br>Verified deadline: {{ record.verified_deadline|default:"Unknown" }}</p>

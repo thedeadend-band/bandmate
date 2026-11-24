@@ -20,7 +20,7 @@ Connection test: {{ credential.test_status }}{% if credential.tested_at %} · {{
 <form method="post" class="wiz-form">{% csrf_token %}<input type="hidden" name="action" value="key">
 {% include "player/feature_form_fields.html" with form=key_form %}<button class="btn btn-add" type="submit">Save encrypted key</button></form></details>
 <h3>AI limits</h3>
-<p>AI starts disabled. Zero limits block inference. Daily and monthly limits use UTC. Inference is not implemented yet; these settings prepare its budget controls. A key test does not enable AI.</p>
+<p>AI starts disabled. Zero limits block inference. Daily and monthly limits use UTC. Candidate extraction requires configured model pricing and a separate approval for the excerpt and estimated cost. A key test does not enable AI.</p>
 <form method="post" class="wiz-form">{% csrf_token %}<input type="hidden" name="action" value="policy">
 {% include "player/feature_form_fields.html" with form=policy_form %}<button class="btn btn-add" type="submit">Save AI limits</button></form>
 <p><a href="{% url 'booking:usage' %}">View usage and estimates</a></p>

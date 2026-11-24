@@ -31,6 +31,10 @@ urlpatterns = [
     path('research/runs/<int:run_id>/cancel/', research_views.cancel, name='research_cancel'),
     path('research/runs/<int:run_id>/schedule/', research_views.schedule_source, name='research_schedule'),
     path('research/candidates/<int:candidate_id>/', research_views.review, name='candidate'),
+    path('research/candidates/<int:candidate_id>/extract/', research_views.extraction_preview, name='extraction_preview'),
+    path('research/candidates/<int:candidate_id>/source/', research_views.source_preview, name='source_preview'),
+    path('research/candidates/<int:candidate_id>/artist-gig/', research_views.save_artist_gig, name='save_artist_gig'),
+    path('research/candidates/<int:candidate_id>/location/', research_views.apply_location, name='apply_location'),
     path('research/mail/export/', research_views.export_mail, name='export_mail'),
     path('research/mail/purge/', research_views.purge_mail, name='purge_mail'),
 ]

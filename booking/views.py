@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
+from django.utils import timezone
 
 from player.group_permissions import audit, change_role
 from .forms import BookingProfileForm
@@ -42,8 +43,10 @@ def settings_view(request):
     form = BookingProfileForm(request.POST or None, instance=config)
     if request.method == 'POST' and form.is_valid():
         with transaction.atomic():
+            from .services.records import lock_band
+            lock_band(group)
             require_booking(request.user, group, [BookingMembershipRole.Role.MANAGER])
-            BookingSettings.objects.filter(pk=config.pk).update(**{
+            BookingSettings.objects.filter(pk=config.pk).update(updated_at=timezone.now(), **{
                 field: form.cleaned_data[field] for field in form.Meta.fields})
             audit(group, request.user, 'booking.profile.updated')
         return redirect('booking:settings')

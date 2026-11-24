@@ -3,12 +3,20 @@
 ## Current status
 
 The Booking worker processes explicitly queued OpenAI model-list/Gmail-profile
-checks and approved Gmail/public-URL research. `booking_worker --once` processes one bounded batch; the long-running worker
+checks and approved Gmail/public-URL/search/geocoding/AI research.
+`booking_worker --once` processes one bounded batch; the long-running worker
 checks every 30 seconds. `booking_check` is read-only and prints no secrets.
-`booking_enqueue_due` enqueues explicitly approved weekly public-URL revisits and
+`booking_enqueue_due` enqueues explicitly approved periodic public-URL revisits and
 purges expired email content, including for Booking-disabled bands. It makes no
 provider calls. No recurring source is enabled by default; Gmail requires fresh
 preview/approval per run. See [research limits/recovery](RESEARCH_AND_RECORDS.md).
+
+Search/geocoding require operator credentials and nonzero global/per-band quotas;
+AI requires reviewed model pricing plus the band's tested key and budget settings.
+See [discovery provider setup](DISCOVERY_PROVIDERS.md). Never reset a started AI
+reservation or retry an uncertain paid request: reconcile actual provider usage
+before adjusting retained reservations. AI requests are not scheduled or retried
+automatically. Input counting and inference both require the approved disclosure.
 
 `sync_google_calendars` now executes real sync and explicitly queued event writes.
 It has an independent lock/timer and works while Booking is OFF. Account-list

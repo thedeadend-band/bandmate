@@ -96,6 +96,9 @@ class BookingJob(models.Model):
         GMAIL_TEST = 'gmail_test', 'Gmail connection test'
         GMAIL_IMPORT = 'gmail_import', 'Targeted Gmail import'
         WEB_DISCOVERY = 'web_discovery', 'Public source discovery'
+        WEB_SEARCH = 'web_search', 'Public opportunity and artist search'
+        GEOCODE = 'geocode', 'Review location matches'
+        AI_EXTRACT = 'ai_extract', 'AI evidence extraction'
 
     group = models.ForeignKey('player.Group', on_delete=models.CASCADE)
     actor = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
@@ -200,6 +203,7 @@ class BookingOrganization(NamedRecord):
 class BookingVenue(NamedRecord):
     organization = models.ForeignKey(BookingOrganization, null=True, blank=True, on_delete=models.PROTECT)
     address = models.CharField(max_length=400, blank=True)
+    location_evidence = models.CharField(max_length=1000, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True,
         validators=[MinValueValidator(-90), MaxValueValidator(90)])
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True,
@@ -268,9 +272,20 @@ class BookingOpportunity(NamedRecord):
     prediction_reason = models.CharField(max_length=1000, blank=True)
     last_verified_at = models.DateTimeField(null=True, blank=True)
     assigned_to = models.ForeignKey('auth.User', null=True, blank=True, on_delete=models.SET_NULL)
+    genres = models.CharField(max_length=300, blank=True)
+    prior_booking = models.BooleanField(default=False)
+    response_status = models.CharField(max_length=20, default='unknown', choices=[
+        ('unknown', 'Unknown'), ('responded', 'Previously responded'), ('no_reply', 'No reply recorded'), ('declined', 'Previously declined')])
+    history_evidence = models.CharField(max_length=2000, blank=True)
+    expected_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    fee_evidence = models.CharField(max_length=1000, blank=True)
 
     def clean(self):
         super().clean()
+        if (self.prior_booking or self.response_status != 'unknown') and not self.history_evidence.strip():
+            raise ValidationError('Booking history and responsiveness need an evidence note.')
+        if self.expected_fee is not None and not self.fee_evidence.strip():
+            raise ValidationError('An expected fee needs a source or explanatory note.')
         if self.event_date and self.event_date.year != self.event_year:
             raise ValidationError({'event_date': 'The event date must belong to the selected event year.'})
         if (self.verified_deadline or self.application_open_date) and (not self.deadline_source or not self.deadline_excerpt.strip()):
@@ -386,6 +401,7 @@ class BookingCandidate(models.Model):
     source_ref = models.CharField(max_length=1000, blank=True)
     title = models.CharField(max_length=200)
     proposed = models.JSONField(default=dict)
+    analysis = models.JSONField(default=dict)
     excerpt = models.TextField(max_length=2000, blank=True)
     content_hash = models.CharField(max_length=64)
     status = models.CharField(max_length=20, default='pending')
@@ -403,3 +419,38 @@ class BookingResearchSchedule(models.Model):
     enabled = models.BooleanField(default=False)
     next_due = models.DateTimeField()
     interval_days = models.PositiveIntegerField(default=7)
+
+
+class BookingProviderGate(models.Model):
+    provider = models.CharField(max_length=20, unique=True)
+    last_started_at = models.DateTimeField(null=True)
+
+
+class BookingProviderRequest(models.Model):
+    group = models.ForeignKey('player.Group', on_delete=models.CASCADE)
+    job = models.ForeignKey(BookingJob, on_delete=models.PROTECT)
+    provider = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+    result = models.CharField(max_length=64, default='started')
+
+    class Meta:
+        indexes = [models.Index(fields=['provider', 'created_at']), models.Index(fields=['group', 'provider', 'created_at'])]
+
+
+class BookingArtistReference(NamedRecord):
+    genres = models.CharField(max_length=300, blank=True)
+
+
+class BookingArtistGig(NamedRecord):
+    artist = models.ForeignKey(BookingArtistReference, on_delete=models.PROTECT)
+    venue = models.ForeignKey(BookingVenue, null=True, blank=True, on_delete=models.PROTECT)
+    event_date = models.DateField()
+    source_excerpt = models.CharField(max_length=2000)
+
+    def clean(self):
+        super().clean()
+        if not self.website or not self.source_excerpt.strip():
+            raise ValidationError('A public artist gig needs its source URL and excerpt.')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['group', 'artist', 'name', 'event_date'], name='booking_artist_gig_key')]

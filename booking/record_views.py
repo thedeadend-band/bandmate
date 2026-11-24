@@ -103,7 +103,7 @@ def record_detail(request, kind, record_id):
     purge_messages(request.active_group, expired_only=True)
     record = get_object_or_404(record_model(kind), pk=record_id, group=request.active_group)
     index = SuppressionIndex(request.active_group)
-    related = [(field.replace('_', ' ').title(), getattr(record, field)) for field in ['organization', 'venue', 'contact', 'series'] if getattr(record, field + '_id', None)]
+    related = [(field.replace('_', ' ').title(), getattr(record, field)) for field in ['organization', 'venue', 'contact', 'series', 'artist'] if getattr(record, field + '_id', None)]
     return render(request, 'booking/record_detail.html', {'nav_active': 'booking', 'kind': kind, 'record': record,
         'related': related, 'blocked': index.blocked(record), 'no_contact': index.blocked(record, sending=True),
         'can_edit': role in EDIT_ROLES and not record.is_archived,

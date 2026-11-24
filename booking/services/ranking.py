@@ -25,6 +25,27 @@ def assess(opportunity, config):
         if 0 <= days <= 60:
             score += 15
             reasons.append('Verified deadline within 60 days: +15')
+    # These are human-reviewed facts, never an inferred promise of suitability.
+    import re
+    tokens = lambda value: {part.strip().casefold() for part in re.split(r'[,;]', value) if part.strip()}
+    matches = tokens(config.genres) & tokens(opportunity.genres)
+    if matches:
+        score += 10
+        reasons.append('Matching saved genres (' + ', '.join(sorted(matches)) + '): +10')
+    if opportunity.prior_booking and opportunity.history_evidence:
+        score += 20
+        reasons.append('Documented previous booking: +20')
+    if opportunity.response_status == 'responded' and opportunity.history_evidence:
+        score += 10
+        reasons.append('Documented previous response: +10')
+    elif opportunity.response_status == 'declined' and opportunity.history_evidence:
+        score -= 10
+        reasons.append('Documented previous decline: −10')
+    if opportunity.stage in ('declined', 'not_selected', 'closed'):
+        score -= 50
+        reasons.append('Closed or declined application: −50')
+    if opportunity.expected_fee is not None:
+        reasons.append('Expected fee recorded; no currency or fee weighting assumed')
     excluded = normalized(opportunity.city or (venue.city if venue else '')) in {
         normalized(city) for city in config.excluded_cities.split(',') if city.strip()}
     if excluded:

@@ -1,4 +1,4 @@
-"""SQLite-safe reservations for future inference handlers. No provider calls here."""
+"""SQLite-safe reservations for inference handlers. No provider calls here."""
 from decimal import Decimal, InvalidOperation
 from django.conf import settings
 from django.db import transaction

@@ -211,9 +211,16 @@ def extract_candidates(text, url, content_type='text/html'):
             pass
         location = item.get('location', {})
         if isinstance(location, dict):
+            if isinstance(location.get('name'), str):
+                proposed['venue_name'] = location['name'][:200]
             address = location.get('address', {})
             if isinstance(address, dict) and isinstance(address.get('addressLocality'), str):
                 proposed['city'] = address['addressLocality'][:160]
+        performer = item.get('performer', {})
+        if isinstance(performer, list):
+            performer = performer[0] if len(performer) == 1 else {}
+        if isinstance(performer, dict) and isinstance(performer.get('name'), str):
+            proposed['artist_name'] = performer['name'][:200]
         organizer = item.get('organizer', {})
         if isinstance(organizer, dict) and isinstance(organizer.get('email'), str):
             try:
@@ -225,7 +232,7 @@ def extract_candidates(text, url, content_type='text/html'):
         # or instructions from page text can change the approved request scope.
         # Preserve the structured facts behind proposed dates and contacts even
         # when the page's visible prose does not repeat them.
-        evidence = {key: item[key] for key in ('name', 'startDate', 'location', 'organizer') if key in item}
+        evidence = {key: item[key] for key in ('name', 'startDate', 'location', 'organizer', 'performer') if key in item}
         rows.append((proposed, (json.dumps(evidence, ensure_ascii=False) + '\n' + excerpt)[:2000]))
     if not rows:
         rows.append(({'name': (' '.join(parser.title).strip() or urlsplit(url).hostname)[:200], 'website': url}, excerpt))
@@ -251,8 +258,7 @@ def discover(job, fetcher=None):
         if index.blocks_source(url=final_url):
             raise ProviderError('source_suppressed')
         for proposed, excerpt in rows:
-            if index.blocks_source(url=final_url, emails=[proposed['contact_email']] if proposed.get('contact_email') else [],
-                    name=proposed['name'], city=proposed.get('city', '')):
+            if index.blocks_proposal(proposed):
                 continue
             # Repeated identical evidence deduplicates; changed evidence returns
             # to review without overwriting a human-maintained booking record.

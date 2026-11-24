@@ -1,5 +1,9 @@
 # Phase 3 core acceptance — 2026-11-23
 
+Historical core checkpoint, committed in `08f03c2`. The subsequent search,
+geocoding, public artist and AI work is covered by
+[current Phase 3 discovery acceptance](PHASE_3_DISCOVERY_ACCEPTANCE.md).
+
 Branch: `codex/ai-booking-agent`, child of committed Phase 0 `bba18cc`.
 This checkpoint includes Phase 1/2 and Phase 3 core work. No deployment, workspace DB migration,
 live mailbox read, paid inference or outbound email was performed.
