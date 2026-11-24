@@ -17,7 +17,8 @@ before using them. No new VM, Docker deployment, port or tunnel is required.
 Migrations: `player/0023_groupaccessaudit`, `booking/0001_initial`,
 `calendar_integrations/0001_initial`, `calendar_integrations/0002_editable_calendars`,
 `booking/0002_credentials_and_budgets`, `booking/0003_research_records_and_imports`
-and `booking/0004_discovery_providers_and_artist_research`.
+`booking/0004_discovery_providers_and_artist_research` and
+`booking/0005_reviewed_outreach`.
 They are additive. Existing groups receive
 no roles or enabled feature automatically. Database changes apply only when the
 operator runs `migrate`; development validation uses disposable databases.
@@ -95,4 +96,4 @@ of Booking enablement. The worker takes a dedicated singleton file lock, not the
 audio queue lock. No service stores API keys in its unit/command line.
 
 Live Linux/systemd verification, service ownership and real credentials have not
-been tested on the production LXC. See [OPERATIONS.md](OPERATIONS.md).
+been tested on the production LXC. See [OPERATIONS.md](OPERATIONS.md) and [reviewed outreach](OUTREACH.md).

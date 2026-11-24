@@ -13,7 +13,7 @@ from .connections import authorized
 from .imports import import_page, purge_messages
 from .discovery import discover
 
-RESEARCH_KINDS = ('gmail_import', 'web_discovery', 'web_search', 'geocode', 'ai_extract')
+RESEARCH_KINDS = ('gmail_import', 'web_discovery', 'web_search', 'geocode', 'ai_extract', 'ai_draft')
 
 
 def new_preview(group, actor, kind, scope):
@@ -21,6 +21,10 @@ def new_preview(group, actor, kind, scope):
     if kind not in RESEARCH_KINDS:
         raise ProviderError('unsupported_research')
     generation, mailbox_hash = 0, ''
+    if kind == 'ai_draft':
+        from .draft_ai import draft_scope
+        scope, _ = draft_scope(group, scope['draft_id'])
+        generation = scope['credential_generation']
     if kind in ('web_search', 'geocode'):
         from .providers import configured
         configured('brave' if kind == 'web_search' else 'opencage')
@@ -48,6 +52,10 @@ def confirm_preview(group, actor, run_id):
         return run
     if run.status != 'preview' or run.expires_at <= timezone.now():
         raise ProviderError('preview_expired')
+    if run.kind == 'ai_draft':
+        from .draft_ai import draft_scope
+        if draft_scope(group, run.scope['draft_id'])[0] != run.scope:
+            raise ProviderError('ai_scope_changed')
     if run.kind == 'ai_extract':
         from .extraction import extraction_scope
         if extraction_scope(group, run.scope['candidate_id']) != run.scope:
@@ -88,10 +96,13 @@ def process_research_job(job):
         elif job.kind == 'ai_extract':
             from .extraction import extract
             result = extract(job)
+        elif job.kind == 'ai_draft':
+            from .draft_ai import arrange
+            result = arrange(job)
         authorized(job)
     except ProviderError as exc:
         error = exc.code
-        retry = job.kind != 'ai_extract' and (exc.status in (429, 500, 502, 503, 504) or exc.code.endswith('_transport')) and run.failures < 3
+        retry = job.kind not in ('ai_extract', 'ai_draft') and (exc.status in (429, 500, 502, 503, 504) or exc.code.endswith('_transport')) and run.failures < 3
     except VaultUnavailable:
         error = 'vault_unavailable'
     except Exception:

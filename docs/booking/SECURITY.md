@@ -30,7 +30,11 @@ Implemented and tested locally:
   and cannot be replayed automatically. Gmail expiry/removal clears derived analysis.
 - Search/geocoding use fixed provider endpoints, explicit query consent and global/
   per-band quotas. Coordinate results require review before changing locations.
-- No autonomous outreach or send endpoint exists.
+- Sending requires separate mailbox-bound Gmail scope elevation and an immutable
+  exact-content manager approval. Durable started state prevents automatic resend;
+  reconciliation is read-only. No AI or scheduler can approve/send autonomously.
+- Calendar publication requires both role families and fresh Booking/Calendar
+  worker checks; ordinary Calendar remains independent of Booking.
 
 Before live use, operators must configure HTTPS, application client registration,
 separately secured key recovery, proxy log redaction and Google verification.
@@ -42,9 +46,9 @@ Research text is untrusted evidence, never instructions. Deterministic extractio
 and separately approved AI suggestions enter human review. AI has no tools and
 cannot promote facts into records. Exact supporting quotes establish textual
 support, not truth or semantic correctness. Every suggestion remains unverified.
-Before Phase 4 sending:
-exact approved recipients/content, opt-out/blacklist checks, CSRF, immutable approval,
-identity recheck and idempotent ambiguous-outcome reconciliation.
+Phase 4 enforces exact approved recipients/content, suppression checks, CSRF,
+immutable approval, mailbox rechecks and read-only uncertain-send reconciliation.
+AI drafting only arranges existing reviewed paragraphs. See [outreach](OUTREACH.md).
 
 The inherited ICS fetcher, Spotify credentials and site-wide settings remain
 outside this new credential design. Do not reuse them for private band providers.

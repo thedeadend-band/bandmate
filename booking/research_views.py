@@ -85,6 +85,14 @@ def run_detail(request, run_id):
     role = require_booking(request.user, request.active_group)
     run = get_object_or_404(BookingResearchRun, pk=run_id, group=request.active_group)
     evidence = None
+    if run.kind == 'ai_draft' and run.status == 'preview':
+        from .services.draft_ai import draft_scope
+        from types import SimpleNamespace
+        try:
+            _, value = draft_scope(request.active_group, run.scope['draft_id'])
+            evidence = SimpleNamespace(excerpt=json.dumps(value))
+        except (ProviderError, ValidationError):
+            pass
     if run.kind == 'ai_extract' and run.status == 'preview':
         from .services.extraction import candidate_for_ai
         try:
@@ -103,7 +111,7 @@ def run_detail(request, run_id):
 def confirm(request, run_id):
     manager(request)
     run = get_object_or_404(BookingResearchRun, pk=run_id, group=request.active_group, actor=request.user)
-    if request.POST.get('consent') != ('analyze_evidence' if run.kind == 'ai_extract' else 'scoped_read'):
+    if request.POST.get('consent') != ('analyze_evidence' if run.kind in ('ai_extract', 'ai_draft') else 'scoped_read'):
         return HttpResponseBadRequest('Confirm this exact read scope and retention policy.')
     try:
         confirm_preview(request.active_group, request.user, run_id)
@@ -333,6 +341,8 @@ def purge_mail(request):
         runs = BookingResearchRun.objects.filter(group=request.active_group, kind='gmail_import', status__in=['preview', 'queued', 'running'])
         BookingJob.objects.filter(pk__in=runs.values('job_id'), group=request.active_group).update(status='cancelled', lease_until=None)
         runs.update(status='cancelled')
+        BookingJob.objects.filter(group=request.active_group, kind='gmail_replies',
+            status__in=['pending', 'processing']).update(status='cancelled', lease_until=None)
         count = purge_messages(request.active_group)
         audit(request.active_group, request.user, 'booking.gmail.imported_data_removed', new=count)
     return redirect('booking:research')

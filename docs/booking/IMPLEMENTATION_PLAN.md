@@ -3,7 +3,8 @@
 There are **six phases, numbered 0–5**. Phase 0 is committed on
 `codex/booking-editable-calendars` (`bba18cc`); work continues on its child branch
 `codex/ai-booking-agent`. See [Phase 1–2 acceptance](PHASE_1_2_ACCEPTANCE.md)
-and [current Phase 3 acceptance](PHASE_3_DISCOVERY_ACCEPTANCE.md).
+and [Phase 3 acceptance](PHASE_3_DISCOVERY_ACCEPTANCE.md).
+Current work: [Phase 4 acceptance](PHASE_4_ACCEPTANCE.md).
 
 ## Phase 0 — committed foundation
 
@@ -44,13 +45,14 @@ Encrypted per-band OpenAI key save/replace/remove, background model-list tests,
 operator model allowlist, token/request/cost settings, atomic budget reservation
 and preflight services, per-attempt estimated usage ledger and usage page. Separate
 Gmail OAuth, mailbox identity/uniqueness, PKCE, connection checks and disconnect.
-No provider fallback or send endpoint. Paid inference is added in Phase 3. Mocked tests
+No provider fallback. Paid inference is added in Phase 3 and reviewed sending in
+Phase 4. Mocked tests
 cover two bands, role/feature revocation, stale generations, log/HTML redaction,
 rotation, backoff and simultaneous budget reservations.
 
 Phase 3 now supplies message import preview/consent, retention/export/deletion.
 Phase 3 extraction uses budget state and token caps before any paid call.
-Charts/category breakdowns remain later dashboard work. Live credentials,
+Phase 4 adds charts/category breakdowns and usage export. Live credentials,
 OAuth/billing and Google verification remain operator gates.
 
 ## Phase 3 — implemented, awaiting live-provider and staging acceptance
@@ -82,13 +84,21 @@ See [research behavior and limits](RESEARCH_AND_RECORDS.md) and
 [discovery provider setup](DISCOVERY_PROVIDERS.md). Search, source fetching,
 coordinate changes and AI disclosure each require their own reviewed approval.
 
-## Phase 4 — reviewed outreach
+## Phase 4 — implemented, awaiting live-provider and staging acceptance
 
-Versioned templates, evidence-grounded drafts and preview/edit; manager-only
-explicit send with CSRF, suppression checks, immutable approved content and
-idempotency/ambiguous-outcome reconciliation. Reply tracking and reminders.
-Explicit publish/update/unlink/remove calendar actions with both role gates,
-stable publication links and deduplication. Usage/activity dashboards and exports.
+- [x] Versioned templates and reviewed placeholder-based drafts; optional budgeted
+  AI selection/ordering of existing paragraphs without invented claims.
+- [x] Manager-only explicit send, separate Gmail send OAuth, immutable content and
+  identity snapshots, recipient limits and no replay after uncertain transmission.
+- [x] Exact Sent-mail reconciliation, scoped reply checks/retention, same-thread
+  follow-up drafts, manual reminders and opportunity outreach history.
+- [x] Explicit add/update/unlink/relink/remove calendar publication with both roles,
+  stable links, optimistic versions and fresh worker-side Booking checks.
+- [x] Model/category/daily usage, remaining budget, jobs and tenant-scoped exports.
+- [ ] Live-provider and staging acceptance; no real sends or paid tests performed.
+
+See [outreach behavior and limits](OUTREACH.md). AI arrangement, metadata-only
+explicit reply reads and plain-text messages are deliberate initial boundaries.
 
 ## Phase 5 — optional
 

@@ -3,8 +3,9 @@ import uuid
 from datetime import timedelta
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import F, Sum, Count
-from django.http import HttpResponseBadRequest
+from django.db.models import F, Sum, Count, Case, When, DecimalField
+from django.db.models.functions import TruncDate
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
@@ -73,6 +74,8 @@ def connections(request):
         'key_form': key_form, 'policy_form': policy_form, 'error': error,
         'credential': credential, 'fingerprint': credential.fingerprint[:12] if credential else '',
         'gmail': BookingGmailConnection.objects.filter(group=group).first(),
+        'gmail_send_enabled': any('https://www.googleapis.com/auth/gmail.send' in row.granted_scopes
+            for row in BookingGmailConnection.objects.filter(group=group, is_connected=True)),
         'jobs': BookingJob.objects.filter(group=group).order_by('-created_at')[:10],
         'openai_test_key': uuid.uuid4(), 'gmail_test_key': uuid.uuid4()})
 
@@ -127,7 +130,33 @@ def usage(request):
         totals = rows.filter(created_at__gte=start).aggregate(requests=Count('id'), cost=Sum('estimated_usd'),
             input_tokens=Sum('input_tokens'), output_tokens=Sum('output_tokens'))
         windows.append({'label': label, **totals})
+    month = now.date().replace(day=1)
+    committed = BookingBudgetReservation.objects.filter(group=request.active_group, period=month).exclude(status='released').aggregate(
+        total=Sum(Case(When(status='settled', then=F('charged_usd')), default=F('authorized_usd'),
+            output_field=DecimalField(max_digits=12, decimal_places=6))))['total'] or 0
+    config = BookingSettings.objects.get(group=request.active_group)
+    daily = list(rows.filter(created_at__gte=now-timedelta(days=30)).annotate(day=TruncDate('created_at')).values('day').annotate(cost=Sum('estimated_usd')).order_by('day'))
+    peak = max([float(row['cost']) for row in daily] or [0]) or 1
+    for row in daily:
+        row['percent'] = float(row['cost']) / peak * 100
     return render(request, 'booking/usage.html', {'nav_active': 'booking', 'windows': windows,
+        'models': rows.values('model').annotate(requests=Count('pk'), cost=Sum('estimated_usd')).order_by('model'),
+        'categories': rows.values('task_type').annotate(requests=Count('pk'), cost=Sum('estimated_usd')).order_by('task_type'),
+        'daily': daily, 'remaining': max(0, config.monthly_budget_usd-committed),
+        'jobs': BookingJob.objects.filter(group=request.active_group).order_by('-created_at')[:100],
         'entries': rows.order_by('-created_at')[:50],
         'reserved': BookingBudgetReservation.objects.filter(group=request.active_group,
             status__in=['reserved', 'started']).aggregate(total=Sum('authorized_usd'))['total'] or 0})
+
+
+@login_required
+@require_GET
+def usage_export(request):
+    require_booking(request.user, request.active_group)
+    response = JsonResponse({'usage': list(BookingAIUsage.objects.filter(group=request.active_group).values(
+        'created_at', 'task_type', 'model', 'input_tokens', 'output_tokens', 'estimated_usd', 'pricing_version', 'result')),
+        'jobs': list(BookingJob.objects.filter(group=request.active_group).values(
+            'id', 'kind', 'status', 'attempts', 'error_code', 'created_at', 'finished_at'))})
+    response['Content-Disposition'] = 'attachment; filename="booking-usage.json"'
+    response['Cache-Control'] = 'no-store'
+    return response

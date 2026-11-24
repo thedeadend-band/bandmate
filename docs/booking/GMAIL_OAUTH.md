@@ -1,7 +1,8 @@
 # Gmail onboarding
 
 Phase 2 implements separate read-only Gmail authorization and explicit connection
-checks. Phase 3 adds explicitly approved targeted imports. There is no send endpoint.
+checks. Phase 3 adds targeted imports; Phase 4 adds separately authorized reviewed
+sending and scoped reply checks. See [outreach](OUTREACH.md).
 
 Configure `GMAIL_OAUTH_CLIENT_ID`, `GMAIL_OAUTH_CLIENT_SECRET` and an exact registered
 HTTPS `GMAIL_OAUTH_REDIRECT_URI` ending in `/booking/gmail/callback/`. These settings
@@ -51,6 +52,7 @@ and [synchronization](https://developers.google.com/workspace/gmail/api/guides/s
 
 `gmail.readonly` is restricted. Production multi-band availability requires the
 applicable Google verification/security-assessment gates; mocked tests do not
-satisfy them. Phase 4 adds separately consented `gmail.send` and exact-content,
-manager-reviewed, idempotent sends only.
+satisfy them. Phase 4 implements separately consented `gmail.send`, bound to the
+existing verified mailbox, and exact-content manager-approved sends. Read-only
+reconnect does not inherit send capability. Uncertain sends are never replayed.
 [Google scope requirements](https://developers.google.com/workspace/gmail/api/auth/scopes).

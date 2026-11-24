@@ -51,7 +51,8 @@ batches, leases, attempt fencing and backoff. Its dedicated worker executes
 connection checks and explicitly approved Gmail/public-source research. Ordinary
 page loads never call providers. Each OpenAI check attempt has a metadata-only
 usage record. Separately consented candidate extraction uses Responses with this
-band's key; no sending handler exists yet.
+band's key. Phase 4 adds explicit manager-approved sends in the Booking worker;
+see [outreach and publication](OUTREACH.md).
 
 Budget reservations take a write lock before reading allowance totals (including
 on SQLite), then atomically reserve the maximum estimated request cost. `begin`

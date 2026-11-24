@@ -88,6 +88,8 @@ class GmailOAuthState(models.Model):
     connection_generation = models.PositiveIntegerField(default=0)
     expires_at = models.DateTimeField()
     consumed = models.BooleanField(default=False)
+    request_send = models.BooleanField(default=False)
+    expected_mailbox = models.EmailField(blank=True)
 
 
 class BookingJob(models.Model):
@@ -99,6 +101,10 @@ class BookingJob(models.Model):
         WEB_SEARCH = 'web_search', 'Public opportunity and artist search'
         GEOCODE = 'geocode', 'Review location matches'
         AI_EXTRACT = 'ai_extract', 'AI evidence extraction'
+        AI_DRAFT = 'ai_draft', 'Review AI draft arrangement'
+        GMAIL_SEND = 'gmail_send', 'Approved Gmail send'
+        GMAIL_RECONCILE = 'gmail_reconcile', 'Check uncertain send'
+        GMAIL_REPLIES = 'gmail_replies', 'Read approved conversation replies'
 
     group = models.ForeignKey('player.Group', on_delete=models.CASCADE)
     actor = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
@@ -454,3 +460,107 @@ class BookingArtistGig(NamedRecord):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['group', 'artist', 'name', 'event_date'], name='booking_artist_gig_key')]
+
+
+class BookingEmailTemplate(BandRecord):
+    name = models.CharField(max_length=200)
+    category = models.CharField(max_length=30, choices=[('venue', 'Venue'), ('festival', 'Festival'),
+        ('civic', 'Civic concert'), ('follow_up', 'Follow-up')], default='venue')
+
+    def __str__(self):
+        return self.name
+
+
+class BookingTemplateVersion(BandRecord):
+    template = models.ForeignKey(BookingEmailTemplate, on_delete=models.PROTECT, related_name='versions')
+    number = models.PositiveIntegerField()
+    subject = models.CharField(max_length=300)
+    body = models.TextField(max_length=12000)
+    created_by = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['template', 'number'], name='booking_template_version')]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError('Template versions are immutable. Save a new version.')
+        super().save(*args, **kwargs)
+
+
+class BookingDraft(BandRecord):
+    opportunity = models.ForeignKey(BookingOpportunity, on_delete=models.PROTECT)
+    contact = models.ForeignKey(BookingContact, on_delete=models.PROTECT)
+    template_version = models.ForeignKey(BookingTemplateVersion, null=True, blank=True, on_delete=models.PROTECT)
+    created_by = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
+    to = models.EmailField()
+    cc = models.JSONField(default=list, blank=True)
+    bcc = models.JSONField(default=list, blank=True)
+    subject = models.CharField(max_length=300)
+    body = models.TextField(max_length=12000)
+    # Human-reviewed substitution values/provenance, not an AI approval.
+    context = models.JSONField(default=dict, blank=True)
+    ai_suggestion = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=24, default='draft')
+    reply_to = models.ForeignKey('BookingOutreachMessage', null=True, blank=True, on_delete=models.PROTECT,
+        related_name='followup_drafts')
+
+
+class BookingOutreachMessage(models.Model):
+    group = models.ForeignKey('player.Group', on_delete=models.PROTECT)
+    draft = models.OneToOneField(BookingDraft, on_delete=models.PROTECT, related_name='outreach')
+    actor = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
+    job = models.OneToOneField(BookingJob, on_delete=models.PROTECT)
+    idempotency_key = models.UUIDField(default=uuid.uuid4, unique=True)
+    snapshot = models.JSONField()
+    content_hash = models.CharField(max_length=64)
+    raw = models.TextField()
+    rfc_message_id = models.CharField(max_length=200, unique=True)
+    mailbox = models.EmailField()
+    credential_generation = models.PositiveIntegerField()
+    status = models.CharField(max_length=24, default='approved')
+    gmail_message_id = models.CharField(max_length=100, blank=True)
+    gmail_thread_id = models.CharField(max_length=100, blank=True)
+    error_code = models.CharField(max_length=80, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    started_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            old = type(self).objects.get(pk=self.pk)
+            immutable = ['group_id', 'draft_id', 'actor_id', 'job_id', 'idempotency_key', 'snapshot',
+                'content_hash', 'raw', 'rfc_message_id', 'mailbox', 'credential_generation', 'expires_at']
+            if any(getattr(old, field) != getattr(self, field) for field in immutable):
+                raise ValidationError('Approved email content and identity are immutable.')
+        super().save(*args, **kwargs)
+
+
+class BookingMailRead(models.Model):
+    group = models.ForeignKey('player.Group', on_delete=models.CASCADE)
+    message = models.ForeignKey(BookingOutreachMessage, on_delete=models.PROTECT)
+    job = models.OneToOneField(BookingJob, on_delete=models.PROTECT)
+    retention_days = models.PositiveIntegerField(default=30)
+    expires_at = models.DateTimeField()
+
+
+class BookingReply(models.Model):
+    group = models.ForeignKey('player.Group', on_delete=models.CASCADE)
+    message = models.ForeignKey(BookingOutreachMessage, on_delete=models.PROTECT)
+    reference = models.OneToOneField(BookingConversationReference, on_delete=models.PROTECT)
+
+
+class BookingCalendarPublication(models.Model):
+    group = models.ForeignKey('player.Group', on_delete=models.CASCADE)
+    opportunity = models.ForeignKey(BookingOpportunity, on_delete=models.PROTECT)
+    target = models.CharField(max_length=60)
+    local_calendar = models.ForeignKey('calendar_integrations.BandmateLocalCalendar', null=True, on_delete=models.PROTECT)
+    google_calendar = models.ForeignKey('calendar_integrations.ConnectedCalendar', null=True, on_delete=models.PROTECT)
+    operation = models.ForeignKey('calendar_integrations.CalendarWriteOperation', on_delete=models.PROTECT)
+    event_id = models.CharField(max_length=1024)
+    linked = models.BooleanField(default=True)
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['group', 'opportunity', 'target'], name='booking_calendar_publication')]

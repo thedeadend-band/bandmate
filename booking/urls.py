@@ -1,8 +1,22 @@
 from django.urls import path
-from . import views, connection_views, gmail_views, record_views, research_views
+from . import views, connection_views, gmail_views, record_views, research_views, outreach_views, publication_views
 
 app_name = 'booking'
 urlpatterns = [
+    path('opportunities/<int:opportunity_id>/calendar/', publication_views.publication, name='publication'),
+    path('templates/', outreach_views.templates, name='templates'),
+    path('templates/new/', outreach_views.template_edit, name='template_new'),
+    path('templates/<int:template_id>/', outreach_views.template_edit, name='template_edit'),
+    path('drafts/', outreach_views.drafts, name='drafts'),
+    path('drafts/export/', outreach_views.outreach_export, name='outreach_export'),
+    path('opportunities/<int:opportunity_id>/draft/', outreach_views.compose, name='compose'),
+    path('drafts/<int:draft_id>/', outreach_views.draft, name='draft'),
+    path('drafts/<int:draft_id>/send/', outreach_views.send, name='send'),
+    path('drafts/<int:draft_id>/ai/', outreach_views.ai_preview, name='draft_ai'),
+    path('drafts/<int:draft_id>/adopt-ai/', outreach_views.adopt_ai, name='adopt_draft_ai'),
+    path('messages/<int:message_id>/', outreach_views.message, name='message'),
+    path('messages/<int:message_id>/read/<str:kind>/', outreach_views.mail_read, name='mail_read'),
+    path('messages/<int:message_id>/cancel/', outreach_views.cancel_send, name='cancel_send'),
     path('', views.overview, name='overview'),
     path('settings/', views.settings_view, name='settings'),
     path('roles/', views.roles, name='roles'),
@@ -10,6 +24,7 @@ urlpatterns = [
     path('connections/openai/remove/', connection_views.remove_key, name='remove_key'),
     path('connections/<str:provider>/test/', connection_views.test_connection, name='test_connection'),
     path('usage/', connection_views.usage, name='usage'),
+    path('usage/export/', connection_views.usage_export, name='usage_export'),
     path('gmail/connect/', gmail_views.connect, name='gmail_connect'),
     path('gmail/callback/', gmail_views.callback, name='gmail_callback'),
     path('gmail/disconnect/', gmail_views.disconnect, name='gmail_disconnect'),

@@ -104,8 +104,10 @@ def record_detail(request, kind, record_id):
     record = get_object_or_404(record_model(kind), pk=record_id, group=request.active_group)
     index = SuppressionIndex(request.active_group)
     related = [(field.replace('_', ' ').title(), getattr(record, field)) for field in ['organization', 'venue', 'contact', 'series', 'artist'] if getattr(record, field + '_id', None)]
+    from .models import BookingDraft
     return render(request, 'booking/record_detail.html', {'nav_active': 'booking', 'kind': kind, 'record': record,
         'related': related, 'blocked': index.blocked(record), 'no_contact': index.blocked(record, sending=True),
+        'drafts': BookingDraft.objects.filter(group=request.active_group, opportunity=record).order_by('-created_at') if kind == 'opportunities' else [],
         'can_edit': role in EDIT_ROLES and not record.is_archived,
         'is_manager': role == BookingMembershipRole.Role.MANAGER,
         'evidence': BookingEvidence.objects.filter(group=request.active_group, record_identity=record.identity).order_by('-created_at'),

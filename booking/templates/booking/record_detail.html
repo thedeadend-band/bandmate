@@ -15,7 +15,7 @@
 {% if record.history_evidence %}<p>Previous booking: {{ record.prior_booking|yesno:"Yes,No" }} · {{ record.get_response_status_display }}</p><blockquote>{{ record.history_evidence }}</blockquote>{% endif %}
 {% if record.fee_evidence %}<p>Expected fee: {{ record.expected_fee }} · {{ record.fee_evidence }}</p>{% endif %}
 {% if kind == 'artist_gigs' %}<p>Public artist gig date: {{ record.event_date }}. This is not a booking by your band.</p><blockquote>{{ record.source_excerpt }}</blockquote>{% endif %}
-{% if kind == 'opportunities' %}<p>{{ record.event_year }} · {{ record.get_stage_display }} · {{ record.get_priority_display }} priority</p>
+{% if kind == 'opportunities' %}{% if can_edit %}<p><a href="{% url 'booking:compose' record.pk %}">Create outreach draft</a> · <a href="{% url 'booking:publication' record.pk %}">Calendar publication</a></p>{% endif %}<p>{{ record.event_year }} · {{ record.get_stage_display }} · {{ record.get_priority_display }} priority</p>
 {% if can_edit %}<p><a href="{% url 'booking:record_new' 'opportunities' %}?from={{ record.pk }}">Start next year's edition</a> — dates must be reviewed for the new cycle.</p>{% endif %}
 <p>Event date: {{ record.event_date|default:"Unknown" }}<br>Applications open: {{ record.application_open_date|default:"Unknown" }}<br>Verified deadline: {{ record.verified_deadline|default:"Unknown" }}</p>
 {% if record.deadline_excerpt %}<blockquote>{{ record.deadline_excerpt }}</blockquote><p><a href="{{ record.deadline_source }}" rel="noopener noreferrer" target="_blank">Application dates source</a></p>{% endif %}
@@ -23,7 +23,7 @@
 {% endif %}
 {% if record.notes %}<h2>Notes</h2><div class="feature-prewrap">{{ record.notes }}</div>{% endif %}
 <h2>Evidence</h2><ul>{% for item in evidence %}<li>{{ item.field_name }} · {{ item.source_type }} · {{ item.created_at }}<br>{{ item.excerpt|default:"Excerpt removed under retention policy." }}</li>{% empty %}<li>Manually entered record. Add published evidence when verifying a deadline.</li>{% endfor %}</ul>
-{% if kind == 'opportunities' %}<h2>Follow-up reminders</h2><p>Reminders appear here and in Calendar. They never send email.</p>
+{% if kind == 'opportunities' %}<h2>Outreach timeline</h2><ul>{% for draft in drafts %}<li>{{ draft.created_at }} · <a href="{% url 'booking:draft' draft.pk %}">{{ draft.subject }}</a> · {{ draft.status }}</li>{% empty %}<li>No outreach drafts.</li>{% endfor %}</ul><h2>Follow-up reminders</h2><p>Reminders appear here and in Calendar. They never send email.</p>
 <ul>{% for reminder in followups %}<li>{{ reminder.due_date }} · {{ reminder.note }}{% if reminder.completed %} · Complete{% elif can_edit %}<form method="post" action="{% url 'booking:complete_followup' reminder.pk %}">{% csrf_token %}<button class="btn btn-secondary">Mark complete</button></form>{% endif %}</li>{% empty %}<li>No reminders.</li>{% endfor %}</ul>
 {% if can_edit %}<form method="post" action="{% url 'booking:followup' record.pk %}" class="wiz-form">{% csrf_token %}{% include "player/feature_form_fields.html" with form=followup_form %}<button class="btn btn-add">Add reminder</button></form>{% endif %}{% endif %}
 {% if is_manager and not record.is_archived %}<h2>Record controls</h2><p>Record identity: <code>{{ record.identity }}</code>. Use this identity in the <a href="{% url 'booking:suppressions' %}">blacklist</a> to preserve suppression across renames.</p>

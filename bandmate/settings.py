@@ -193,6 +193,7 @@ BOOKING_PROVIDER_MIN_INTERVAL = max(1, int(os.environ.get('BOOKING_PROVIDER_MIN_
 import json as _booking_json
 BOOKING_AI_PRICING = _booking_json.loads(os.environ.get('BOOKING_AI_PRICING', '{}'))
 BOOKING_AI_MAX_INPUT_TOKENS = 8192
+BOOKING_SEND_DAILY_LIMIT = max(0, int(os.environ.get('BOOKING_SEND_DAILY_LIMIT', '10')))
 # SQL parameters can contain tenant-private data; never inherit root DEBUG.
 LOGGING['loggers']['django.db.backends'] = {'handlers': ['console'], 'level': 'WARNING', 'propagate': False}
 LOGGING['filters'] = {'oauth_query': {'()': 'bandmate.log_filters.OAuthQueryRedactor'}}

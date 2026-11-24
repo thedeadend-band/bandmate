@@ -1,4 +1,4 @@
-"""Bounded, leased read-only checks; independent of audio and Calendar workers."""
+"""Bounded, leased approved jobs; independent of audio and Calendar workers."""
 from datetime import timedelta
 from django.conf import settings
 from django.db import transaction
@@ -23,7 +23,8 @@ def enqueue(group, actor, kind, key, generation):
 
 def process_batch():
     now = timezone.now()
-    # Only idempotent read-only jobs can recover an expired lease automatically.
+    # Send jobs recover only into reconciliation; their durable started state
+    # prevents a second remote send after an expired worker lease.
     eligible = Q(status='pending', run_after__lte=now) | Q(status='processing', lease_until__lt=now)
     ids = list(BookingJob.objects.filter(eligible).order_by('run_after', 'pk').values_list('pk', flat=True)[:settings.BOOKING_JOB_BATCH_SIZE])
     for pk in ids:
@@ -31,6 +32,10 @@ def process_batch():
                 attempts=F('attempts') + 1, lease_until=now + timedelta(minutes=5)):
             continue
         job = BookingJob.objects.select_related('actor', 'group').get(pk=pk)
+        if job.kind in ('gmail_send', 'gmail_reconcile', 'gmail_replies'):
+            from .mail_delivery import process_mail_job
+            process_mail_job(job)
+            continue
         from .research_jobs import RESEARCH_KINDS, process_research_job
         if job.kind in RESEARCH_KINDS:
             process_research_job(job)

@@ -46,5 +46,7 @@ Uncertain requests retain the full reservation until operator reconciliation wit
 provider usage. A request crossing UTC midnight must release its unstarted
 reservation and obtain a fresh job/reservation. AI runs are never automatically
 retried; a new approved run is a separate request and may incur another charge.
-Model/category breakdowns, charts, export and provider billing reconciliation are
-later dashboard work, not implemented controls.
+Phase 4 adds model/category breakdowns, daily estimated-cost charts, metadata
+export and remaining monthly budget. It also adds separately approved AI paragraph
+arrangement for reviewed drafts using the same budget controls. Provider billing
+reconciliation remains an operator activity. See [outreach](OUTREACH.md).

@@ -18,7 +18,7 @@ from calendar_integrations.services.google import ProviderError
 from player.group_permissions import audit
 from .connection_views import manager
 from .models import GmailOAuthState, BookingGmailConnection, BookingSettings
-from .services.connections import exchange_gmail_code, gmail_profile, GMAIL_READ_SCOPE
+from .services.connections import exchange_gmail_code, gmail_profile, GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE
 
 
 def digest(value):
@@ -30,7 +30,8 @@ def digest(value):
 @sensitive_variables()
 def connect(request):
     manager(request)
-    if request.POST.get('consent') != 'read_profile':
+    sending = request.POST.get('consent') == 'enable_reviewed_send'
+    if request.POST.get('consent') not in ('read_profile', 'enable_reviewed_send'):
         return HttpResponseBadRequest('Acknowledge the Gmail read-only connection before continuing.')
     if not (settings.GMAIL_OAUTH_CLIENT_ID and settings.GMAIL_OAUTH_CLIENT_SECRET and
             urlparse(settings.GMAIL_OAUTH_REDIRECT_URI).scheme == 'https'):
@@ -41,14 +42,17 @@ def connect(request):
     except VaultUnavailable:
         return HttpResponseBadRequest('The credential vault must be configured before connecting Gmail.')
     connection, _ = BookingGmailConnection.objects.get_or_create(group=request.active_group)
+    if sending and not connection.is_connected:
+        return HttpResponseBadRequest('Connect and verify the read-only mailbox before enabling reviewed sending.')
     GmailOAuthState.objects.filter(expires_at__lt=timezone.now()).delete()
     GmailOAuthState.objects.create(digest=digest(nonce), group=request.active_group, user=request.user,
         session_digest=digest(request.session.session_key or ''), verifier_ciphertext=encrypted,
-        connection_generation=connection.generation, expires_at=timezone.now() + timedelta(minutes=10))
+        connection_generation=connection.generation, request_send=sending,
+        expected_mailbox=connection.mailbox if sending else '', expires_at=timezone.now() + timedelta(minutes=10))
     audit(request.active_group, request.user, 'booking.gmail.consent_requested')
     return redirect('https://accounts.google.com/o/oauth2/v2/auth?' + urlencode({
         'client_id': settings.GMAIL_OAUTH_CLIENT_ID, 'redirect_uri': settings.GMAIL_OAUTH_REDIRECT_URI,
-        'response_type': 'code', 'scope': GMAIL_READ_SCOPE, 'state': nonce, 'access_type': 'offline',
+        'response_type': 'code', 'scope': GMAIL_READ_SCOPE + (' ' + GMAIL_SEND_SCOPE if sending else ''), 'state': nonce, 'access_type': 'offline',
         'prompt': 'consent', 'code_challenge_method': 'S256',
         'code_challenge': base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()}))
 
@@ -75,12 +79,18 @@ def callback(request):
         scopes = tokens.get('scope', '').split()
         if GMAIL_READ_SCOPE not in scopes or not tokens.get('refresh_token'):
             raise ProviderError('offline_read_consent_required')
+        if state.request_send and GMAIL_SEND_SCOPE not in scopes:
+            raise ProviderError('send_consent_required')
+        # An old broader grant cannot silently elevate a read-only reconnect.
+        scopes = [scope for scope in scopes if scope != GMAIL_SEND_SCOPE or state.request_send]
         manager(request)
         if not BookingGmailConnection.objects.filter(group_id=state.group_id, generation=state.connection_generation).exists():
             raise ProviderError('connection_changed')
         profile = gmail_profile(tokens['access_token'])
         mailbox = profile.get('emailAddress', '').strip().lower()
         validate_email(mailbox)
+        if state.expected_mailbox and mailbox != state.expected_mailbox:
+            raise ProviderError('mailbox_identity_changed')
         encrypted = seal(state.group_id, 'gmail-refresh', tokens['refresh_token'])
         with transaction.atomic():
             BookingSettings.objects.filter(group_id=state.group_id).update(updated_at=F('updated_at'))

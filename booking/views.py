@@ -15,7 +15,7 @@ from .permissions import require_booking
 @require_http_methods(['GET'])
 def overview(request):
     role = require_booking(request.user, request.active_group)
-    from .models import BookingOpportunity, BookingFollowUp, BookingCandidate
+    from .models import BookingOpportunity, BookingFollowUp, BookingCandidate, BookingOutreachMessage
     from .services.records import SuppressionIndex, EDIT_ROLES
     from django.utils import timezone
     from datetime import timedelta
@@ -27,6 +27,8 @@ def overview(request):
     return render(request, 'booking/overview.html', {
         'nav_active': 'booking', 'is_booking_manager': role == BookingMembershipRole.Role.MANAGER,
         'can_edit': role in EDIT_ROLES, 'opportunity_count': len(opportunities),
+        'outreach': BookingOutreachMessage.objects.filter(group=request.active_group,
+            draft__opportunity_id__in=visible_ids).order_by('-created_at')[:10],
         'deadlines': [row for row in opportunities if row.verified_deadline and today <= row.verified_deadline <= today + timedelta(days=60)],
         'predictions': [row for row in opportunities if row.predicted_window_start and row.predicted_window_end >= today and row.predicted_window_start <= today + timedelta(days=60)],
         'followups': BookingFollowUp.objects.filter(group=request.active_group, opportunity_id__in=visible_ids,

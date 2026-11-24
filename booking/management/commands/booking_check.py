@@ -8,4 +8,4 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         count = BookingSettings.objects.filter(enabled=True).count()
         self.stdout.write(f'Booking enabled bands: {count}')
-        self.stdout.write('Connection checks and approved research/import jobs are available. AI extraction requires separate consent, configured pricing and band budget. Email sending is not implemented.')
+        self.stdout.write('Connection checks, approved research/import, reviewed outreach and conversation checks are available. AI requires separate consent, configured pricing and band budget. Sending requires explicit manager approval and Gmail send authorization.')

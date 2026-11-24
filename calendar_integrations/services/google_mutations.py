@@ -42,9 +42,22 @@ def process_operation(op, client=None):
     attempting_write = False
     calendar = ConnectedCalendar.objects.select_related('account').get(pk=op.google_calendar_id)
     client = client or GoogleCalendarClient(calendar.account)
+    def booking_gate():
+        from booking.models import BookingCalendarPublication
+        from booking.permissions import require_booking
+        from booking.services.records import EDIT_ROLES, SuppressionIndex
+        publication = BookingCalendarPublication.objects.filter(operation=op).select_related('opportunity').first()
+        if publication:
+            require_booking(op.actor, op.group, EDIT_ROLES)
+            opportunity = publication.opportunity
+            if publication.group_id != op.group_id or opportunity.group_id != op.group_id or not publication.linked:
+                raise Http404
+            if op.action != 'delete' and (opportunity.is_archived or opportunity.stage != 'confirmed' or SuppressionIndex(op.group).blocked(opportunity)):
+                raise Http404
     try:
         if not op.actor:
             raise Http404
+        booking_gate()
         if op.action == 'enable':
             require_calendar_manager(op.actor, op.group)
             if calendar.account.group_id != op.group_id or not calendar.is_enabled or GOOGLE_EVENT_WRITE_SCOPE not in calendar.account.granted_scopes:
@@ -107,6 +120,7 @@ def process_operation(op, client=None):
             return
         # Re-read permissions immediately before the write, not only at enqueue time.
         require_source_write(op.actor, op.group, calendar)
+        booking_gate()
         CalendarWriteOperation.objects.filter(pk=op.pk).update(status='processing', attempts=op.attempts + 1, updated_at=timezone.now())
         attempting_write = True
         response = client.write(calendar.external_calendar_id, op.event_id, op.action, payload,

@@ -121,5 +121,6 @@ API references:
 Before live use, verify authorized provider accounts and plan/storage terms,
 model availability/pricing, Google verification and mailbox consent, then exercise
 provider failures and retention on staging. Production deployment remains a
-separate operator-approved action. Phase 4 still owns drafts/templates, reviewed
-Gmail sending, reply threading and explicit calendar publication.
+separate operator-approved action. Phase 4 implements drafts/templates, reviewed
+Gmail sending, reply threading and explicit calendar publication; see
+[outreach setup and limits](OUTREACH.md).

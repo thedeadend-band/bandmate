@@ -3,7 +3,8 @@
 ## Current status
 
 The Booking worker processes explicitly queued OpenAI model-list/Gmail-profile
-checks and approved Gmail/public-URL/search/geocoding/AI research.
+checks, approved Gmail/public-URL/search/geocoding/AI research, explicit sends,
+uncertain-delivery reconciliation and approved conversation reads.
 `booking_worker --once` processes one bounded batch; the long-running worker
 checks every 30 seconds. `booking_check` is read-only and prints no secrets.
 `booking_enqueue_due` enqueues explicitly approved periodic public-URL revisits and
@@ -26,7 +27,9 @@ pages do not sync Google or ICS. Keep the existing ICS timer enabled for ICS.
 Do not enable provider jobs with production accounts until the release gates below
 are met. Mocked success is not live provider acceptance. Feature changes and
 connection lifecycle events use `GroupAccessAudit`; event changes also have
-`CalendarMutationAudit` and durable operation status. No email sends are available.
+`CalendarMutationAudit` and durable operation status. Reviewed sending is available
+only after separate Gmail send authorization and exact-content manager approval.
+See [outreach recovery](OUTREACH.md); never reset uncertain send rows for replay.
 
 ## Vault provisioning and rotation
 
@@ -110,7 +113,8 @@ operator-held vault backup/recovery; real read-only OAuth test accounts and Goog
 verification; then explicitly authorized isolated Google CRUD/ETag/revocation tests.
 No paid OpenAI inference or email test has been run. Phase 3 import/data-retention
 controls have passed mocked/local acceptance; live mailbox and staging retention
-checks remain. Phase 4 reviewed sending remains unimplemented.
+checks remain. Phase 4 reviewed sending/publication has local mocked coverage;
+authorized live mailbox/calendar and uncertain-delivery acceptance remain pending.
 
 Pending Google writes are visible on Calendar and operation pages. Conflicts require
 reloading the current event; ambiguous results require inspecting Google before a

@@ -7,6 +7,7 @@ from booking.permissions import booking_role
 from booking.models import BookingMembershipRole
 
 GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send'
 
 
 def authorized(job):

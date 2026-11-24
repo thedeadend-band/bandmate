@@ -25,15 +25,16 @@ Connection test: {{ credential.test_status }}{% if credential.tested_at %} · {{
 {% include "player/feature_form_fields.html" with form=policy_form %}<button class="btn btn-add" type="submit">Save AI limits</button></form>
 <p><a href="{% url 'booking:usage' %}">View usage and estimates</a></p>
 <h2>Gmail</h2>
-{% if gmail.is_connected %}<p>Connected mailbox: <strong>{{ gmail.mailbox }}</strong>. Read-only authorization.</p>
+{% if gmail.is_connected %}<p>Connected mailbox: <strong>{{ gmail.mailbox }}</strong>. {% if gmail_send_enabled %}Reviewed sending authorized.{% else %}Read-only authorization.{% endif %}</p>
 <form method="post" action="{% url 'booking:test_connection' 'gmail' %}">{% csrf_token %}
 <input type="hidden" name="operation_key" value="{{ gmail_test_key }}"><button class="btn btn-secondary" type="submit">Test Gmail connection</button></form>
 {% else %}<p>No active Gmail connection.</p>{% endif %}
 {% if gmail.last_error_code %}<p role="status">Connection needs attention: {{ gmail.last_error_code }}</p>{% endif %}
-<p>This connection is separate from Google Calendar. One mailbox can belong to only one band. Connecting stores the mailbox address and encrypted authorization. <a href="{% url 'booking:research' %}">Targeted history imports</a> require a separate preview and approval. Sending email is not available yet.</p>
+<p>This connection is separate from Google Calendar. One mailbox can belong to only one band. Connecting stores the mailbox address and encrypted authorization. <a href="{% url 'booking:research' %}">Targeted history imports</a> require a separate preview and approval. Sending requires a separate authorization below and a manager review of every message.</p>
 <form method="post" action="{% url 'booking:gmail_connect' %}" class="wiz-form">{% csrf_token %}
 <label><input type="checkbox" name="consent" value="read_profile" required> I authorize a read-only Gmail connection for {{ active_group.name }} and the profile check needed to verify its mailbox.</label>
 <button class="btn btn-add" type="submit">{% if gmail.is_connected %}Reconnect{% else %}Connect{% endif %} Gmail</button></form>
+{% if gmail.is_connected and not gmail_send_enabled %}<form method="post" action="{% url 'booking:gmail_connect' %}" class="wiz-form">{% csrf_token %}<label><input type="checkbox" name="consent" value="enable_reviewed_send" required> Add Gmail send permission for this verified mailbox. Each message still requires a manager's explicit approval.</label><button class="btn btn-secondary">Authorize reviewed sending</button></form>{% endif %}
 {% if gmail %}<form method="post" action="{% url 'booking:gmail_disconnect' %}">{% csrf_token %}
 <button class="btn btn-secondary" type="submit">Disconnect and remove saved Gmail authorization</button></form>{% endif %}
 <p>Disconnect removes the active credential and mailbox address from BandMate and stops further imports. Previously imported excerpts remain until their approved expiry or removal through Research &amp; review. Connection audit records and secured database backups remain subject to the operator's retention policy. You can also revoke access in your Google account.</p>
