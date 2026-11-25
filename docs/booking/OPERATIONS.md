@@ -115,6 +115,10 @@ No paid OpenAI inference or email test has been run. Phase 3 import/data-retenti
 controls have passed mocked/local acceptance; live mailbox and staging retention
 checks remain. Phase 4 reviewed sending/publication has local mocked coverage;
 authorized live mailbox/calendar and uncertain-delivery acceptance remain pending.
+Phase 5 gig/setlist/resource/rehearsal workflow has local regression and browser
+coverage. It adds no provider or worker setup; include migration `0006` in staging
+backup/restore checks. Resource archiving does not edit previously composed email.
+See [gig preparation](GIG_PREPARATION.md) and [Phase 5 acceptance](PHASE_5_ACCEPTANCE.md).
 
 Pending Google writes are visible on Calendar and operation pages. Conflicts require
 reloading the current event; ambiguous results require inspecting Google before a

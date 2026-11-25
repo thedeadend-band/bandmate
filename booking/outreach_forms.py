@@ -1,7 +1,7 @@
 import re
 from django import forms
 from django.core.validators import validate_email
-from .models import BookingContact, BookingEmailTemplate, BookingDraft
+from .models import BookingContact, BookingEmailTemplate, BookingDraft, BookingResource
 
 PLACEHOLDERS = {'band_name', 'venue_name', 'event_name', 'organizer_name', 'prior_contact_context',
     'year', 'epk_url', 'available_dates', 'contact_name'}
@@ -29,9 +29,16 @@ class TemplateForm(forms.Form):
         return value
 
 
+class EPKChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return f'{obj.name} — {obj.url}'
+
+
 class ComposeForm(forms.Form):
     contact = forms.ModelChoiceField(queryset=BookingContact.objects.none())
     template = forms.ModelChoiceField(queryset=BookingEmailTemplate.objects.none(), required=False)
+    epk_resource = EPKChoiceField(queryset=BookingResource.objects.none(), required=False,
+        label='Reviewed EPK resource', help_text='Choose a saved EPK or enter a URL below. The selected URL is copied into this draft only.')
     epk_url = forms.URLField(required=False, max_length=1000)
     available_dates = forms.CharField(required=False, max_length=1000)
 
@@ -39,6 +46,14 @@ class ComposeForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields['contact'].queryset = BookingContact.objects.filter(group=group, is_archived=False).exclude(email='')
         self.fields['template'].queryset = BookingEmailTemplate.objects.filter(group=group, is_archived=False)
+        self.fields['epk_resource'].queryset = BookingResource.objects.filter(group=group,
+            is_archived=False, approved_for_outreach=True, kind='epk').order_by('name')
+
+    def clean(self):
+        data = super().clean()
+        if data.get('epk_resource') and data.get('epk_url'):
+            raise forms.ValidationError('Choose a saved EPK or enter a URL, not both.')
+        return data
 
 
 def addresses(value):

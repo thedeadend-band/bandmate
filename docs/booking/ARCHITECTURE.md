@@ -4,7 +4,8 @@
 
 Phase 0 was committed as `bba18cc` on `codex/booking-editable-calendars`.
 `codex/ai-booking-agent` descends from that commit and adds Phase 1 Calendar
-editing, Phase 2 credential onboarding/budgets and Phase 3 records/import/review. Full scope:
+editing, Phase 2 credential onboarding/budgets, Phase 3 records/import/review,
+Phase 4 reviewed outreach and Phase 5 gig preparation. Full scope:
 [original package](spec/START_HERE.md); remaining work: [plan](IMPLEMENTATION_PLAN.md).
 No production deployment, live credentials or paid provider calls were used.
 
@@ -93,6 +94,14 @@ providers. Calendar overlays are generated from visible same-band records and
 never create Google write operations. See [research details](RESEARCH_AND_RECORDS.md).
 
 ## Runtime and migration safety
+
+Phase 5 stores gig plans, resource links and rehearsals as separate group-owned
+Booking records. Setlist references use `SET_NULL` and preserve existing player
+ownership and content. Preparation requires current Booking roles; ordinary
+Calendar/Setlist views expose Booking links only to authorized Booking members.
+Rehearsals are read-only day overlays, not provider writes. EPK selection copies
+the reviewed URL/revision into a draft without copying private resource notes.
+See [gig preparation](GIG_PREPARATION.md).
 
 Network I/O occurs outside database transactions. The Booking worker, Google
 sync command and audio worker have independent locks/queues. Research scheduling

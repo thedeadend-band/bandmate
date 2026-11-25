@@ -564,3 +564,41 @@ class BookingCalendarPublication(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['group', 'opportunity', 'target'], name='booking_calendar_publication')]
+
+
+class BookingResource(BandRecord):
+    name = models.CharField(max_length=200)
+    kind = models.CharField(max_length=24, default='epk', choices=[('epk', 'EPK'),
+        ('stage_plot', 'Stage plot'), ('rider', 'Technical rider'), ('video', 'Video'), ('other', 'Other link')])
+    url = models.URLField(max_length=1000)
+    notes = models.TextField(max_length=2000, blank=True)
+    approved_for_outreach = models.BooleanField(default=False)
+
+    def clean(self):
+        super().clean()
+        from urllib.parse import urlsplit
+        try:
+            url = urlsplit(self.url)
+            if url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password:
+                raise ValueError
+        except ValueError:
+            raise ValidationError({'url': 'Use an HTTP or HTTPS link without embedded credentials.'}) from None
+
+    def __str__(self):
+        return self.name
+
+
+class BookingGigPlan(BandRecord):
+    opportunity = models.OneToOneField(BookingOpportunity, on_delete=models.PROTECT)
+    setlist = models.ForeignKey('player.Setlist', null=True, blank=True, on_delete=models.SET_NULL)
+    notes = models.TextField(max_length=5000, blank=True)
+
+
+class BookingRehearsal(BandRecord):
+    opportunity = models.ForeignKey(BookingOpportunity, on_delete=models.PROTECT)
+    setlist = models.ForeignKey('player.Setlist', null=True, blank=True, on_delete=models.SET_NULL)
+    date = models.DateField()
+    focus = models.TextField(max_length=2000)
+    status = models.CharField(max_length=20, default='planned', choices=[
+        ('planned', 'Planned'), ('complete', 'Complete'), ('cancelled', 'Cancelled')])
+    creation_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)

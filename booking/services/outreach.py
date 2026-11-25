@@ -74,11 +74,20 @@ def compose(group, actor, opportunity, data, parent=None):
     lock_band(group)
     require_booking(actor, group, EDIT_ROLES)
     contact = data['contact']
+    resource = None
+    if data.get('epk_resource'):
+        from booking.models import BookingResource
+        resource = BookingResource.objects.filter(group=group, pk=data['epk_resource'].pk,
+            is_archived=False, approved_for_outreach=True, kind='epk').first()
+        if not resource or data.get('epk_url'):
+            raise ValidationError('Choose an active, approved EPK resource or enter a separate URL.')
     context = {'band_name': group.name, 'event_name': opportunity.name, 'year': str(opportunity.event_year),
         'venue_name': opportunity.venue.name if opportunity.venue_id else '',
         'organizer_name': opportunity.organization.name if opportunity.organization_id else '',
         'contact_name': contact.name, 'prior_contact_context': opportunity.history_evidence,
-        'epk_url': data.get('epk_url', ''), 'available_dates': data.get('available_dates', '')}
+        'epk_url': resource.url if resource else data.get('epk_url', ''), 'available_dates': data.get('available_dates', '')}
+    if resource:
+        context.update(epk_resource_identity=str(resource.identity), epk_resource_revision=resource.revision)
     version = None
     if data.get('template'):
         version = BookingTemplateVersion.objects.filter(group=group, template=data['template']).order_by('-number').first()

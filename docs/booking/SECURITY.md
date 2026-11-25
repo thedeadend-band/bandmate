@@ -35,6 +35,14 @@ Implemented and tested locally:
   reconciliation is read-only. No AI or scheduler can approve/send autonomously.
 - Calendar publication requires both role families and fresh Booking/Calendar
   worker checks; ordinary Calendar remains independent of Booking.
+- Gig plans, resource links and rehearsal focus remain Booking-role scoped.
+  Setlist creation explicitly discloses band-member visibility; linking never
+  expands existing setlist editing rights. Calendar/player backlinks recheck
+  Booking access, and rehearsal overlays omit private focus notes.
+- Resource approval does not publish or fetch files. Only reviewed same-band EPKs
+  are selectable in draft composition; copied URLs remain subject to full message
+  review. Archive/revocation prevents future selection but does not rewrite drafts
+  or immutable send approvals. See [gig preparation](GIG_PREPARATION.md).
 
 Before live use, operators must configure HTTPS, application client registration,
 separately secured key recovery, proxy log redaction and Google verification.

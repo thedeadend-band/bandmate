@@ -60,8 +60,10 @@ def detail(request, kind, event_id):
     editable = kind != 'ics' and source_write_allowed(request.user, request.active_group, event.calendar)
     if kind == 'google':
         editable = editable and event.mutable
+    from booking.presentation import gig_links
     return render(request, 'calendar_integrations/event_detail.html', {
         'event': event, 'kind': kind, 'editable': editable, 'nav_active': 'calendar',
+        'booking_gigs': gig_links(request.user, request.active_group, kind=kind, event=event),
         'source_name': event.source.name if kind == 'ics' else event.calendar.name})
 
 

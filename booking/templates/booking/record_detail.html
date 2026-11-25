@@ -18,6 +18,7 @@
 {% if kind == 'opportunities' %}{% if can_edit %}<p><a href="{% url 'booking:compose' record.pk %}">Create outreach draft</a> · <a href="{% url 'booking:publication' record.pk %}">Calendar publication</a></p>{% endif %}<p>{{ record.event_year }} · {{ record.get_stage_display }} · {{ record.get_priority_display }} priority</p>
 {% if can_edit %}<p><a href="{% url 'booking:record_new' 'opportunities' %}?from={{ record.pk }}">Start next year's edition</a> — dates must be reviewed for the new cycle.</p>{% endif %}
 <p>Event date: {{ record.event_date|default:"Unknown" }}<br>Applications open: {{ record.application_open_date|default:"Unknown" }}<br>Verified deadline: {{ record.verified_deadline|default:"Unknown" }}</p>
+{% if record.stage == 'confirmed' or has_gig_preparation %}<p><a class="btn btn-secondary" href="{% url 'booking:gig' record.pk %}">Setlist &amp; gig preparation</a></p>{% endif %}
 {% if record.deadline_excerpt %}<blockquote>{{ record.deadline_excerpt }}</blockquote><p><a href="{{ record.deadline_source }}" rel="noopener noreferrer" target="_blank">Application dates source</a></p>{% endif %}
 {% if record.predicted_window_start %}<h2>Predicted application window</h2><p>{{ record.predicted_window_start }} – {{ record.predicted_window_end }}. This is a forecast, not an official deadline.</p><p>{{ record.prediction_reason }}</p>{% endif %}
 {% endif %}

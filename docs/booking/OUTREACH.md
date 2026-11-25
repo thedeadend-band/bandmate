@@ -15,6 +15,11 @@ facts must be supplied/reviewed before creating it. Blank-template drafts can be
 written manually by editors/managers. Opportunity detail links to its outreach
 history, compose form, reminders and calendar publication.
 
+Phase 5 adds a reviewed EPK resource selector to composition. It copies the URL
+and resource revision into this draft, without private resource notes. Later edits
+or archiving do not rewrite existing drafts or approved messages. See
+[gig preparation and resources](GIG_PREPARATION.md).
+
 Editors/managers review To, Cc, Bcc, subject and plain-text body. Recipients must
 be valid distinct email addresses; Cc/Bcc each allow up to four, with nine total.
 There are no attachments, automatic uploads, sender aliases or HTML emails. Links

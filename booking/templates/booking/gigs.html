@@ -1,0 +1,9 @@
+{% extends "player/base.html" %}
+{% block title %}Confirmed gigs – Booking{% endblock %}
+{% block content %}{% include "booking/record_nav.html" %}
+<div class="wiz-content feature-content">
+<h1 class="page-title">Confirmed gigs</h1>
+<p>Prepare the setlist, resources and rehearsals for each confirmed opportunity.</p>
+<ul>{% for row in rows %}<li><a href="{% url 'booking:gig' row.pk %}">{{ row.name }}</a> · {{ row.event_date|default:"Date to be confirmed" }}{% if row.bookinggigplan.setlist %} · {{ row.bookinggigplan.setlist.name }}{% endif %}</li>
+{% empty %}<li>No active confirmed gigs. Confirm an <a href="{% url 'booking:directory' 'opportunities' %}">opportunity</a> to begin preparing.</li>{% endfor %}</ul>
+</div>{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "player/base.html" %}
+{% block title %}Gig preparation · {{ opportunity.name }}{% endblock %}
+{% block content %}{% include "booking/record_nav.html" %}
+<div class="wiz-content feature-content"><h1 class="page-title">Gig preparation · {{ opportunity.name }}</h1>
+<p>{{ opportunity.get_stage_display }} · {{ opportunity.event_date|default:"Date to be confirmed" }}</p>
+<p><a href="{% url 'booking:record_detail' 'opportunities' opportunity.pk %}">Opportunity and outreach</a>{% if can_edit %} · <a href="{% url 'booking:publication' opportunity.pk %}">Calendar publication</a>{% endif %}</p>
+{% if not can_prepare %}<p role="status">This opportunity is no longer active, confirmed and unsuppressed. Preparation is retained for reference. Existing rehearsals can be completed or cancelled.</p>{% endif %}
+<h2>Gig setlist</h2>
+{% if plan.setlist %}<p><a class="btn btn-add" href="{% url 'setlist_player' plan.setlist_id %}">Play {{ plan.setlist.name }}</a>{% if can_edit_setlist %} <a class="btn btn-secondary" href="{% url 'setlist_edit' plan.setlist_id %}">Edit songs</a>{% endif %}</p>
+{% else %}<p>No setlist linked.</p>{% endif %}
+{% if can_edit and can_prepare %}
+<p>Setlists are visible to band members and keep their existing owner permissions. Private gig notes stay in Booking. Linking a setlist does not change its date or songs.</p>
+<form method="post" class="wiz-form">{% csrf_token %}{% include "player/feature_form_fields.html" %}
+<button class="btn btn-add" name="action" value="save">Save gig preparation</button>
+{% if not plan.setlist %}<hr><p>Create an empty setlist named after this gig, dated {{ opportunity.event_date|default:"only when confirmed" }}. You will choose songs in the existing setlist editor.</p>
+<label><input type="checkbox" name="confirm_setlist" value="create_for_band"> Create a new setlist visible to band members</label>
+<button class="btn btn-secondary" name="action" value="create_setlist">Create setlist and choose songs</button>{% endif %}
+</form>
+{% elif plan.notes %}<h3>Private gig preparation notes</h3><p class="feature-prewrap">{{ plan.notes }}</p>{% endif %}
+<h2>Rehearsals</h2><p>Planned rehearsals appear as day reminders in Booking Calendar milestones. Each rehearsal keeps its selected practice setlist.</p>
+{% if can_edit and can_prepare %}<p><a class="btn btn-secondary" href="{% url 'booking:rehearsal_new' opportunity.pk %}">Plan rehearsal</a></p>{% endif %}
+{% for row in rehearsals %}<section><h3>{{ row.date }} · {{ row.get_status_display }}</h3><p class="feature-prewrap">{{ row.focus }}</p>
+{% if row.setlist %}<p><a href="{% url 'setlist_player' row.setlist_id %}">Practice {{ row.setlist.name }}</a></p>{% endif %}
+{% if can_edit %}{% if row.status == 'planned' and can_prepare %}<p><a href="{% url 'booking:rehearsal_edit' opportunity.pk row.pk %}">Edit rehearsal</a></p>{% endif %}
+<form method="post" action="{% url 'booking:rehearsal_status' row.pk %}">{% csrf_token %}<input type="hidden" name="revision" value="{{ row.revision }}">
+{% if row.status != 'complete' %}<button class="btn btn-secondary" name="status" value="complete">Mark complete</button>{% endif %}
+{% if row.status != 'cancelled' %}<button class="btn btn-secondary" name="status" value="cancelled">Cancel rehearsal</button>{% endif %}
+{% if row.status != 'planned' and can_prepare %}<button class="btn btn-secondary" name="status" value="planned">Reopen rehearsal</button>{% endif %}
+</form>{% endif %}</section>{% empty %}<p>No rehearsals planned.</p>{% endfor %}
+<h2>Band resources</h2><p><a href="{% url 'booking:resources' %}">Manage EPK &amp; resource links</a></p>
+<ul>{% for resource in resources %}<li><a href="{{ resource.url }}" target="_blank" rel="noopener noreferrer">{{ resource.name }}</a> · {{ resource.get_kind_display }}{% if resource.approved_for_outreach %} · Approved for outreach{% endif %}</li>{% empty %}<li>No resource links saved.</li>{% endfor %}</ul>
+</div>{% endblock %}

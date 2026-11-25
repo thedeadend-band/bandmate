@@ -1,0 +1,13 @@
+{% extends "player/base.html" %}
+{% block title %}EPK &amp; resources – Booking{% endblock %}
+{% block content %}{% include "booking/record_nav.html" %}
+<div class="wiz-content feature-content"><h1 class="page-title">EPK &amp; resources</h1>
+<p>Keep links to the band's press kit, stage plot, rider and performance videos. Managers review links before making EPKs available in outreach drafts. Notes stay in Booking.</p>
+{% if is_manager %}<p><a class="btn btn-add" href="{% url 'booking:resource_new' %}">Add resource link</a></p>{% endif %}
+{% for row in rows %}<section><h2>{{ row.name }}</h2>
+<p>{{ row.get_kind_display }} · {% if row.is_archived %}Archived{% elif row.approved_for_outreach %}Approved for outreach{% else %}Internal reference{% endif %} · revision {{ row.revision }}</p>
+<p><a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.url }}</a></p>
+{% if row.notes %}<p class="feature-prewrap">{{ row.notes }}</p>{% endif %}
+{% if is_manager %}<p><a href="{% url 'booking:resource_edit' row.pk %}">Edit and review resource</a></p>{% endif %}</section>
+{% empty %}<p>No resource links saved.</p>{% endfor %}
+</div>{% endblock %}

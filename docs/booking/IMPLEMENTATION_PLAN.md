@@ -4,7 +4,8 @@ There are **six phases, numbered 0–5**. Phase 0 is committed on
 `codex/booking-editable-calendars` (`bba18cc`); work continues on its child branch
 `codex/ai-booking-agent`. See [Phase 1–2 acceptance](PHASE_1_2_ACCEPTANCE.md)
 and [Phase 3 acceptance](PHASE_3_DISCOVERY_ACCEPTANCE.md).
-Current work: [Phase 4 acceptance](PHASE_4_ACCEPTANCE.md).
+Phase 4 is committed as `1091d97`; see [Phase 4 acceptance](PHASE_4_ACCEPTANCE.md).
+Current work: [Phase 5 acceptance](PHASE_5_ACCEPTANCE.md).
 
 ## Phase 0 — committed foundation
 
@@ -100,11 +101,21 @@ coordinate changes and AI disclosure each require their own reviewed approval.
 See [outreach behavior and limits](OUTREACH.md). AI arrangement, metadata-only
 explicit reply reads and plain-text messages are deliberate initial boundaries.
 
-## Phase 5 — optional
+## Phase 5 — gig preparation implemented, awaiting staging acceptance
 
-Confirmed-gig setlists/EPK/rehearsal helpers; public-only sharing after proven
-isolation. Social adapters only if supported and authorized. Database/queue
-scaling only in response to measured contention.
+- [x] Confirmed-gig workspace, private preparation notes, same-band setlist links
+  and explicit setlist creation using the existing owner/editor/player workflow.
+- [x] Manager-reviewed EPK/resource links and explicit EPK selection into drafts,
+  with copied URL/revision provenance and no automatic upload or sharing.
+- [x] Rehearsal planning, practice setlists, completion/cancellation/reopening and
+  private day reminders on Booking Calendar milestones.
+- [x] Booking-role-gated navigation from Calendar event detail and setlist player;
+  feature-off behavior, tenancy, stale edits and duplicate actions tested.
+- [ ] Staging install/upgrade/restore and the existing live-provider release gates.
+
+See [gig preparation behavior](GIG_PREPARATION.md). Shared public-only caches,
+social adapters, hosted assets and database/queue scaling remain optional future
+extensions, requiring separate design/provenance or measured load.
 
 ## Decisions and prerequisites
 

@@ -9,6 +9,7 @@
   </svg>
   Back to Setlists
 </a>
+{% for gig in booking_gigs %}<p><a href="{% url 'booking:gig' gig.pk %}">Gig preparation · {{ gig.name }}</a></p>{% endfor %}
 
 <div class="section-header setlist-player-header" style="margin-top:0">
   <div class="setlist-heading">

@@ -1,8 +1,17 @@
 from django.urls import path
 from . import views, connection_views, gmail_views, record_views, research_views, outreach_views, publication_views
+from . import gig_views
 
 app_name = 'booking'
 urlpatterns = [
+    path('gigs/', gig_views.directory, name='gigs'),
+    path('gigs/<int:opportunity_id>/', gig_views.detail, name='gig'),
+    path('gigs/<int:opportunity_id>/rehearsals/new/', gig_views.rehearsal_edit, name='rehearsal_new'),
+    path('gigs/<int:opportunity_id>/rehearsals/<int:rehearsal_id>/', gig_views.rehearsal_edit, name='rehearsal_edit'),
+    path('rehearsals/<int:rehearsal_id>/status/', gig_views.rehearsal_status, name='rehearsal_status'),
+    path('resources/', gig_views.resources, name='resources'),
+    path('resources/new/', gig_views.resource_edit, name='resource_new'),
+    path('resources/<int:resource_id>/', gig_views.resource_edit, name='resource_edit'),
     path('opportunities/<int:opportunity_id>/calendar/', publication_views.publication, name='publication'),
     path('templates/', outreach_views.templates, name='templates'),
     path('templates/new/', outreach_views.template_edit, name='template_new'),

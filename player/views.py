@@ -2146,6 +2146,7 @@ def setlist_delete(request, setlist_id: int):
 @login_required
 def setlist_player(request, setlist_id: int):
     sl = get_object_or_404(Setlist, pk=setlist_id, group=request.active_group)
+    from booking.presentation import gig_links
     entries = list(sl.entries.order_by('position'))
 
     setlist_items = []
@@ -2178,6 +2179,7 @@ def setlist_player(request, setlist_id: int):
 
     return render(request, 'player/setlist_player.html', {
         'setlist': sl,
+        'booking_gigs': gig_links(request.user, request.active_group, setlist=sl),
         'setlist_items': setlist_items,
         'can_edit_setlist': sl.owner == request.user or request.user.is_staff,
         'details_error': request.GET.get('details_error', ''),

@@ -17,11 +17,14 @@ before using them. No new VM, Docker deployment, port or tunnel is required.
 Migrations: `player/0023_groupaccessaudit`, `booking/0001_initial`,
 `calendar_integrations/0001_initial`, `calendar_integrations/0002_editable_calendars`,
 `booking/0002_credentials_and_budgets`, `booking/0003_research_records_and_imports`
-`booking/0004_discovery_providers_and_artist_research` and
-`booking/0005_reviewed_outreach`.
+`booking/0004_discovery_providers_and_artist_research`,
+`booking/0005_reviewed_outreach` and `booking/0006_gig_preparation`.
 They are additive. Existing groups receive
 no roles or enabled feature automatically. Database changes apply only when the
 operator runs `migrate`; development validation uses disposable databases.
+Phase 5 needs no new credentials, environment variables or workers. Reversing
+`0006` discards preparation/resource/rehearsal records while leaving player setlists
+intact; follow the existing backup/rollback procedure. See [gig preparation](GIG_PREPARATION.md).
 
 In Settings → Edit Group → **Booking and Calendar permissions**, designate
 initial managers from existing members. A Booking manager can configure location
